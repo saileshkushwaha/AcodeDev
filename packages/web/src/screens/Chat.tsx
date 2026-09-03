@@ -38,7 +38,7 @@ export function ChatScreen() {
 
     let conv = convId ? projects.getConversation(convId) : undefined;
     if (!conv) {
-      conv = projects.createConversation({ title: userMsgText.slice(0, 40), projectId: currentProjectId, provider, model });
+      conv = projects.createConversation({ title: userMsgText.slice(0, 40), projectId: currentProjectId ?? undefined, provider, model });
       setConvId(conv.id);
     }
 

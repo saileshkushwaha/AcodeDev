@@ -25,7 +25,7 @@ export function WorkflowsScreen() {
     { id: 'e2', source: 'n_llm', target: 'n_out', sourceHandle: 'out', targetHandle: 'in' },
   ]);
   const [input, setInput] = useState('The team shipped a new feature for the dashboard. It includes streaming responses and a new provider selector. Users can now switch between multiple LLM providers from one screen.');
-  const [result, setResult] = useState<{ results: { nodeId: string; nodeType: string; output: string }[]; final: string } | null>(null);
+  const [result, setResult] = useState<{ results: { nodeId: string; nodeType: string; output: string; durationMs?: number }[]; final: string } | null>(null);
   const [running, setRunning] = useState(false);
 
   const addNode = (type: WorkflowNode['type']) => {

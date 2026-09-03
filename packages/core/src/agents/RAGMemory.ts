@@ -44,4 +44,5 @@ export class RAGMemory {
   }
 }
 
-export { AgentTool, Toolbox };
+export type { AgentTool };
+export { Toolbox };

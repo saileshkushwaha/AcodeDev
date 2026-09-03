@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Input, Badge, TabBar, useTheme, Spinner } from '@acode/ui';
-import type { GitHubClient, GitHubRepo, GitHubPullRequest, GitHubIssue, GitHubWorkflowRun, GitHubUserInfo } from '@acode/core';
+import { GitHubClient } from '@acode/core';
+import type { GitHubUserInfo, GitHubRepo, GitHubPullRequest, GitHubIssue, GitHubWorkflowRun } from '@acode/core';
 
 export function GitHubScreen() {
   const { tokens } = useTheme();
@@ -38,10 +39,9 @@ export function GitHubScreen() {
     }
   };
 
-  const makeClient = (token: string) => {
-    const { GitHubClient } = require('@acode/core') as typeof import('@acode/core');
-    return new GitHubClient({ token });
-  };
+const makeClient = (token: string) => {
+  return new GitHubClient({ token });
+};
 
   const selectRepo = async (fullName: string, c?: GitHubClient, u?: GitHubUserInfo) => {
     setSelectedRepo(fullName);
