@@ -20,13 +20,11 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build -w @acode/web
-
-      - name: Create nojekyll file
-        run: touch ./packages/web/dist/nojekyll
+        run: npm run build -w @acode/web && touch ./packages/web/dist/nojekyll
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./packages/web/dist
+          keep_files: true
