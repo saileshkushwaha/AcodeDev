@@ -32,10 +32,9 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./packages/web/dist
 
-      - name: Add nojekyll file
+      - name: Add nojekyll file to gh-pages
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout gh-pages
           touch nojekyll
           git add nojekyll
           git commit -m "chore: add nojekyll file for GitHub Pages"
