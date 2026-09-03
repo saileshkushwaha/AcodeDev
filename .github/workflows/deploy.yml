@@ -22,7 +22,7 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build -w @acode/web && touch ./packages/web/dist/nojekyll
+        run: npm run build -w @acode/web
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
