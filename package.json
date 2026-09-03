@@ -1,0 +1,23 @@
+{
+  "name": "acode-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AcodeDev - All-in-one AI studio and project management platform",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "web": "npm run dev -w @acode/web",
+    "web:build": "npm run build -w @acode/web",
+    "mobile": "npm run start -w @acode/mobile",
+    "mobile:android": "npm run android -w @acode/mobile",
+    "core": "npm run build -w @acode/core",
+    "build": "npm run build -w @acode/core && npm run build -w @acode/ui && npm run build -w @acode/web",
+    "typecheck": "npm run typecheck -w @acode/core && npm run typecheck -w @acode/ui && npm run typecheck -w @acode/web",
+    "test": "npm run test -w @acode/core"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
