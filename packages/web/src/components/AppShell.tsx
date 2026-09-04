@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Sidebar, useTheme, type NavItem } from '@acode/ui';
 
 const icons: Record<string, React.ReactNode> = {
@@ -41,22 +41,38 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const { tokens } = useTheme();
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
     <div style={{ display: 'flex', height: '100vh', background: tokens.bg, color: tokens.text }}>
       <Sidebar
+        collapsed={collapsed}
+        onToggleCollapse={() => setCollapsed((c) => !c)}
         active={active}
         onSelect={onSelect}
         items={NAV}
         header={
-          <div style={{ padding: tokens.space4, display: 'flex', alignItems: 'center', gap: tokens.space2, borderBottom: `1px solid ${tokens.border}` }}>
-            <div style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: tokens.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: tokens.fontSizeMd }}>A</div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, lineHeight: 1.1 }}>AcodeDev</div>
-              <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>AI Studio</div>
-            </div>
+          <div
+            style={{
+              padding: collapsed ? `${tokens.space4}px ${tokens.space2}px` : tokens.space4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space2,
+              borderBottom: `1px solid ${tokens.border}`,
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: tokens.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: tokens.fontSizeMd, flexShrink: 0 }}>A</div>
+            {!collapsed && (
+              <div style={{ whiteSpace: 'nowrap' }}>
+                <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, lineHeight: 1.1 }}>AcodeDev</div>
+                <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>AI Studio</div>
+              </div>
+            )}
           </div>
         }
-        footer={<div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center', paddingBottom: tokens.space1 }}>v0.1 · all-in-one</div>}
+        footer={!collapsed ? <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center', paddingBottom: tokens.space1 }}>v0.1 · all-in-one</div> : undefined}
       />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {header}
