@@ -1133,6 +1133,89 @@ function ShellBlock({ command, output }: { command: string; output: string }) {
 const STATUS_LABEL: Record<string, string> = { added: 'Added', modified: 'Modified', deleted: 'Deleted' };
 const STATUS_COLOR: Record<string, string> = { added: '#2f9e44', modified: '#e6a23c', deleted: '#e03131' };
 
+type DiffLine = { type: 'add' | 'remove' | 'context'; lineNum?: number; content: string };
+type DiffHunk = { label?: string; lines: DiffLine[] };
+
+function generateMockDiff(path: string, status: string): DiffHunk[] {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  if (status === 'added') {
+    return [
+      { label: undefined, lines: [
+        { type: 'add', content: `import React, { useState, useRef, useEffect, useCallback } from 'react';` },
+        { type: 'add', content: `import { useApp } from '../state/AppProvider';` },
+        { type: 'add', content: `` },
+        { type: 'add', content: `export function ${path.split('/').pop()?.replace(/\.\w+$/, '') ?? 'Component'}() {` },
+        { type: 'add', content: `  const [value, setValue] = useState('');` },
+        { type: 'add', content: `  return <div>{value}</div>;` },
+        { type: 'add', content: `}` },
+      ]},
+    ];
+  }
+  if (status === 'deleted') {
+    return [
+      { label: undefined, lines: [
+        { type: 'remove', content: `import React from 'react';` },
+        { type: 'remove', content: `` },
+        { type: 'remove', content: `export function DeletedComponent() {` },
+        { type: 'remove', content: `  return <div>deleted</div>;` },
+        { type: 'remove', content: `}` },
+      ]},
+    ];
+  }
+  return [
+    { label: undefined, lines: [
+      { type: 'context', content: `import React, { useState, useRef, useEffect, useCallback } from 'react';` },
+      { type: 'context', content: `import { useApp } from '../state/AppProvider';` },
+      { type: 'context', content: `import { Button, Select, Input, Toggle, Spinner, useTheme, Badge, useIsMobile } from '@acode/ui';` },
+      { type: 'context', content: `` },
+      { type: 'context', content: `const SYSTEM_PROMPT = 'You are AcodeDev assistant, a helpful AI. Be concise and accurate.';` },
+      { type: 'remove', content: `const [sidebarOpen, setSidebarOpen] = useState(false);` },
+      { type: 'add', content: `const [sidebarOpen, setSidebarOpen] = useState(true);` },
+      { type: 'add', content: `const [completedTabs, setCompletedTabs] = useState<Set<string>>(new Set());` },
+      { type: 'context', content: `` },
+      { type: 'context', content: `const [contextOpen, setContextOpen] = useState(!isMobile);` },
+      { type: 'context', content: `const [selectedSkills, setSelectedSkills] = useState<string[]>([]);` },
+      { type: 'context', content: `const [attachments, setAttachments] = useState<ChatAttachment[]>([]);` },
+    ]},
+    { label: '320 unmodified lines', lines: [] },
+    { label: undefined, lines: [
+      { type: 'context', content: `  /* keep whatever the stream produced */` },
+      { type: 'context', content: `}` },
+      { type: 'context', content: `}` },
+      { type: 'context', content: `setStreaming(false);` },
+      { type: 'add', content: `if (cid && activeTab) {` },
+      { type: 'add', content: `  setCompletedTabs((prev) => {` },
+      { type: 'add', content: `    const next = new Set(prev);` },
+      { type: 'add', content: `    next.add(activeTab);` },
+      { type: 'add', content: `    return next;` },
+      { type: 'add', content: `  });` },
+      { type: 'add', content: `}` },
+      { type: 'context', content: `refreshSessions();` },
+      { type: 'context', content: `refreshChangedFiles();` },
+      { type: 'context', content: `};` },
+    ]},
+    { label: '18 unmodified lines', lines: [] },
+    { label: undefined, lines: [
+      { type: 'context', content: `<div style={{ height: '100%', display: 'flex', flexDirection: 'column',` },
+      { type: 'context', content: `  background: tokens.bg, overflow: 'hidden' }}>` },
+      { type: 'context', content: `  {/* Top app bar: grid button · session tabs · + button */}` },
+      { type: 'context', content: `  <div style={{ display: 'flex', alignItems: 'center', gap:` },
+      { type: 'context', content: `    tokens.space1, padding: \`0 \${tokens.space2}px\`, height: 44, flexShrink: 0,` },
+      { type: 'context', content: `    borderBottom: \`1px solid \${tokens.border}\`, background: tokens.bgElevated,` },
+      { type: 'context', content: `    overflowX: 'auto', overflowY: 'hidden' }}>` },
+      { type: 'remove', content: `    <button` },
+      { type: 'remove', content: `      title="Projects & Sessions"` },
+      { type: 'remove', content: `      onClick={() => {` },
+      { type: 'remove', content: `        if (sidebarOpen) {` },
+      { type: 'remove', content: `          setSidebarOpen(false);` },
+      { type: 'add', content: `    <button` },
+      { type: 'add', content: `      title="All screens"` },
+      { type: 'add', content: `      onClick={() => onNavigate?.('dashboard')}` },
+      { type: 'context', content: `      style={{ width: 32, height: 32, borderRadius: tokens.radiusMd,` },
+    ]},
+  ];
+}
+
 function SidebarPanel({ sessions, activeId, onSelect, onNewSession, onClose, projects, currentProjectId }: {
   sessions: Conversation[];
   activeId: string | null;
@@ -1310,38 +1393,151 @@ function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getPr
 
 function FilesPanel({ changedFiles }: { changedFiles: { path: string; status: string }[] }) {
   const { tokens } = useTheme();
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+  const [allExpanded, setAllExpanded] = useState(false);
+
+  const toggleFile = (path: string) => {
+    setExpandedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allExpanded) {
+      setExpandedFiles(new Set());
+    } else {
+      setExpandedFiles(new Set(changedFiles.map((f) => f.path)));
+    }
+    setAllExpanded(!allExpanded);
+  };
+
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: tokens.space3 }}>
-      {changedFiles.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
-          No files changed in this session yet.
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space2}px ${tokens.space3}px`, borderBottom: `1px solid ${tokens.border}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2 }}>
+          <span style={{ fontSize: tokens.fontSizeSm, color: tokens.text, fontWeight: 500 }}>Last turn changes</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round"><path d="M6 9l6 6 6-6" /></svg>
         </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space1 }}>
-          {changedFiles.map((f) => (
-            <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd }}>
-              <span
-                style={{
-                  flexShrink: 0,
-                  fontSize: tokens.fontSizeXs,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  color: '#fff',
-                  background: STATUS_COLOR[f.status] ?? tokens.textMuted,
-                  padding: `2px 8px`,
-                  borderRadius: tokens.radiusFull,
-                  width: 76,
-                  textAlign: 'center',
-                }}
-              >
-                {STATUS_LABEL[f.status] ?? f.status}
-              </span>
-              <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path}</span>
-            </div>
-          ))}
+        <button
+          onClick={toggleAll}
+          style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, background: 'transparent', cursor: 'pointer', color: tokens.textSecondary, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
+          {allExpanded ? 'Collapse all' : 'Expand all'}
+        </button>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: tokens.space3 }}>
+        {changedFiles.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
+            No files changed in this session yet.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2 }}>
+            {changedFiles.map((f) => (
+              <FileCard key={f.path} file={f} expanded={expandedFiles.has(f.path)} onToggle={() => toggleFile(f.path)} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FileCard({ file, expanded, onToggle }: { file: { path: string; status: string }; expanded: boolean; onToggle: () => void }) {
+  const { tokens } = useTheme();
+  const { path, status } = file;
+  const diff = generateMockDiff(path, status);
+  const addCount = diff.reduce((acc, h) => acc + h.lines.filter((l) => l.type === 'add').length, 0);
+  const removeCount = diff.reduce((acc, h) => acc + h.lines.filter((l) => l.type === 'remove').length, 0);
+  const fileName = path.split('/').pop() ?? path;
+
+  return (
+    <div style={{ borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, overflow: 'hidden', background: tokens.bg }}>
+      <div
+        onClick={onToggle}
+        style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, cursor: 'pointer', background: expanded ? tokens.bgSubtle : 'transparent', transition: 'background 0.12s ease' }}
+        onMouseEnter={(e) => { if (!expanded) e.currentTarget.style.background = tokens.surfaceHover; }}
+        onMouseLeave={(e) => { if (!expanded) e.currentTarget.style.background = 'transparent'; }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+        </svg>
+        <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{path}</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, cursor: 'pointer' }}><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+        {addCount > 0 && <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.success, fontFamily: tokens.fontMono }}>+{addCount}</span>}
+        {removeCount > 0 && <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.danger, fontFamily: tokens.fontMono }}>-{removeCount}</span>}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}><path d="M9 18l6-6-6-6" /></svg>
+      </div>
+      {expanded && (
+        <div style={{ borderTop: `1px solid ${tokens.border}` }}>
+          <DiffViewer hunks={diff} />
         </div>
       )}
+    </div>
+  );
+}
+
+function DiffViewer({ hunks }: { hunks: DiffHunk[] }) {
+  const { tokens } = useTheme();
+  const [collapsedSections, setCollapsedSections] = useState<Set<number>>(new Set());
+
+  const toggleSection = (idx: number) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
+  return (
+    <div style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, lineHeight: 1.6 }}>
+      {hunks.map((hunk, hunkIdx) => {
+        if (hunk.label && hunk.lines.length === 0) {
+          const isCollapsed = collapsedSections.has(hunkIdx);
+          return (
+            <div
+              key={hunkIdx}
+              onClick={() => toggleSection(hunkIdx)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.space2, padding: `6px ${tokens.space3}px`, background: tokens.bgSubtle, cursor: 'pointer', borderTop: hunkIdx > 0 ? `1px solid ${tokens.border}` : 'none', borderBottom: `1px solid ${tokens.border}` }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round" style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 0.15s ease' }}><path d="M9 18l6-6-6-6" /></svg>
+              <span style={{ color: tokens.textMuted, fontSize: tokens.fontSizeXs }}>{hunk.label}</span>
+            </div>
+          );
+        }
+
+        let lineCounter = 0;
+        const contextLines: DiffLine[] = [];
+        hunk.lines.forEach((l) => {
+          if (l.type === 'context') lineCounter++;
+        });
+
+        return (
+          <div key={hunkIdx} style={{ borderTop: hunkIdx > 0 ? `1px solid ${tokens.border}` : 'none' }}>
+            {hunk.lines.map((line, lineIdx) => {
+              const bgColor = line.type === 'add' ? '#1a3a2a' : line.type === 'remove' ? '#3a1a1a' : 'transparent';
+              const borderColor = line.type === 'add' ? '#2f9e44' : line.type === 'remove' ? '#e03131' : 'transparent';
+              return (
+                <div
+                  key={lineIdx}
+                  style={{ display: 'flex', alignItems: 'stretch', background: bgColor, borderLeft: `3px solid ${borderColor}` }}
+                >
+                  <span style={{ width: 40, flexShrink: 0, textAlign: 'right', paddingRight: 8, color: tokens.textMuted, userSelect: 'none', fontSize: tokens.fontSizeXs, lineHeight: '1.6', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
+                  </span>
+                  <span style={{ flex: 1, paddingLeft: 8, paddingRight: 16, whiteSpace: 'pre', overflow: 'hidden', color: line.type === 'remove' ? '#ff8a8a' : line.type === 'add' ? '#8ae68a' : tokens.text, lineHeight: '1.6', display: 'flex', alignItems: 'center' }}>
+                    {line.content}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
