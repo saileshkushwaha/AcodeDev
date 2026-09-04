@@ -153,6 +153,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [subtab, setSubtab] = useState<'session' | 'files'>('session');
+  const [changesMode, setChangesMode] = useState<'git' | 'lastTurn'>('lastTurn');
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
   const [changedFiles, setChangedFiles] = useState<{ path: string; status: string; changedAt: number }[]>([]);
@@ -614,10 +615,10 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         />
       )}
 
-      {/* Secondary tab bar: Session | Files Changed */}
+      {/* Secondary tab bar: Session | Changes */}
       <div style={{ display: 'flex', gap: tokens.space4, padding: `0 ${tokens.space3}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
         <SubTab active={subtab === 'session'} onClick={() => setSubtab('session')}>Session</SubTab>
-        <SubTab active={subtab === 'files'} onClick={() => setSubtab('files')}>Files Changed {fileCount > 0 ? fileCount : ''}</SubTab>
+        <SubTab active={subtab === 'files'} onClick={() => setSubtab('files')}>Changes{fileCount > 0 && subtab !== 'files' ? ` ${fileCount}` : ''}</SubTab>
       </div>
 
       {/* Content */}
@@ -706,7 +707,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
             )}
           </div>
         ) : (
-          <FilesPanel changedFiles={changedFiles} />
+          <FilesPanel changedFiles={changedFiles} mode={changesMode} onModeChange={setChangesMode} />
         )}
 
         {linkDraft.open && (
@@ -1405,10 +1406,11 @@ function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getPr
   );
 }
 
-function FilesPanel({ changedFiles }: { changedFiles: { path: string; status: string }[] }) {
+function FilesPanel({ changedFiles, mode, onModeChange }: { changedFiles: { path: string; status: string }[]; mode: 'git' | 'lastTurn'; onModeChange: (m: 'git' | 'lastTurn') => void }) {
   const { tokens } = useTheme();
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [allExpanded, setAllExpanded] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const toggleFile = (path: string) => {
     setExpandedFiles((prev) => {
@@ -1428,25 +1430,63 @@ function FilesPanel({ changedFiles }: { changedFiles: { path: string; status: st
     setAllExpanded(!allExpanded);
   };
 
+  const modeLabel = mode === 'git' ? 'Git changes' : 'Last turn changes';
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space2}px ${tokens.space3}px`, borderBottom: `1px solid ${tokens.border}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2 }}>
-          <span style={{ fontSize: tokens.fontSizeSm, color: tokens.text, fontWeight: 500 }}>Last turn changes</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round"><path d="M6 9l6 6 6-6" /></svg>
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setDropdownOpen((v) => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, background: 'transparent', cursor: 'pointer', color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, fontWeight: 500 }}
+          >
+            {modeLabel}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round" style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+          {dropdownOpen && (
+            <>
+              <div onClick={() => setDropdownOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
+              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 71, minWidth: 180, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
+                <button
+                  onClick={() => { onModeChange('git'); setDropdownOpen(false); }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: `${tokens.space2}px ${tokens.space3}px`, background: 'transparent', border: 'none', borderRadius: tokens.radiusSm, color: mode === 'git' ? tokens.text : tokens.textSecondary, fontSize: tokens.fontSizeSm, cursor: 'pointer', fontFamily: tokens.fontSans }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                >
+                  <span>Git changes</span>
+                  {mode === 'git' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.primary} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                </button>
+                <button
+                  onClick={() => { onModeChange('lastTurn'); setDropdownOpen(false); }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: `${tokens.space2}px ${tokens.space3}px`, background: 'transparent', border: 'none', borderRadius: tokens.radiusSm, color: mode === 'lastTurn' ? tokens.text : tokens.textSecondary, fontSize: tokens.fontSizeSm, cursor: 'pointer', fontFamily: tokens.fontSans }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                >
+                  <span>Last turn changes</span>
+                  {mode === 'lastTurn' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.primary} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                </button>
+              </div>
+            </>
+          )}
         </div>
-        <button
-          onClick={toggleAll}
-          style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, background: 'transparent', cursor: 'pointer', color: tokens.textSecondary, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
-          {allExpanded ? 'Collapse all' : 'Expand all'}
-        </button>
+        {mode === 'lastTurn' && changedFiles.length > 0 && (
+          <button
+            onClick={toggleAll}
+            style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, background: 'transparent', cursor: 'pointer', color: tokens.textSecondary, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
+            {allExpanded ? 'Collapse all' : 'Expand all'}
+          </button>
+        )}
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: tokens.space3 }}>
-        {changedFiles.length === 0 ? (
+        {mode === 'git' ? (
           <div style={{ textAlign: 'center', padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
-            No files changed in this session yet.
+            No changes
+          </div>
+        ) : changedFiles.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
+            No changes
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2 }}>
