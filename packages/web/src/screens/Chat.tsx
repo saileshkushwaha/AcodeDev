@@ -127,9 +127,12 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const [sessions, setSessions] = useState<Conversation[]>([]);
   const [convId, setConvId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [sessionsOpen, setSessionsOpen] = useState(!isMobile);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [subtab, setSubtab] = useState<'session' | 'files'>('session');
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [pinnedToBottom, setPinnedToBottom] = useState(true);
 
   // Chat context
   const [contextOpen, setContextOpen] = useState(!isMobile);
@@ -196,9 +199,17 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     }
   }, [isMobile]);
 
+  const messagesRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: streaming ? 'auto' : 'smooth' });
-  }, [messages, streaming]);
+    if (pinnedToBottom) bottomRef.current?.scrollIntoView({ behavior: streaming ? 'auto' : 'smooth' });
+  }, [messages, streaming, pinnedToBottom, subtab]);
+
+  const onScrollBody = () => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    setPinnedToBottom(nearBottom);
+  };
 
   // Auto-grow the composer textarea as content grows (vertical context space).
   useEffect(() => {
@@ -256,6 +267,34 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     projects.renameConversation(id, renameValue);
     refreshSessions();
     setRenaming(null);
+  };
+
+  // ---- session header actions (Rename / Share / Export / Archive / Delete) ----
+  const shareSession = async () => {
+    const conv = convId ? projects.getConversation(convId) : undefined;
+    const transcript = (conv?.messages ?? [])
+      .filter((m) => m.role !== 'system')
+      .map((m) => `${m.role === 'user' ? '**User**' : '**Assistant**'}:\n${m.content}`)
+      .join('\n\n');
+    try {
+      await navigator.clipboard.writeText(transcript || 'No messages yet.');
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+  const exportSession = () => {
+    const conv = convId ? projects.getConversation(convId) : undefined;
+    if (!conv) return;
+    const lines = ['# ' + (conv.title || 'Chat'), '', ...(conv.messages ?? [])
+      .filter((m) => m.role !== 'system')
+      .map((m) => `## ${m.role === 'user' ? 'User' : 'Assistant'}\n\n${m.content}`)];
+    const blob = new Blob([lines.join('\n\n')], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(conv.title || 'chat').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // ---- attachments ----
@@ -384,194 +423,183 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     ? { ok: true, text: provDef?.name ?? provider }
     : { ok: false, text: provDef?.name ?? provider };
 
-  return (
-    <div style={{ display: 'flex', height: '100%', background: tokens.bg }}>
-      {/* Sessions sidebar */}
-      {sessionsOpen && (
-        <>
-          {isMobile && (
-            <div className="fade-in" onClick={() => setSessionsOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 60 }} />
-          )}
-          <aside
-            className="rise"
-            style={{
-              width: isMobile ? 'min(85vw, 320px)' : 260,
-              flexShrink: 0,
-              background: tokens.bgSubtle,
-              borderRight: `1px solid ${tokens.border}`,
-              display: 'flex',
-              flexDirection: 'column',
-              zIndex: isMobile ? 61 : 'auto',
-              position: isMobile ? 'fixed' : 'relative',
-              top: 0, bottom: 0, left: 0,
-            }}
-          >
-            <div style={{ padding: tokens.space3, borderBottom: `1px solid ${tokens.border}`, display: 'flex', gap: tokens.space2 }}>
-              <Input value={search} onChange={setSearch} placeholder="Search sessions…" />
-            </div>
-            <div style={{ padding: tokens.space2 }}>
-              <Button full onClick={newSession}>
-                + New chat
-              </Button>
-            </div>
-            <div style={{ padding: `${tokens.space1}px ${tokens.space3}px`, fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontWeight: 600 }}>
-              SESSIONS {sessions.length > 0 ? `(${sessions.length})` : ''}
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: `0 ${tokens.space2}px ${tokens.space2}px` }}>
-              {filteredSessions.length === 0 ? (
-                <div style={{ padding: tokens.space3, fontSize: tokens.fontSizeSm, color: tokens.textMuted }}>
-                  {search ? 'No sessions match' : 'No chats yet. Start a new chat!'}
-                </div>
-              ) : (
-                filteredSessions.map((s) => (
-                  <SessionItem
-                    key={s.id}
-                    session={s}
-                    active={s.id === convId}
-                    renaming={renaming === s.id}
-                    renameValue={renameValue}
-                    onRenameValue={setRenameValue}
-                    onClick={() => selectSession(s.id)}
-                    onRename={() => startRename(s.id, s.title)}
-                    onCommitRename={() => commitRename(s.id)}
-                    onCancelRename={() => setRenaming(null)}
-                    onClear={() => clearSession(s.id)}
-                    onDelete={() => deleteSession(s.id)}
-                  />
-                ))
-              )}
-            </div>
-          </aside>
-        </>
-      )}
+  const activeSession = convId ? projects.getConversation(convId) : undefined;
+  const sessionTitle = activeSession?.title ?? 'New session';
+  const sessionLetter = (sessionTitle.replace(/\s+/g, ' ').trim().charAt(0) || 'N').toUpperCase();
+  const fileCount =
+    attachments.length +
+    messages.reduce((n, m) => n + (((m as ChatMessage & { attachments?: unknown[] }).attachments)?.length ?? 0), 0);
 
-      {/* Main chat area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated, flexWrap: 'wrap' }}>
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: tokens.bg, overflow: 'hidden' }}>
+      {/* Top app bar: app switcher · session tab chip · new tab */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `0 ${tokens.space2}px`, height: 56, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
+        <IconBtn title="All screens" onClick={() => onNavigate?.('dashboard')}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+        </IconBtn>
+
+        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
           <button
             onClick={() => setSessionsOpen((v) => !v)}
-            aria-label="Toggle sessions"
-            style={{ background: 'transparent', border: 'none', color: tokens.text, width: 32, height: 32, borderRadius: tokens.radiusMd, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+            title="Switch session"
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space1}px ${tokens.space2}px`, background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusFull, cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.text, minWidth: 0 }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+            <span style={{ width: 26, height: 26, borderRadius: '50%', background: tokens.surface, color: tokens.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: tokens.fontSizeSm, flexShrink: 0 }}>{sessionLetter}</span>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: tokens.fontSizeSm, textAlign: 'left' }}>{sessionTitle}</span>
+            {convId && (
+              <span
+                role="button"
+                title="Close session"
+                onClick={(e) => { e.stopPropagation(); setConvId(null); setMessages([]); }}
+                style={{ color: tokens.textMuted, fontSize: 14, padding: 4, lineHeight: 1 }}
+              >×</span>
+            )}
           </button>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {convId ? (projects.getConversation(convId)?.title ?? 'Chat') : 'Chat'}
-            </div>
-            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{convId ? `${messages.filter((m) => m.role === 'user').length} messages` : 'No active session'}</div>
-          </div>
-          <div style={{ flex: 1 }} />
-          {convId && (
-            <Button size="sm" variant="ghost" onClick={() => clearSession(convId)}>Clear</Button>
-          )}
-          <Button size="sm" variant={contextOpen ? undefined : 'ghost'} onClick={() => setContextOpen((v) => !v)}>{contextOpen ? 'Hide context' : 'Show context'}</Button>
-        </div>
 
-        {/* Not-connected banner */}
-        {!connected && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, padding: `${tokens.space2}px ${tokens.space3}px`, borderBottom: `1px solid ${tokens.border}`, background: `linear-gradient(90deg, ${tokens.warning}1f, ${tokens.bgElevated})`, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: tokens.fontSizeMd }}>⚠️</span>
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600 }}>{connStatus.text} isn't connected</div>
-              <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary }}>Add your API key to start getting real responses from this provider.</div>
-            </div>
-            <Button size="sm" onClick={() => onNavigate?.('keys')}>Connect provider</Button>
-          </div>
-        )}
-
-        {/* Messages */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: tokens.space4, display: 'flex', flexDirection: 'column', gap: tokens.space4, placeItems: 'stretch' }}>
-          {messages.length === 0 ? (
-            <div style={{ margin: 'auto', maxWidth: 520, textAlign: 'center' }}>
-              <div style={{ width: 56, height: 56, margin: '0 auto 16px', borderRadius: tokens.radiusLg, background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: tokens.fontSizeXl, boxShadow: tokens.shadowMd }}>A</div>
-              <div style={{ fontSize: tokens.fontSizeLg, fontWeight: 700, marginBottom: tokens.space2 }}>What can I help you build?</div>
-              <p style={{ color: tokens.textSecondary, fontSize: tokens.fontSizeSm, margin: '0 0 24px', lineHeight: 1.6 }}>
-                Start a conversation or pick a suggestion below. Your selected model {model ? <Badge color={tokens.primary}>{model.split('/').pop()}</Badge> : ''} will respond in real time.
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: tokens.space2 }}>
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => handleSend(s)}
-                    style={{ textAlign: 'left', padding: tokens.space3, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, background: tokens.surface, color: tokens.textSecondary, cursor: 'pointer', fontSize: tokens.fontSizeSm, lineHeight: 1.4, transition: 'border-color 0.12s ease, background 0.12s ease' }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = tokens.primary; (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = tokens.borderStrong; (e.currentTarget as HTMLButtonElement).style.background = tokens.surface; }}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            messages.map((m, i) => (
-              <Bubble key={i} msg={m} streaming={streaming && m.name === messages[messages.length - 1].name} />
-            ))
-          )}
-          <div ref={bottomRef} />
-        </div>
-
-        {/* Unified bottom section: context strip + model row + composer */}
-        <div style={{ borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
-          <div style={{ maxWidth: 960, margin: '0 auto', padding: tokens.space3, position: 'relative' }}>
-
-            {/* Context strip (horizontal, collapsible) */}
-            <ContextStrip
-              open={contextOpen}
-              onToggle={() => setContextOpen((v) => !v)}
-              skills={selectedSkills}
-              capabilities={capabilities}
-              attachmentCount={attachments.length}
-              onOpenAttach={() => setAttachOpen((o) => !o)}
-              onOpenSkills={() => setSkillOpen((o) => !o)}
+          {sessionsOpen && (
+            <SessionPopover
+              sessions={filteredSessions}
+              activeId={convId}
+              search={search}
+              setSearch={setSearch}
+              onNew={newSession}
+              onSelect={selectSession}
+              onClose={() => setSessionsOpen(false)}
+              onRename={startRename}
+              onCommitRename={commitRename}
+              onCancelRename={() => setRenaming(null)}
+              renaming={renaming}
+              renameValue={renameValue}
+              setRenameValue={setRenameValue}
+              onClear={clearSession}
+              onDelete={deleteSession}
             />
+          )}
+        </div>
 
-            {/* Model row — below the context, same section */}
-            <div style={{ display: 'flex', gap: tokens.space2, alignItems: 'center', flexWrap: 'wrap', marginBottom: tokens.space2 }}>
-              <div style={{ flex: '1 1 170px', minWidth: 150 }}>
-                <Select
-                  value={provider}
-                  onChange={setProvider}
-                  options={[
-                    ...gatewayProviders.map((p) => ({ label: `${p.name} · gateway`, value: p.id })),
-                    ...directProviders.map((p) => ({ label: p.name, value: p.id })),
-                  ]}
-                />
-              </div>
-              <div style={{ flex: '2 1 260px', minWidth: 200 }}>
-                <Select
-                  label={`Model · ${formatContext(providerModels.find((m) => m.id === model)?.contextWindow ?? 0)} ctx`}
-                  value={model}
-                  onChange={setModel}
-                  options={providerModels.map((m) => ({
-                    label: `${m.name}${m.isFree ? ' · free' : ''} · ${formatContext(m.contextWindow)} ctx`,
-                    value: m.id,
-                  }))}
-                />
-              </div>
-              <div style={{ flexShrink: 0 }}>
-                <Toggle checked={freeOnly} onChange={setFreeOnly} label="Free only" />
-              </div>
-              <div style={{ width: 86, flexShrink: 0 }}>
-                <Input value={minContext} onChange={setMinContext} placeholder="min ctx" />
-              </div>
-            </div>
+        <IconBtn title="New chat" onClick={newSession}>+</IconBtn>
+      </div>
 
-            {/* Attachments chips */}
-            {attachments.length > 0 && (
-              <div style={{ display: 'flex', gap: tokens.space2, flexWrap: 'wrap', marginBottom: tokens.space2 }}>
-                {attachments.map((a) => (
-                  <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />
-                ))}
+      {/* Secondary tab bar: Session | Files Changed */}
+      <div style={{ display: 'flex', gap: tokens.space4, padding: `0 ${tokens.space3}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
+        <SubTab active={subtab === 'session'} onClick={() => setSubtab('session')}>Session</SubTab>
+        <SubTab active={subtab === 'files'} onClick={() => setSubtab('files')}>Files Changed{fileCount > 0 ? ` ${fileCount}` : ''}</SubTab>
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+        {/* Content header: title · spinner · overflow menu */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space3}px ${tokens.space4}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}` }}>
+          <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sessionTitle}</div>
+          {streaming && <Spinner size={16} color={tokens.primary} />}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <IconBtn small title="Session actions" onClick={() => setOverflowOpen((v) => !v)}>···</IconBtn>
+            {overflowOpen && (
+              <OverflowMenu
+                hasSession={!!convId}
+                onRename={() => { setOverflowOpen(false); if (convId) startRename(convId, activeSession?.title ?? ''); }}
+                onShare={() => { setOverflowOpen(false); void shareSession(); }}
+                onExport={() => { setOverflowOpen(false); exportSession(); }}
+                onDelete={() => { setOverflowOpen(false); if (convId) deleteSession(convId); }}
+                onClose={() => setOverflowOpen(false)}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Body */}
+        {subtab === 'session' ? (
+          <div ref={messagesRef} onScroll={onScrollBody} style={{ flex: 1, overflowY: 'auto', padding: tokens.space4, position: 'relative', display: 'flex', flexDirection: 'column', gap: tokens.space4 }}>
+            {!connected && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, background: `linear-gradient(90deg, ${tokens.warning}1f, ${tokens.bgElevated})`, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: tokens.fontSizeMd }}>⚠️</span>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600 }}>{connStatus.text} isn't connected</div>
+                  <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary }}>Add your API key to get real responses.</div>
+                </div>
+                <Button size="sm" onClick={() => onNavigate?.('keys')}>Connect provider</Button>
               </div>
             )}
 
-            {/* Composer */}
-            <div style={{ display: 'flex', gap: tokens.space2, alignItems: 'flex-end' }}>
-              {/* + icon with attachment submenu */}
+            {messages.length === 0 ? (
+              <div style={{ margin: 'auto', maxWidth: 520, textAlign: 'center' }}>
+                <div style={{ width: 56, height: 56, margin: '0 auto 16px', borderRadius: tokens.radiusLg, background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: tokens.fontSizeXl, boxShadow: tokens.shadowMd }}>{sessionLetter}</div>
+                <div style={{ fontSize: tokens.fontSizeLg, fontWeight: 700, marginBottom: tokens.space2 }}>What can I help you build?</div>
+                <p style={{ color: tokens.textSecondary, fontSize: tokens.fontSizeSm, margin: '0 0 24px', lineHeight: 1.6 }}>
+                  {model ? <><Badge color={tokens.primary}>{model.split('/').pop()}</Badge> will respond in real time.</> : 'Pick a model to get started.'}
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: tokens.space2 }}>
+                  {SUGGESTIONS.map((s) => (
+                    <button key={s} onClick={() => handleSend(s)} style={{ textAlign: 'left', padding: tokens.space3, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, background: tokens.surface, color: tokens.textSecondary, cursor: 'pointer', fontSize: tokens.fontSizeSm, lineHeight: 1.4 }}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              messages.map((m, i) => (
+                <Bubble key={i} msg={m} streaming={streaming && m.name === messages[messages.length - 1].name} />
+              ))
+            )}
+
+            {attachments.length > 0 && (
+              <div style={{ display: 'flex', gap: tokens.space2, flexWrap: 'wrap' }}>
+                {attachments.map((a) => <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />)}
+              </div>
+            )}
+            <div ref={bottomRef} />
+
+            {!pinnedToBottom && messages.length > 0 && (
+              <button
+                onClick={() => { setPinnedToBottom(true); setSubtab('session'); requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })); }}
+                title="Scroll to bottom"
+                style={{ position: 'sticky', bottom: tokens.space2, left: '50%', transform: 'translateX(-50%)', width: 40, height: 40, borderRadius: '50%', border: `1px solid ${tokens.borderStrong}`, background: tokens.bgElevated, color: tokens.textSecondary, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: tokens.shadowMd, flexShrink: 0, marginLeft: 'auto', marginRight: 'auto' }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14m0 0l-5-5m5 5l5-5" /></svg>
+              </button>
+            )}
+          </div>
+        ) : (
+          <FilesPanel
+            attachments={attachments}
+            messages={messages}
+            selectedSkills={selectedSkills}
+            onToggleSkill={toggleSkill}
+          />
+        )}
+
+        {linkDraft.open && (
+          <div style={{ display: 'flex', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space4}px`, alignItems: 'center', flexWrap: 'wrap', borderTop: `1px solid ${tokens.border}` }}>
+            <div style={{ flex: 1, minWidth: 160 }}><Input value={linkDraft.url} onChange={(v) => setLinkDraft((d) => ({ ...d, url: v }))} placeholder="https://…" onEnter={addLink} /></div>
+            <div style={{ flex: 1, minWidth: 140 }}><Input value={linkDraft.title} onChange={(v) => setLinkDraft((d) => ({ ...d, title: v }))} placeholder="Label (optional)" /></div>
+            <Button size="sm" onClick={addLink} disabled={!linkDraft.url.trim()}>Add link</Button>
+          </div>
+        )}
+      </div>
+
+      {/* Fixed bottom composer */}
+      <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: tokens.space3, position: 'relative' }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: 0, background: tokens.bg, border: `1.5px dashed ${paramsOpen ? tokens.primary : tokens.borderStrong}`, borderRadius: tokens.radiusLg, padding: tokens.space2, transition: 'border-color 0.12s ease' }}
+          >
+            {/* input */}
+            <textarea
+              ref={textareaRef}
+              rows={2}
+              placeholder="Message AcodeDev… (Enter to send)"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onFocus={() => setContextOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend(); }
+              }}
+              style={{ width: '100%', background: 'transparent', border: 'none', color: tokens.text, padding: `${tokens.space1}px ${tokens.space2}px`, fontSize: tokens.fontSizeMd, fontFamily: tokens.fontSans, outline: 'none', resize: 'none', boxSizing: 'border-box', lineHeight: 1.5, minHeight: 44, maxHeight: 220 }}
+            />
+            {/* toolbar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space1 }}>
               <div style={{ position: 'relative', flexShrink: 0 }}>
-                <IconBtn title="Add attachment" onClick={() => setAttachOpen((o) => !o)} active={attachOpen}><b style={{ fontSize: 22, lineHeight: 1 }}>+</b></IconBtn>
+                <IconBtn tiny title="Add attachment" onClick={() => setAttachOpen((o) => !o)} active={attachOpen}>+</IconBtn>
                 {attachOpen && (
                   <AddMenu
                     onFile={() => { setAttachOpen(false); fileRef.current?.click(); }}
@@ -582,53 +610,16 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                 )}
               </div>
 
-              <div style={{ flex: 1 }}>
-                <textarea
-                  ref={textareaRef}
-                  rows={2}
-                  placeholder="Message AcodeDev…  (Enter to send, Shift+Enter for newline)"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      void handleSend();
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    background: tokens.bg,
-                    border: `1px solid ${tokens.borderStrong}`,
-                    borderRadius: tokens.radiusMd,
-                    color: tokens.text,
-                    padding: `${tokens.space2}px ${tokens.space3}px`,
-                    fontSize: tokens.fontSizeSm,
-                    fontFamily: tokens.fontSans,
-                    outline: 'none',
-                    resize: 'none',
-                    boxSizing: 'border-box',
-                    lineHeight: 1.5,
-                    minHeight: 48,
-                    maxHeight: 220,
-                  }}
-                />
-              </div>
-
-              {/* Skills icon -> popup */}
-              <div style={{ position: 'relative', flexShrink: 0 }}>
-                <IconBtn title="Skills" onClick={() => setSkillOpen((o) => !o)} active={skillOpen || selectedSkills.length > 0}>✨</IconBtn>
-                {skillOpen && (
-                  <SkillsMenu
-                    selected={selectedSkills}
-                    onToggle={toggleSkill}
-                    onClose={() => setSkillOpen(false)}
-                  />
-                )}
-              </div>
-
-              {/* Params icon -> popup */}
-              <div style={{ position: 'relative', flexShrink: 0 }}>
-                <IconBtn title="Generation settings" onClick={() => setParamsOpen((o) => !o)} active={paramsOpen}>⚙</IconBtn>
+              <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                <button
+                  onClick={() => setParamsOpen((o) => !o)}
+                  title="Model & settings"
+                  style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, maxWidth: '100%', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, overflow: 'hidden' }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M4 5h16M4 12h16M4 19h16" /><circle cx="9" cy="5" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="7" cy="19" r="2" /></svg>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{model.split('/').pop() || 'Select model'}</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6" /></svg>
+                </button>
                 {paramsOpen && (
                   <ParamsMenu
                     showParams={showParams}
@@ -638,70 +629,67 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                     maxTokens={maxTokens}
                     setMaxTokens={setMaxTokens}
                     onClose={() => setParamsOpen(false)}
+                    provider={provider}
+                    setProvider={setProvider}
+                    freeOnly={freeOnly}
+                    setFreeOnly={setFreeOnly}
+                    minContext={minContext}
+                    setMinContext={setMinContext}
+                    models={providerModels}
+                    model={model}
+                    setModel={setModel}
                   />
                 )}
               </div>
 
-              {/* Send icon */}
               <div style={{ flexShrink: 0 }}>
                 <button
                   onClick={() => void handleSend()}
                   disabled={(!input.trim() && attachments.length === 0) || streaming}
                   title="Send"
                   aria-label="Send"
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: tokens.radiusMd,
-                    border: 'none',
-                    background: (!input.trim() && attachments.length === 0) || streaming ? tokens.surfaceHover : tokens.primary,
-                    color: (!input.trim() && attachments.length === 0) || streaming ? tokens.textMuted : '#fff',
-                    cursor: (!input.trim() && attachments.length === 0) || streaming ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'background 0.12s ease',
-                  }}
+                  style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: (!input.trim() && attachments.length === 0) || streaming ? tokens.surfaceHover : tokens.primary, color: (!input.trim() && attachments.length === 0) || streaming ? tokens.textMuted : '#fff', cursor: (!input.trim() && attachments.length === 0) || streaming ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                 >
-                  {streaming ? <Spinner size={18} color="#fff" /> : (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4z" /></svg>
+                  {streaming ? <Spinner size={16} color="#fff" /> : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5m0 0l-6 6m6-6l6 6" /></svg>
                   )}
                 </button>
               </div>
             </div>
-
-            {linkDraft.open && (
-              <div style={{ display: 'flex', gap: tokens.space2, marginTop: tokens.space2, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 160 }}>
-                  <Input value={linkDraft.url} onChange={(v) => setLinkDraft((d) => ({ ...d, url: v }))} placeholder="https://…" onEnter={addLink} />
-                </div>
-                <div style={{ flex: 1, minWidth: 140 }}>
-                  <Input value={linkDraft.title} onChange={(v) => setLinkDraft((d) => ({ ...d, title: v }))} placeholder="Label (optional)" />
-                </div>
-                <Button size="sm" onClick={addLink} disabled={!linkDraft.url.trim()}>Add link</Button>
-              </div>
-            )}
-            <div style={{ marginTop: tokens.space1, fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
-              Responses are generated by the selected model. AI can make mistakes — verify important output.
-            </div>
+          </div>
+          <div style={{ marginTop: tokens.space1, fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center' }}>
+            Responses are generated by the selected model. AI can make mistakes — verify important output.
           </div>
         </div>
-
-        {/* Hidden inputs */}
-        <input ref={fileRef} type="file" multiple style={{ display: 'none' }} onChange={onPickFiles} />
-        <input ref={folderRef} type="file" multiple style={{ display: 'none' }} {...({ webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>)} onChange={onPickFolder} />
       </div>
+
+      {/* Attachments/skill toolbars & hidden inputs */}
+      {attachOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 70, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 120 }}>
+          <div onClick={() => setAttachOpen(false)} style={{ position: 'absolute', inset: 0 }} />
+        </div>
+      )}
+      {skillOpen && (
+        <SkillsMenu
+          selected={selectedSkills}
+          onToggle={toggleSkill}
+          onClose={() => setSkillOpen(false)}
+        />
+      )}
+      <input ref={fileRef} type="file" multiple style={{ display: 'none' }} onChange={onPickFiles} />
+      <input ref={folderRef} type="file" multiple style={{ display: 'none' }} {...({ webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>)} onChange={onPickFolder} />
     </div>
   );
 }
 
-function IconBtn({ title, onClick, children, active }: { title: string; onClick: () => void; children: React.ReactNode; active?: boolean }) {
+function IconBtn({ title, onClick, children, active, small, tiny }: { title: string; onClick: () => void; children: React.ReactNode; active?: boolean; small?: boolean; tiny?: boolean }) {
   const { tokens } = useTheme();
+  const w = tiny ? 34 : small ? 38 : 44;
   return (
     <button
       title={title}
       onClick={onClick}
-      style={{ background: active ? `${tokens.primary}1a` : tokens.bg, border: `1px solid ${active ? tokens.primary : tokens.borderStrong}`, borderRadius: tokens.radiusMd, width: 44, height: 44, cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: active ? tokens.primary : tokens.text }}
+      style={{ background: active ? `${tokens.primary}1a` : 'transparent', border: `1px solid ${active ? tokens.primary : 'transparent'}`, borderRadius: tokens.radiusMd, width: w, height: w, cursor: 'pointer', fontSize: small || tiny ? 16 : 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: active ? tokens.primary : tokens.textSecondary, transition: 'background 0.12s ease' }}
     >
       {children}
     </button>
@@ -866,10 +854,19 @@ function SkillsMenu({ selected, onToggle, onClose }: { selected: string[]; onTog
 }
 
 /* ------------------------------------------------------------------ */
-/* Generation params popup (anchored above the ⚙ button)               */
+/* Model + generation settings popup (anchored above the branch chip)    */
 /* ------------------------------------------------------------------ */
-function ParamsMenu({ showParams, setShowParams, temperature, setTemperature, maxTokens, setMaxTokens, onClose }:
+function ParamsMenu({ provider, setProvider, models, model, setModel, freeOnly, setFreeOnly, minContext, setMinContext, showParams, setShowParams, temperature, setTemperature, maxTokens, setMaxTokens, onClose }:
   {
+    provider: ProviderId;
+    setProvider: (v: ProviderId) => void;
+    models: { id: string; name: string; isFree?: boolean; contextWindow?: number }[];
+    model: string;
+    setModel: (v: string) => void;
+    freeOnly: boolean;
+    setFreeOnly: (v: boolean) => void;
+    minContext: string;
+    setMinContext: (v: string) => void;
     showParams: boolean;
     setShowParams: React.Dispatch<React.SetStateAction<boolean>>;
     temperature: number;
@@ -879,10 +876,26 @@ function ParamsMenu({ showParams, setShowParams, temperature, setTemperature, ma
     onClose: () => void;
   }) {
   const { tokens } = useTheme();
+  const context = formatContext(models.find((m) => m.id === model)?.contextWindow ?? 0);
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
-      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', right: 0, zIndex: 71, width: 300, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space3 }}>
+      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 71, width: 340, maxHeight: '70vh', overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space3 }}>
+        <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 700, marginBottom: tokens.space2 }}>Model</div>
+        <Select label="Provider" value={provider} onChange={(v) => { setProvider(v as ProviderId); setModel(models[0]?.id ?? ''); }} options={[
+          ...gatewayProvidersLocal().map((p) => ({ label: `${p.name} · gateway`, value: p.id })),
+          ...directProvidersLocal().map((p) => ({ label: p.name, value: p.id })),
+        ]} />
+        <div style={{ marginTop: tokens.space2 }}>
+          <Select label={`Model · ${context} ctx`} value={model} onChange={setModel} options={models.map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''} · ${formatContext(m.contextWindow ?? 0)} ctx`, value: m.id }))} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, marginTop: tokens.space3 }}>
+          <Toggle checked={freeOnly} onChange={setFreeOnly} label="Free only" />
+          <div style={{ width: 86, flexShrink: 0 }}>
+            <Input value={minContext} onChange={setMinContext} placeholder="min ctx" />
+          </div>
+        </div>
+        <div style={{ height: 1, background: tokens.border, margin: `${tokens.space3}px 0` }} />
         <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 700, marginBottom: tokens.space2 }}>Generation</div>
         <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
           <span style={{ fontSize: tokens.fontSizeSm }}>Advanced</span>
@@ -897,6 +910,13 @@ function ParamsMenu({ showParams, setShowParams, temperature, setTemperature, ma
       </div>
     </>
   );
+}
+
+function gatewayProvidersLocal() {
+  return listProviders().filter((p) => p.gateway);
+}
+function directProvidersLocal() {
+  return listProviders().filter((p) => !p.gateway && p.id !== 'local');
 }
 
 function SessionItem({
@@ -974,14 +994,15 @@ function SessionItem({
   );
 }
 
-function MenuItem({ label, icon, onClick, danger }: { label: string; icon: string; onClick: () => void; danger?: boolean }) {
+function MenuItem({ label, icon, onClick, danger, disabled }: { label: string; icon: string; onClick: () => void; danger?: boolean; disabled?: boolean }) {
   const { tokens } = useTheme();
   return (
     <button
-      onClick={onClick}
-      style={{ width: '100%', textAlign: 'left', padding: `${tokens.space1}px ${tokens.space2}px`, background: 'transparent', border: 'none', borderRadius: tokens.radiusSm, color: danger ? tokens.danger : tokens.text, fontSize: tokens.fontSizeSm, cursor: 'pointer', fontFamily: tokens.fontSans }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      style={{ width: '100%', textAlign: 'left', padding: `${tokens.space1}px ${tokens.space2}px`, background: 'transparent', border: 'none', borderRadius: tokens.radiusSm, color: disabled ? tokens.textMuted : danger ? tokens.danger : tokens.text, fontSize: tokens.fontSizeSm, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: tokens.fontSans, opacity: disabled ? 0.6 : 1 }}
+      onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover; }}
+      onMouseLeave={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
     >
       <span style={{ marginRight: 6 }}>{icon}</span>{label}
     </button>
@@ -1035,6 +1056,152 @@ function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
             {copied ? '✓ Copied' : '⧉ Copy'}
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Secondary tab (Session | Files Changed)                             */
+/* ------------------------------------------------------------------ */
+function SubTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  const { tokens } = useTheme();
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        fontFamily: tokens.fontSans,
+        fontSize: tokens.fontSizeMd,
+        fontWeight: active ? 700 : 500,
+        color: active ? tokens.text : tokens.textMuted,
+        padding: `${tokens.space3}px ${tokens.space1}px`,
+        position: 'relative',
+      }}
+    >
+      {children}
+      {active && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: tokens.primary, borderRadius: tokens.radiusFull }} />}
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Overflow menu (···): Rename / Share / Export / Archive / Delete      */
+/* ------------------------------------------------------------------ */
+function OverflowMenu({ hasSession, onRename, onShare, onExport, onDelete, onClose }: {
+  hasSession: boolean;
+  onRename: () => void;
+  onShare: () => void;
+  onExport: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const { tokens } = useTheme();
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
+      <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 71, minWidth: 180, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
+        <MenuItem label="Rename" icon="✎" onClick={onRename} />
+        <MenuItem label="Share…" icon="↗" onClick={onShare} />
+        <MenuItem label="Export…" icon="↓" onClick={onExport} />
+        <MenuItem label="Archive" icon="🗂" onClick={onClose} />
+        <div style={{ height: 1, background: tokens.border, margin: `${tokens.space1}px 0` }} />
+        <MenuItem label="Delete…" icon="🗑" danger onClick={onDelete} disabled={!hasSession} />
+      </div>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Session switcher popover (from the top session chip)                 */
+/* ------------------------------------------------------------------ */
+function SessionPopover({ sessions, activeId, search, setSearch, onNew, onSelect, onClose, onRename, onCommitRename, onCancelRename, renaming, renameValue, setRenameValue, onClear, onDelete }: {
+  sessions: Conversation[];
+  activeId: string | null;
+  search: string;
+  setSearch: (v: string) => void;
+  onNew: () => void;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+  onRename: (id: string, current: string) => void;
+  onCommitRename: (id: string) => void;
+  onCancelRename: () => void;
+  renaming: string | null;
+  renameValue: string;
+  setRenameValue: (v: string) => void;
+  onClear: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const { tokens } = useTheme();
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
+      <div className="rise" style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 71, maxHeight: '60vh', overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space2 }}>
+        <div style={{ marginBottom: tokens.space2 }}>
+          <Input value={search} onChange={setSearch} placeholder="Search sessions…" />
+        </div>
+        <Button full size="sm" variant="secondary" onClick={onNew}>+ New chat</Button>
+        <div style={{ marginTop: tokens.space2, fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontWeight: 600, padding: `0 ${tokens.space1}px` }}>SESSIONS ({sessions.length})</div>
+        <div style={{ marginTop: 4 }}>
+          {sessions.length === 0 ? (
+            <div style={{ padding: tokens.space2, fontSize: tokens.fontSizeSm, color: tokens.textMuted }}>No chats yet. Start a new chat!</div>
+          ) : (
+            sessions.map((s) => (
+              <SessionItem
+                key={s.id}
+                session={s}
+                active={s.id === activeId}
+                renaming={renaming === s.id}
+                renameValue={renameValue}
+                onRenameValue={setRenameValue}
+                onClick={() => { onSelect(s.id); onClose(); }}
+                onRename={() => onRename(s.id, s.title)}
+                onCommitRename={() => onCommitRename(s.id)}
+                onCancelRename={onCancelRename}
+                onClear={() => onClear(s.id)}
+                onDelete={() => onDelete(s.id)}
+              />
+            ))
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Files Changed panel (sub-tab)                                        */
+/* ------------------------------------------------------------------ */
+function FilesPanel({ attachments, messages, selectedSkills, onToggleSkill }: { attachments: ChatAttachment[]; messages: ChatMessage[]; selectedSkills: string[]; onToggleSkill: (id: string) => void }) {
+  const { tokens } = useTheme();
+  const msgFiles = messages.flatMap((m) => (m as ChatMessage & { attachments?: ChatAttachment[] }).attachments ?? []);
+  const all = [...attachments, ...msgFiles];
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: tokens.space4 }}>
+      {all.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
+          No external files changed in this session.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2, marginBottom: tokens.space4 }}>
+          {all.map((a) => (
+            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusMd, background: tokens.bgSubtle }}>
+              <span style={{ fontSize: 16 }}>{kindIcon[a.kind]}</span>
+              <span style={{ flex: 1, fontSize: tokens.fontSizeSm, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+              <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
+                {a.kind === 'folder' ? `${a.children?.length ?? 0} files` : a.kind === 'link' ? 'link' : a.kind}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontWeight: 600, textTransform: 'uppercase', marginBottom: tokens.space1 }}>Context & Skills</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {BUILTIN_SKILLS.map((s) => (
+          <SkillRow key={s.id} skill={s} active={selectedSkills.includes(s.id)} onToggle={() => onToggleSkill(s.id)} />
+        ))}
       </div>
     </div>
   );
