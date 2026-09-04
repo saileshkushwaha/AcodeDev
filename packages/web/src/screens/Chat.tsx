@@ -1,7 +1,20 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Button, Select, Input, Toggle, Spinner, useTheme, Badge, useIsMobile } from '@acode/ui';
-import { listModels, listProviders, type ChatMessage, type ProviderId } from '@acode/core';
+import {
+  listModels,
+  listProviders,
+  BUILTIN_SKILLS,
+  getSkill,
+  skillsByIds,
+  inferCapabilities,
+  CAPABILITY_LABELS,
+  type ChatMessage,
+  type ProviderId,
+  type ChatAttachment,
+  type AttachmentKind,
+  type ModelCapability,
+} from '@acode/core';
 import type { Conversation } from '@acode/core';
 import { Markdown } from '../components/Markdown';
 
@@ -14,6 +27,15 @@ const SUGGESTIONS = [
   'Write a prompt for code review',
 ];
 
+const CAP_ORDER: ModelCapability[] = ['text', 'tool', 'vision', 'image', 'file', 'folder', 'svg', 'drawio', 'link', 'code', 'reasoning'];
+
+let _seq = 0;
+function uid(): string {
+  return `att_${Date.now().toString(36)}_${(_seq++).toString(36)}`;
+}
+
+const BINARY_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'pdf', 'zip', 'gz', 'tar', 'bin', 'exe', 'wasm', 'woff', 'woff2', 'ttf']);
+
 function formatContext(n: number): string {
   if (n <= 0) return '?';
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
@@ -21,9 +43,75 @@ function formatContext(n: number): string {
   return String(n);
 }
 
-export function ChatScreen() {
+function readTextAsync(f: File): Promise<string> {
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = () => resolve((r.result as string) ?? '');
+    r.onerror = () => resolve('');
+    r.readAsText(f);
+  });
+}
+
+function fileToAttachment(f: File): Promise<ChatAttachment> {
+  const name = f.name;
+  const type = f.type;
+  const id = uid();
+  if (type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(name)) {
+    return new Promise((resolve) => {
+      const r = new FileReader();
+      r.onload = () => resolve({ id, kind: 'image', name, mimeType: type || undefined, src: (r.result as string) ?? undefined, size: f.size });
+      r.onerror = () => resolve({ id, kind: 'image', name, mimeType: type || undefined, src: URL.createObjectURL(f), size: f.size });
+      r.readAsDataURL(f);
+    });
+  }
+  let kind: AttachmentKind = 'file';
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const text = (r.result as string) ?? '';
+      const ext = name.split('.').pop()?.toLowerCase() ?? '';
+      kind = 'file';
+      if (type === 'image/svg+xml' || ext === 'svg') kind = 'svg';
+      else if (ext === 'drawio' || name.toLowerCase().includes('drawio') || (text.includes('<mxGraphModel') && ext === 'xml')) kind = 'drawio';
+      else if (BINARY_EXT.has(ext) || text.includes('\u0000')) kind = 'file';
+      resolve({ id, kind, name, mimeType: type || undefined, text, size: f.size });
+    };
+    r.onerror = () => resolve({ id, kind, name, mimeType: type || undefined, size: f.size });
+    r.readAsText(f);
+  });
+}
+
+function folderToAttachment(files: File[], folderName: string): Promise<ChatAttachment> {
+  const children: ChatAttachment['children'] = [];
+  const pushes = files.slice(0, 40).map(async (f) => {
+    let text = '';
+    if (!BINARY_EXT.has(f.name.split('.').pop()?.toLowerCase() ?? '')) {
+      text = await readTextAsync(f);
+    }
+    children.push({ name: f.name, path: f.webkitRelativePath || f.name, text });
+  });
+  return Promise.all(pushes).then(() => ({
+    id: uid(),
+    kind: 'folder' as AttachmentKind,
+    name: folderName,
+    children,
+    size: children.length,
+  }));
+}
+
+const kindIcon: Record<AttachmentKind, string> = {
+  text: '📝',
+  file: '📄',
+  folder: '📁',
+  image: '🖼',
+  svg: '◫',
+  drawio: '⬡',
+  link: '🔗',
+};
+
+export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const { tokens } = useTheme();
-  const { chat, projects, currentProjectId } = useApp();
+  const { chat, projects, currentProjectId, hasKey } = useApp();
   const isMobile = useIsMobile();
 
   const [provider, setProvider] = useState<ProviderId>('openrouter');
@@ -42,16 +130,33 @@ export function ChatScreen() {
   const [sessionsOpen, setSessionsOpen] = useState(!isMobile);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+
+  // Chat context
+  const [contextOpen, setContextOpen] = useState(!isMobile);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [linkDraft, setLinkDraft] = useState({ open: false, url: '', title: '' });
+
+  const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { catalogVersion } = useApp();
-  void catalogVersion; // re-render when the provider/model catalog updates
+  void catalogVersion;
 
   const allProviders = listProviders();
   const gatewayProviders = allProviders.filter((p) => p.gateway);
   const directProviders = allProviders.filter((p) => !p.gateway && p.id !== 'local');
   const minCtx = Number(minContext) || 0;
   const providerModels = listModels(provider).filter((m) => (freeOnly ? m.isFree : true)).filter((m) => (minCtx > 0 ? m.contextWindow >= minCtx : true));
+
+  const provDef = allProviders.find((p) => p.id === provider);
+  const needsKey = !!(provDef && provDef.needsKey !== false && provDef.kind !== 'local');
+  const connected = !needsKey || hasKey(provider);
+
+  const modelDef = providerModels.find((m) => m.id === model);
+  const capabilities: ModelCapability[] = modelDef?.capabilities ?? inferCapabilities(modelDef?.tags);
 
   const refreshSessions = useCallback(() => {
     setSessions(projects.conversationsFor(currentProjectId ?? undefined));
@@ -82,15 +187,28 @@ export function ChatScreen() {
   }, [convId]);
 
   useEffect(() => {
-    if (!isMobile) setSessionsOpen(true);
+    if (!isMobile) {
+      setSessionsOpen(true);
+      setContextOpen(true);
+    }
   }, [isMobile]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: streaming ? 'auto' : 'smooth' });
   }, [messages, streaming]);
 
+  // Auto-grow the composer textarea as content grows (vertical context space).
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+    }
+  }, [input]);
+
   const selectSession = (id: string) => {
     setConvId(id);
+    setAttachments([]);
     if (isMobile) setSessionsOpen(false);
   };
 
@@ -104,6 +222,7 @@ export function ChatScreen() {
     refreshSessions();
     setConvId(conv.id);
     setMessages([]);
+    setAttachments([]);
     if (isMobile) setSessionsOpen(false);
   };
 
@@ -132,15 +251,40 @@ export function ChatScreen() {
     setRenaming(null);
   };
 
+  // ---- attachments ----
+  const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    for (const f of files) {
+      const a = await fileToAttachment(f);
+      setAttachments((prev) => [...prev, a]);
+    }
+  };
+  const onPickFolder = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (!files.length) return;
+    const root = files[0].webkitRelativePath?.split('/')[0] || files[0].name;
+    const a = await folderToAttachment(files, root);
+    setAttachments((prev) => [...prev, a]);
+  };
+  const addLink = () => {
+    if (!linkDraft.url.trim()) return;
+    setAttachments((prev) => [...prev, { id: uid(), kind: 'link', name: linkDraft.title.trim() || linkDraft.url.trim(), url: linkDraft.url.trim() }]);
+    setLinkDraft({ open: false, url: '', title: '' });
+  };
+  const removeAttachment = (id: string) => setAttachments((prev) => prev.filter((a) => a.id !== id));
+
+  // ---- send ----
   const handleSend = async (text?: string) => {
     const raw = (text ?? input).trim();
-    if (!raw || streaming) return;
+    if ((!raw && attachments.length === 0) || streaming) return;
     setInput('');
 
     let cid = convId;
     if (!cid) {
       const conv = projects.createConversation({
-        title: raw.slice(0, 40),
+        title: raw.slice(0, 40) || 'New chat',
         projectId: currentProjectId ?? undefined,
         provider,
         model,
@@ -151,18 +295,27 @@ export function ChatScreen() {
     }
 
     const conv = projects.getConversation(cid)!;
-    if (conv.title === 'New chat') {
+    if (conv.title === 'New chat' && raw) {
       projects.renameConversation(cid, raw.slice(0, 40));
       refreshSessions();
     }
 
-    const userMsg: ChatMessage = { role: 'user', content: raw };
+    const userMsg: ChatMessage = { role: 'user', content: raw, attachments };
     projects.appendMessage(cid, userMsg);
     const devStorage = projects.getConversation(cid)!;
     const prior = devStorage.messages.filter((m) => m.role !== 'system');
     setMessages([...prior]);
+    setAttachments([]);
 
-    const history: ChatMessage[] = [{ role: 'system', content: SYSTEM_PROMPT }, ...prior];
+    // Compose system prompt from base + active skills
+    const active = skillsByIds(selectedSkills);
+    let system = SYSTEM_PROMPT;
+    if (active.length) {
+      const skillBlock = active.map((s) => `<skill name="${s.name}">\n${s.instructions}\n</skill>`).join('\n\n');
+      system = `${SYSTEM_PROMPT}\n\nEnable these skills for this conversation:\n${skillBlock}`;
+    }
+
+    const history: ChatMessage[] = [{ role: 'system', content: system }, ...prior.map((m) => m.role === 'system' ? { ...m, content: system } : m)];
 
     setStreaming(true);
     const assistantId = `assist_${Date.now()}`;
@@ -195,6 +348,10 @@ export function ChatScreen() {
     !search || s.title.toLowerCase().includes(search.toLowerCase()),
   );
 
+  const connStatus = connected
+    ? { ok: true, text: provDef?.name ?? provider }
+    : { ok: false, text: provDef?.name ?? provider };
+
   return (
     <div style={{ display: 'flex', height: '100%', background: tokens.bg }}>
       {/* Sessions sidebar */}
@@ -206,7 +363,7 @@ export function ChatScreen() {
           <aside
             className="rise"
             style={{
-              width: isMobile ? 'min(85vw, 320px)' : 280,
+              width: isMobile ? 'min(85vw, 320px)' : 260,
               flexShrink: 0,
               background: tokens.bgSubtle,
               borderRight: `1px solid ${tokens.border}`,
@@ -274,37 +431,21 @@ export function ChatScreen() {
             <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{convId ? `${messages.filter((m) => m.role === 'user').length} messages` : 'No active session'}</div>
           </div>
           <div style={{ flex: 1 }} />
-          <div style={{ width: 220, minWidth: 160 }}>
-            <GroupedSelect
-              value={provider}
-              onChange={(v) => setProvider(v)}
-              groups={[
-                { label: 'Gateways', options: gatewayProviders.map((p) => ({ label: `${p.name} · many models`, value: p.id })) },
-                { label: 'Direct providers', options: directProviders.map((p) => ({ label: p.name, value: p.id })) },
-              ]}
-            />
-          </div>
-          <div style={{ width: 260, minWidth: 200 }}>
-            <Select value={model} onChange={setModel} options={providerModels.map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''} · ${formatContext(m.contextWindow)} ctx`, value: m.id }))} />
-          </div>
-          <Toggle checked={freeOnly} onChange={setFreeOnly} label="Free" />
-          <div style={{ width: 110, minWidth: 90 }}>
-            <Input value={minContext} onChange={setMinContext} placeholder="min ctx" hint="" />
-          </div>
-          <Button size="sm" variant="ghost" onClick={() => setShowParams((s) => !s)}>{showParams ? 'Hide' : 'Params'}</Button>
           {convId && (
             <Button size="sm" variant="ghost" onClick={() => clearSession(convId)}>Clear</Button>
           )}
+          <Button size="sm" onClick={() => setContextOpen((v) => !v)}>{contextOpen ? 'Hide context' : 'Context'}</Button>
         </div>
 
-        {showParams && (
-          <div style={{ display: 'flex', gap: tokens.space3, padding: tokens.space3, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgSubtle, flexWrap: 'wrap' }}>
-            <div style={{ width: 200 }}>
-              <Input label={`Temperature: ${temperature}`} value={String(temperature)} onChange={(v) => setTemperature(Math.max(0, Math.min(2, Number(v) || 0)))} type="number" />
+        {/* Not-connected banner */}
+        {!connected && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, padding: `${tokens.space2}px ${tokens.space3}px`, borderBottom: `1px solid ${tokens.border}`, background: `linear-gradient(90deg, ${tokens.warning}1f, ${tokens.bgElevated})`, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: tokens.fontSizeMd }}>⚠️</span>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600 }}>{connStatus.text} isn't connected</div>
+              <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary }}>Add your API key to start getting real responses from this provider.</div>
             </div>
-            <div style={{ width: 200 }}>
-              <Input label="Max tokens" value={String(maxTokens)} onChange={(v) => setMaxTokens(Math.max(1, Number(v) || 2048))} type="number" />
-            </div>
+            <Button size="sm" onClick={() => onNavigate?.('keys')}>Connect provider</Button>
           </div>
         )}
 
@@ -341,27 +482,352 @@ export function ChatScreen() {
 
         {/* Composer */}
         <div style={{ padding: tokens.space3, borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
-          <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', gap: tokens.space2, alignItems: 'flex-end' }}>
-            <div style={{ flex: 1 }}>
-              <Input
-                textarea
-                rows={2}
-                placeholder="Message AcodeDev…  (Enter to send, Shift+Enter for newline)"
-                value={input}
-                onChange={setInput}
-                onEnter={() => void handleSend()}
-              />
+          <div style={{ maxWidth: 900, margin: '0 auto' }}>
+            {attachments.length > 0 && (
+              <div style={{ display: 'flex', gap: tokens.space2, flexWrap: 'wrap', marginBottom: tokens.space2 }}>
+                {attachments.map((a) => (
+                  <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: tokens.space2, alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: tokens.space1, flexShrink: 0 }}>
+                <IconBtn title="Attach file" onClick={() => fileRef.current?.click()}>📄</IconBtn>
+                <IconBtn title="Attach folder" onClick={() => folderRef.current?.click()}>📁</IconBtn>
+                <IconBtn title="Attach link" onClick={() => setLinkDraft((d) => ({ ...d, open: !d.open }))}>🔗</IconBtn>
+              </div>
+              <div style={{ flex: 1 }}>
+                <textarea
+                  ref={textareaRef}
+                  rows={2}
+                  placeholder="Message AcodeDev…  (Enter to send, Shift+Enter for newline)"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    background: tokens.bg,
+                    border: `1px solid ${tokens.borderStrong}`,
+                    borderRadius: tokens.radiusMd,
+                    color: tokens.text,
+                    padding: `${tokens.space2}px ${tokens.space3}px`,
+                    fontSize: tokens.fontSizeSm,
+                    fontFamily: tokens.fontSans,
+                    outline: 'none',
+                    resize: 'none',
+                    boxSizing: 'border-box',
+                    lineHeight: 1.5,
+                    minHeight: 48,
+                    maxHeight: 220,
+                  }}
+                />
+              </div>
+              <Button onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || streaming} style={{ height: 48, whiteSpace: 'nowrap' }}>
+                {streaming ? <Spinner size={16} color="#fff" /> : 'Send'}
+              </Button>
             </div>
-            <Button onClick={() => void handleSend()} disabled={!input.trim() || streaming} style={{ height: 48, whiteSpace: 'nowrap' }}>
-              {streaming ? <Spinner size={16} color="#fff" /> : 'Send'}
-            </Button>
-          </div>
-          <div style={{ maxWidth: 860, margin: `${tokens.space1}px auto 0`, fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
-            Responses are generated by the selected model. AI can make mistakes — verify important output.
+            {linkDraft.open && (
+              <div style={{ display: 'flex', gap: tokens.space2, marginTop: tokens.space2, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <Input value={linkDraft.url} onChange={(v) => setLinkDraft((d) => ({ ...d, url: v }))} placeholder="https://…" onEnter={addLink} />
+                </div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <Input value={linkDraft.title} onChange={(v) => setLinkDraft((d) => ({ ...d, title: v }))} placeholder="Label (optional)" />
+                </div>
+                <Button size="sm" onClick={addLink} disabled={!linkDraft.url.trim()}>Add link</Button>
+              </div>
+            )}
+            <div style={{ marginTop: tokens.space1, fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
+              Responses are generated by the selected model. AI can make mistakes — verify important output.
+            </div>
           </div>
         </div>
+
+        {/* Hidden inputs */}
+        <input ref={fileRef} type="file" multiple style={{ display: 'none' }} onChange={onPickFiles} />
+        <input ref={folderRef} type="file" multiple style={{ display: 'none' }} {...({ webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>)} onChange={onPickFolder} />
       </div>
+
+      {/* Context panel */}
+      {contextOpen && (
+        <ContextPanel
+          provider={provider}
+          setProvider={setProvider}
+          model={model}
+          setModel={setModel}
+          providerModels={providerModels}
+          gatewayProviders={gatewayProviders}
+          directProviders={directProviders}
+          capabilities={capabilities}
+          freeOnly={freeOnly}
+          setFreeOnly={setFreeOnly}
+          minContext={minContext}
+          setMinContext={setMinContext}
+          showParams={showParams}
+          setShowParams={setShowParams}
+          temperature={temperature}
+          setTemperature={setTemperature}
+          maxTokens={maxTokens}
+          setMaxTokens={setMaxTokens}
+          selectedSkills={selectedSkills}
+          setSelectedSkills={setSelectedSkills}
+          connected={connected}
+          onNavigate={onNavigate}
+          isMobile={isMobile}
+          onClose={() => setContextOpen(false)}
+          onTriggerFile={() => fileRef.current?.click()}
+          onTriggerFolder={() => folderRef.current?.click()}
+          onTriggerLink={() => setLinkDraft((d) => ({ ...d, open: !d.open }))}
+        />
+      )}
     </div>
+  );
+}
+
+function IconBtn({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
+  const { tokens } = useTheme();
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      style={{ background: tokens.bg, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, width: 44, height: 44, cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function AttachmentChip({ attachment: a, onRemove }: { attachment: ChatAttachment; onRemove: () => void }) {
+  const { tokens } = useTheme();
+  const meta = a.kind === 'folder' ? `${a.children?.length ?? 0} files` : a.kind === 'image' ? 'image' : a.kind === 'link' ? 'link' : a.size ? `${(a.size / 1024).toFixed(0)}kb` : a.kind;
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusFull, border: `1px solid ${tokens.borderStrong}`, background: tokens.bgSubtle, fontSize: tokens.fontSizeXs }}>
+      <span>{kindIcon[a.kind]}</span>
+      <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{a.name}</span>
+      <span style={{ color: tokens.textMuted }}>{meta}</span>
+      <button onClick={onRemove} title="Remove" style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>
+    </div>
+  );
+}
+
+function ContextPanel(props: {
+  provider: string;
+  setProvider: (v: string) => void;
+  model: string;
+  setModel: (v: string) => void;
+  providerModels: { id: string; name: string; isFree: boolean; contextWindow: number }[];
+  gatewayProviders: { id: string; name: string }[];
+  directProviders: { id: string; name: string }[];
+  capabilities: ModelCapability[];
+  freeOnly: boolean;
+  setFreeOnly: (v: boolean) => void;
+  minContext: string;
+  setMinContext: (v: string) => void;
+  showParams: boolean;
+  setShowParams: React.Dispatch<React.SetStateAction<boolean>>;
+  temperature: number;
+  setTemperature: (v: number) => void;
+  maxTokens: number;
+  setMaxTokens: (v: number) => void;
+  selectedSkills: string[];
+  setSelectedSkills: React.Dispatch<React.SetStateAction<string[]>>;
+  connected: boolean;
+  onNavigate?: (tab: string) => void;
+  isMobile: boolean;
+  onClose: () => void;
+  onTriggerFile: () => void;
+  onTriggerFolder: () => void;
+  onTriggerLink: () => void;
+}) {
+  const { tokens } = useTheme();
+  const {
+    provider, setProvider, model, setModel, providerModels, gatewayProviders, directProviders,
+    capabilities, freeOnly, setFreeOnly, minContext, setMinContext,
+    showParams, setShowParams, temperature, setTemperature, maxTokens, setMaxTokens,
+    selectedSkills, setSelectedSkills, connected, onNavigate, isMobile, onClose,
+    onTriggerFile, onTriggerFolder, onTriggerLink,
+  } = props;
+
+  const toggleSkill = (id: string) => {
+    setSelectedSkills((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+  };
+
+  const groups = [...new Set(BUILTIN_SKILLS.map((s) => s.group))];
+
+  return (
+    <>
+      {isMobile && <div className="fade-in" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 60 }} />}
+      <aside
+        className="rise"
+        style={{
+          width: isMobile ? 'min(88vw, 360px)' : 340,
+          flexShrink: 0,
+          background: tokens.bgSubtle,
+          borderLeft: `1px solid ${tokens.border}`,
+          display: 'flex',
+          flexDirection: 'column',
+          zIndex: isMobile ? 61 : 'auto',
+          position: isMobile ? 'fixed' : 'relative',
+          top: 0, bottom: 0, right: 0,
+          overflowY: 'auto',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, borderBottom: `1px solid ${tokens.border}` }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd }}>Chat context</div>
+            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>Model, skills & attached resources</div>
+          </div>
+          {isMobile && (
+            <Button size="sm" variant="ghost" onClick={onClose}>✕</Button>
+          )}
+        </div>
+
+        {/* Model + capabilities */}
+        <div style={{ padding: tokens.space3, borderBottom: `1px solid ${tokens.border}` }}>
+          <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, marginBottom: tokens.space2 }}>Model</div>
+          <Select
+            label="Provider"
+            value={provider}
+            onChange={setProvider}
+            options={[
+              ...gatewayProviders.map((p) => ({ label: `${p.name} · gateway`, value: p.id })),
+              ...directProviders.map((p) => ({ label: p.name, value: p.id })),
+            ]}
+          />
+          <div style={{ marginTop: tokens.space2 }}>
+            <Select
+              label={`Model · ${formatContext(providerModels.find((m) => m.id === model)?.contextWindow ?? 0)} ctx`}
+              value={model}
+              onChange={setModel}
+              options={providerModels.map((m) => ({
+                label: `${m.name}${m.isFree ? ' · free' : ''} · ${formatContext(m.contextWindow)} ctx`,
+                value: m.id,
+              }))}
+            />
+          </div>
+
+          {/* Capabilities the model can accept */}
+          <div style={{ marginTop: tokens.space2 }}>
+            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginBottom: tokens.space1 }}>Accepts</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.space1 }}>
+              {CAP_ORDER.filter((c) => capabilities.includes(c)).map((c) => (
+                <Badge key={c} color={tokens.success}>{CAPABILITY_LABELS[c]}</Badge>
+              ))}
+              {capabilities.length === 0 && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>—</span>}
+            </div>
+          </div>
+
+          {!connected && onNavigate && (
+            <div style={{ marginTop: tokens.space2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: tokens.space2 }}>
+              <span style={{ fontSize: tokens.fontSizeXs, color: tokens.warning }}>Not connected</span>
+              <Button size="sm" onClick={() => onNavigate('keys')}>Configure</Button>
+            </div>
+          )}
+        </div>
+
+        {/* Skills */}
+        <div style={{ padding: tokens.space3, borderBottom: `1px solid ${tokens.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
+            <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600 }}>Skills</div>
+            {selectedSkills.length > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => setSelectedSkills([])}>Clear</Button>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.space1 }}>
+            {selectedSkills.length === 0 && (
+              <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginBottom: tokens.space1 }}>Enable skills to steer the model's approach.</span>
+            )}
+            {selectedSkills.map((id) => {
+              const s = getSkill(id);
+              return (
+                <Badge key={id} color={tokens.primary} style={{ cursor: 'pointer' }} >
+                  <span onClick={() => toggleSkill(id)} title={s?.description}>{s?.icon} {s?.name} ✕</span>
+                </Badge>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: tokens.space2 }}>
+            {groups.map((g) => (
+              <div key={g} style={{ marginBottom: tokens.space2 }}>
+                <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, textTransform: 'uppercase', fontWeight: 600, marginBottom: tokens.space1 }}>{g}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space1 }}>
+                  {BUILTIN_SKILLS.filter((s) => s.group === g).map((s) => (
+                    <SkillRow key={s.id} skill={s} active={selectedSkills.includes(s.id)} onToggle={() => toggleSkill(s.id)} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Attachments */}
+        <div style={{ padding: tokens.space3, borderBottom: `1px solid ${tokens.border}` }}>
+          <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, marginBottom: tokens.space2 }}>Attachments</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.space1, marginBottom: tokens.space2 }}>
+            <AttachBtn icon="📄" label="File" onClick={onTriggerFile} />
+            <AttachBtn icon="🖼" label="Image" onClick={onTriggerFile} />
+            <AttachBtn icon="📁" label="Folder" onClick={onTriggerFolder} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.space1 }}>
+            <AttachBtn icon="◫" label="SVG" onClick={onTriggerFile} />
+            <AttachBtn icon="⬡" label="draw.io" onClick={onTriggerFile} />
+            <AttachBtn icon="🔗" label="Link" onClick={onTriggerLink} />
+          </div>
+          <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginTop: tokens.space2 }}>
+            Attachments travel with your next message. Files, folders, images, SVGs, draw.io diagrams and links are all supported.
+          </div>
+        </div>
+
+        {/* Params */}
+        <div style={{ padding: tokens.space3 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
+            <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600 }}>Generation</div>
+            <Button size="sm" variant="ghost" onClick={() => setShowParams((s) => !s)}>{showParams ? 'Hide' : 'Show'}</Button>
+          </div>
+          <div style={{ display: 'flex', gap: tokens.space3, alignItems: 'center', marginBottom: tokens.space2, flexWrap: 'wrap' }}>
+            <Toggle checked={freeOnly} onChange={setFreeOnly} label="Free only" />
+            <div style={{ width: 110 }}>
+              <Input value={minContext} onChange={setMinContext} placeholder="min ctx" />
+            </div>
+          </div>
+          {showParams && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>
+              <Input label={`Temperature: ${temperature}`} value={String(temperature)} onChange={(v) => setTemperature(Math.max(0, Math.min(2, Number(v) || 0)))} type="number" />
+              <Input label="Max tokens" value={String(maxTokens)} onChange={(v) => setMaxTokens(Math.max(1, Number(v) || 2048))} type="number" />
+            </div>
+          )}
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function AttachBtn({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+  const { tokens } = useTheme();
+  return (
+    <button
+      onClick={onClick}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: `${tokens.space2}px 4px`, border: `1px dashed ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, background: tokens.bg, cursor: 'pointer', color: tokens.textSecondary, fontFamily: tokens.fontSans, fontSize: tokens.fontSizeXs }}
+    >
+      <span style={{ fontSize: 18 }}>{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function SkillRow({ skill, active, onToggle }: { skill: { id: string; name: string; icon: string; description: string }; active: boolean; onToggle: () => void }) {
+  const { tokens } = useTheme();
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, cursor: 'pointer', padding: `${tokens.space1}px 0` }}>
+      <input type="checkbox" checked={active} onChange={onToggle} />
+      <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: active ? tokens.primary : tokens.text }}>{skill.icon} {skill.name}</span>
+      <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontFamily: tokens.fontSans }}>— {skill.description}</span>
+    </label>
   );
 }
 
@@ -389,7 +855,7 @@ function SessionItem({
       style={{
         position: 'relative',
         marginBottom: tokens.space1,
-        padding: `${tokens.space2}px ${tokens.space3}px`,
+        padding: `${tokens.space2}px ${tokens.space2}px`,
         borderRadius: tokens.radiusMd,
         background: active ? tokens.primary : 'transparent',
         color: active ? tokens.primaryForeground : tokens.text,
@@ -467,6 +933,15 @@ function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
         <div style={{ width: 30, height: 30, borderRadius: tokens.radiusMd, background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: tokens.fontSizeSm, alignSelf: 'flex-start', flexShrink: 0 }}>A</div>
       )}
       <div style={{ maxWidth: '82%', display: 'flex', flexDirection: 'column', gap: tokens.space1 }}>
+        {isUser && msg.attachments && msg.attachments.length > 0 && (
+          <div style={{ display: 'flex', gap: tokens.space1, flexWrap: 'wrap' }}>
+            {msg.attachments.map((a) => (
+              <span key={a.id} style={{ padding: `2px ${tokens.space2}px`, borderRadius: tokens.radiusFull, background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, fontSize: tokens.fontSizeXs }}>
+                {kindIcon[a.kind]} {a.name}
+              </span>
+            ))}
+          </div>
+        )}
         <div
           style={{
             padding: `${tokens.space3}px ${tokens.space4}px`,
@@ -494,40 +969,5 @@ function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
         )}
       </div>
     </div>
-  );
-}
-
-function GroupedSelect({
-  value,
-  onChange,
-  groups,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  groups: { label: string; options: { label: string; value: string }[] }[];
-}) {
-  const { tokens } = useTheme();
-  const base: React.CSSProperties = {
-    width: '100%',
-    background: tokens.bg,
-    border: `1px solid ${tokens.borderStrong}`,
-    borderRadius: tokens.radiusMd,
-    color: tokens.text,
-    padding: `${tokens.space2}px ${tokens.space3}px`,
-    fontSize: tokens.fontSizeSm,
-    fontFamily: tokens.fontSans,
-    outline: 'none',
-    boxSizing: 'border-box',
-  };
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} style={base}>
-      {groups.map((g) => (
-        <optgroup key={g.label} label={g.label}>
-          {g.options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
   );
 }

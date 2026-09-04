@@ -15,7 +15,7 @@ export function App() {
 
   const screens: Record<string, React.ReactNode> = {
     dashboard: <Dashboard onNavigate={setTab} />,
-    chat: <ChatScreen />,
+    chat: <ChatScreen onNavigate={setTab} />,
     workflows: <WorkflowsScreen />,
     prompts: <PromptsScreen />,
     agents: <AgentsScreen />,

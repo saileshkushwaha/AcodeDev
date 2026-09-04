@@ -9,12 +9,63 @@ export type ProviderId = string;
 
 export type ConnectionMode = 'openrouter' | 'direct' | 'local';
 
+/** Resource kinds a user can attach to a chat message. */
+export type AttachmentKind =
+  | 'text' // arbitrary text
+  | 'file' // a text/code file
+  | 'folder' // a folder containing files
+  | 'image' // image (PNG/JPEG/WebP/GIF) via data URL
+  | 'svg' // SVG document
+  | 'drawio' // draw.io XML diagram
+  | 'link'; // URL reference
+
+export interface ChatAttachment {
+  id: string;
+  kind: AttachmentKind;
+  /** Display name (file name, link title, etc.). */
+  name: string;
+  /** MIME type when known (e.g. image/png, text/plain, image/svg+xml). */
+  mimeType?: string;
+  /** For image: a data URL or remote URL. */
+  src?: string;
+  /** For text/file/svg/drawio: raw textual content. */
+  text?: string;
+  /** For link: the target URL. */
+  url?: string;
+  /** For folder: flattened child files. */
+  children?: { name: string; path: string; text: string }[];
+  /** Byte size when known. */
+  size?: number;
+}
+
+/** Modal capabilities a given model can accept in a chat message. */
+export type ModelCapability =
+  | 'text' // plain text
+  | 'tool' // function/tool calling
+  | 'vision' // images
+  | 'image' // image generation is out of scope; reserved
+  | 'file' // text/code files
+  | 'folder' // folder of files
+  | 'svg'
+  | 'drawio'
+  | 'link'
+  | 'code' // code-aware
+  | 'reasoning'; // chain-of-thought / reasoning model
+
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
   name?: string;
   toolCalls?: ToolCall[];
   toolCallId?: string;
+  /** Rich content parts (text + images) for multimodal providers. */
+  parts?: ChatContentPart[];
+  /** User-supplied resources attached to this message. */
+  attachments?: ChatAttachment[];
 }
 
 export interface ToolCall {
@@ -77,6 +128,8 @@ export interface ModelInfo {
   costPer1kIn?: number;
   costPer1kOut?: number;
   tags: string[];
+  /** Resource kinds this model can accept in a message (defaults to text+tool). */
+  capabilities?: ModelCapability[];
 }
 
 export type CryptoAdapter = {

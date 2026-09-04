@@ -1,4 +1,6 @@
 import type {
+  ChatAttachment,
+  ChatContentPart,
   ChatMessage,
   ChatRequest,
   ChatResponse,
@@ -12,14 +14,125 @@ export interface AbstractProvider {
   stream(req: ChatRequest): AsyncIterable<ChatStreamChunk>;
 }
 
+/**
+ * Build the wire-friendly multipart content for a message, adapting
+ * attachments into text / image parts. Returns either a plain string (fast
+ * path for text-only) or an array of OpenAI-style content parts.
+ */
+export function buildContentParts(msg: ChatMessage): string | ChatContentPart[] {
+  if (msg.parts && msg.parts.length) return msg.parts;
+  const attach = msg.attachments;
+  if (!attach || attach.length === 0) return msg.content;
+
+  const parts: ChatContentPart[] = [];
+  if (msg.content.trim()) parts.push({ type: 'text', text: msg.content });
+  let imageCount = 0;
+  for (const a of attach) {
+    const part = attachmentToContentPart(a);
+    if (!part) continue;
+    if (part.type === 'image_url') {
+      imageCount++;
+      if (imageCount > 24) break; // some providers cap image inputs
+    }
+    parts.push(part);
+  }
+  // Text-only fallback if nothing produced a part (e.g. attachments with no data).
+  return parts.length ? parts : msg.content;
+}
+
+/** Convert a single attachment into an OpenAI-style content part (or null). */
+function attachmentToContentPart(a: ChatAttachment): ChatContentPart | null {
+  switch (a.kind) {
+    case 'image':
+      if (a.src) return { type: 'image_url', image_url: { url: a.src } };
+      return null;
+    case 'link':
+      return {
+        type: 'text',
+        text: `[link: ${a.name}] ${a.url ?? ''}${a.text ? `\n${a.text}` : ''}`,
+      };
+    case 'folder': {
+      const files = a.children ?? [];
+      const head = `[folder: ${a.name}] ${files.length} file(s)\n`;
+      const body = files
+        .map((f) => `--- ${f.path} ---\n${(f.text ?? '').slice(0, 8000)}`)
+        .join('\n\n')
+        .slice(0, 24000);
+      return { type: 'text', text: head + body };
+    }
+    case 'svg':
+      return {
+        type: 'text',
+        text: `[svg: ${a.name}]\n\`\`\`svg\n${(a.text ?? '').slice(0, 20000)}\n\`\`\``,
+      };
+    case 'drawio':
+      return {
+        type: 'text',
+        text: `[draw.io diagram: ${a.name}]\n\`\`\`xml\n${(a.text ?? '').slice(0, 20000)}\n\`\`\``,
+      };
+    case 'file':
+      return {
+        type: 'text',
+        text: `[file: ${a.name}${a.mimeType ? ` (${a.mimeType})` : ''}]\n\`\`\`\n${(a.text ?? '').slice(0, 24000)}\n\`\`\``,
+      };
+    case 'text':
+      return { type: 'text', text: `[note]: ${a.text ?? a.name}` };
+    default:
+      return null;
+  }
+}
+
+/** Split a data URL into { mimeType, base64Data } for providers that want the raw bytes. */
+export function splitDataUrl(src: string): { mimeType?: string; data: string } {
+  const m = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(src);
+  if (!m) return { data: src };
+  return { mimeType: m[1] || undefined, data: m[3] };
+}
+
+/** OpenAI-style parts -> Gemini parts (text + inline_data for images). */
+function toGeminiParts(msg: ChatMessage): Record<string, unknown>[] {
+  const parts = buildContentParts(msg);
+  if (typeof parts === 'string') return [{ text: parts }];
+  const out: Record<string, unknown>[] = [];
+  for (const p of parts) {
+    if (p.type === 'text') out.push({ text: p.text });
+    else {
+      const { mimeType, data } = splitDataUrl(p.image_url.url);
+      out.push({ inline_data: { mime_type: mimeType ?? 'image/png', data } });
+    }
+  }
+  return out;
+}
+
+/** OpenAI-style parts -> Anthropic content blocks (text + image sources). */
+function toAnthropicContent(msg: ChatMessage): Array<Record<string, unknown>> {
+  const parts = buildContentParts(msg);
+  if (typeof parts === 'string') return [{ type: 'text', text: parts }];
+  const out: Array<Record<string, unknown>> = [];
+  for (const p of parts) {
+    if (p.type === 'text') out.push({ type: 'text', text: p.text });
+    else {
+      const { mimeType, data } = splitDataUrl(p.image_url.url);
+      out.push({
+        type: 'image',
+        source: { type: 'base64', media_type: mimeType ?? 'image/png', data },
+      });
+    }
+  }
+  return out;
+}
+
 function buildOpenAIMessages(messages: ChatMessage[]) {
-  return messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-    ...(m.name ? { name: m.name } : {}),
-    ...(m.toolCalls && m.toolCalls.length ? { tool_calls: m.toolCalls } : {}),
-    ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
-  }));
+  return messages.map((m) => {
+    const content = buildContentParts(m);
+    return {
+      role: m.role,
+      content,
+      ...(m.name ? { name: m.name } : {}),
+      ...(m.toolCalls && m.toolCalls.length ? { tool_calls: m.toolCalls } : {}),
+      ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
+    };
+  });
 }
 
 export class OpenAICompatibleProvider implements AbstractProvider {
@@ -159,7 +272,7 @@ export class GoogleProvider implements AbstractProvider {
   private buildContents(messages: ChatMessage[]) {
     return messages
       .filter((m) => m.role !== 'system')
-      .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+      .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: toGeminiParts(m) }));
   }
 
   private async callRaw(req: ChatRequest, stream: boolean) {
@@ -246,7 +359,7 @@ export class AnthropicProvider implements AbstractProvider {
     const nonSystem = req.messages.filter((m) => m.role !== 'system');
     const parts = nonSystem.map((m) => ({
       role: m.role === 'tool' ? 'user' : m.role,
-      content: m.content,
+      content: toAnthropicContent(m),
     }));
     const body: Record<string, unknown> = {
       model: req.model,

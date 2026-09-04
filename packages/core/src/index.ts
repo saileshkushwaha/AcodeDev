@@ -1,4 +1,5 @@
 export * from './types';
+export * from './skills';
 export * from './models/catalog';
 export * from './llm/provider';
 export * from './llm/ChatEngine';

@@ -1,4 +1,47 @@
-import type { ModelInfo, ProviderId } from '../types';
+import type { ModelCapability, ModelInfo, ProviderId } from '../types';
+
+/**
+ * Derive the resource capabilities a model can accept from its tags and any
+ * multimodal hints carried by the live source. Models default to text + tool
+ * + file + folder + link (universal); vision unlocks image/svg/drawio.
+ */
+export function inferCapabilities(
+  tags: string[] = [],
+  inputModalities?: string[] | string,
+): ModelCapability[] {
+  const caps: ModelCapability[] = ['text', 'tool', 'file', 'folder', 'link'];
+  const list = Array.isArray(inputModalities)
+    ? inputModalities
+    : typeof inputModalities === 'string'
+      ? [inputModalities]
+      : [];
+  const hasVision =
+    list.length > 0
+      ? list.some((m) => m === 'image' || m === 'vision')
+      : tags.includes('vision');
+  if (hasVision) caps.push('vision', 'image', 'svg', 'drawio');
+  if (tags.includes('reasoning') || tags.includes('thinking')) caps.push('reasoning');
+  if (tags.includes('code') || tags.includes('coding')) caps.push('code');
+  if (tags.includes('vision') || hasVision) {
+    if (!caps.includes('vision')) caps.push('vision');
+  }
+  return [...new Set(caps)];
+}
+
+/** Stable label per capability (used by the model selector / context UI). */
+export const CAPABILITY_LABELS: Record<ModelCapability, string> = {
+  text: 'Text',
+  tool: 'Tool calling',
+  vision: 'Vision / images',
+  image: 'Images',
+  file: 'Files',
+  folder: 'Folders',
+  svg: 'SVG',
+  drawio: 'draw.io',
+  link: 'Links',
+  code: 'Code',
+  reasoning: 'Reasoning',
+};
 
 /**
  * A provider/gateway definition. Providers can be:
@@ -128,7 +171,12 @@ const listeners = new Set<() => void>();
 function seed() {
   SEED_PROVIDERS.forEach((p) => registryProviders.set(p.id, p));
   Object.values(FREE_MODELS).forEach((group) =>
-    group.forEach((m) => registryModels.set(`${m.provider}::${m.id}`, m as ModelRecord)),
+    group.forEach((m) =>
+      registryModels.set(
+        `${m.provider}::${m.id}`,
+        { ...m, capabilities: (m as ModelRecord).capabilities ?? inferCapabilities(m.tags) } as ModelRecord,
+      ),
+    ),
   );
 }
 seed();
@@ -358,6 +406,14 @@ export async function syncGatewayData(source: GatewaySource): Promise<number> {
     if (isFree) tags.push('free');
     if (ctx >= 64000) tags.push('long-context');
 
+    const arch = (m.architecture ?? {}) as Record<string, unknown> | undefined;
+    const direct = arch?.input_modalities as string[] | undefined;
+    const nested = (arch?.modalities as { input?: string[] } | undefined)?.input;
+    const textFlag = arch?.modalitiy_text;
+    const modalities: string[] | string | undefined =
+      direct ?? nested ?? (textFlag !== undefined ? (textFlag ? ['text', 'image'] : ['text']) : undefined);
+    const capabilities = inferCapabilities(tags, modalities);
+
     const record: ModelRecord = {
       id,
       name,
@@ -368,6 +424,7 @@ export async function syncGatewayData(source: GatewaySource): Promise<number> {
       costPer1kIn: promptPrice != null ? promptPrice * 1000 : undefined,
       costPer1kOut: completionPrice != null ? completionPrice * 1000 : undefined,
       tags,
+      capabilities,
     };
     // Don't overwrite curated seeds with worse data; only add new ids.
     if (!registryModels.has(keyOf(source.id, id))) {
