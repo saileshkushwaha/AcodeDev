@@ -249,10 +249,17 @@ const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 
 function parseContext(spec: string | undefined): number {
   if (!spec) return 0;
-  const m = spec.match(/(\d+(?:\.\d+)?)\s*(k|m)/i);
-  if (!m) return 0;
-  const n = parseFloat(m[1]);
-  return m[2].toLowerCase() === 'm' ? n * 1000000 : n * 1000;
+  const s = String(spec).trim().toLowerCase();
+  // "128k", "2.5m", "1 m" style
+  const m = s.match(/^(\d+(?:\.\d+)?)\s*(k|m)$/);
+  if (m) {
+    const n = parseFloat(m[1]);
+    return m[2] === 'm' ? n * 1000000 : n * 1000;
+  }
+  // plain number = raw token count (OpenRouter returns e.g. "131072")
+  const n = Number(s);
+  if (Number.isFinite(n) && n > 0) return Math.round(n);
+  return 0;
 }
 
 /**
