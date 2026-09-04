@@ -43,6 +43,30 @@ function formatContext(n: number): string {
   return String(n);
 }
 
+// Detect files the assistant wrote/edited from a code-fence filename header,
+// e.g. ```ts src/app.ts ... or ``` filename.ts / path/to/file.js:12
+const FILE_EXT_RE = /\.(?:[a-z0-9]+)$/i;
+function extractChangedFiles(content: string): string[] {
+  const found = new Set<string>();
+  const entry = /```[^\n]*\s+([^\s`]+)\s*\n/g;
+  let m: RegExpExecArray | null;
+  while ((m = entry.exec(content)) !== null) {
+    const raw = m[1].split(':')[0].trim();
+    // strip leading markers like "./" or "▸ " and quotes
+    const path = raw.replace(/^\.{1,2}\//, '').replace(/^[/\\]/, '').replace(/[`'"”]/g, '');
+    if (
+      path &&
+      !path.startsWith('```') &&
+      path.split('/').length >= 1 &&
+      /^[\w.-]+(\/[\w.@-]+)+$/.test(path) &&
+      FILE_EXT_RE.test(path.split('/').pop() ?? '')
+    ) {
+      found.add(path);
+    }
+  }
+  return [...found];
+}
+
 function readTextAsync(f: File): Promise<string> {
   return new Promise((resolve) => {
     const r = new FileReader();
@@ -133,6 +157,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const [subtab, setSubtab] = useState<'session' | 'files'>('session');
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
+  const [changedFiles, setChangedFiles] = useState<{ path: string; status: string; changedAt: number }[]>([]);
 
   // Chat context
   const [contextOpen, setContextOpen] = useState(!isMobile);
@@ -168,9 +193,14 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setSessions(projects.conversationsFor(currentProjectId ?? undefined));
   }, [projects, currentProjectId]);
 
+  const refreshChangedFiles = useCallback(() => {
+    setChangedFiles((projects.changedFilesFor(convId) ?? []) as { path: string; status: string; changedAt: number }[]);
+  }, [projects, convId]);
+
   useEffect(() => {
     refreshSessions();
-  }, [refreshSessions]);
+    refreshChangedFiles();
+  }, [refreshSessions, refreshChangedFiles]);
 
   useEffect(() => {
     if (!providerModels.some((m) => m.id === model)) {
@@ -230,7 +260,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setSelectedSkills((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
   };
 
-  const newSession = () => {
+  const toggleSessions = () => { setSessionsOpen((v) => !v); }; const newSession = () => {
     const conv = projects.createConversation({
       title: 'New chat',
       projectId: currentProjectId ?? undefined,
@@ -392,6 +422,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       }
       setMessages((prev) => prev.map((m) => (m.name === assistantId ? { role: 'assistant', content: full } : m)));
       projects.appendMessage(cid, { role: 'assistant', content: full });
+      extractChangedFiles(full).forEach((p) => projects.addChangedFile(cid, p, 'modified'));
     } catch (e) {
       const errMsg = `⚠️ ${e instanceof Error ? e.message : String(e)}\n\nTip: check your API key or connectivity.`;
       setMessages((prev) => prev.map((m) => (m.name === assistantId ? { role: 'assistant', content: errMsg } : m)));
@@ -406,6 +437,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           full = text;
           setMessages((prev) => prev.map((m) => (m.name === assistantId ? { role: 'assistant', content: text } : m)));
           projects.appendMessage(cid, { role: 'assistant', content: text });
+          extractChangedFiles(text).forEach((p) => projects.addChangedFile(cid, p, 'modified'));
         }
       } catch {
         /* keep whatever the stream produced */
@@ -413,6 +445,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     }
     setStreaming(false);
     refreshSessions();
+    refreshChangedFiles();
   };
 
   const filteredSessions = sessions.filter((s) =>
@@ -477,13 +510,13 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           )}
         </div>
 
-        <IconBtn title="New chat" onClick={newSession}>+</IconBtn>
+        <IconBtn title="New chat" onClick={toggleSessions}>+</IconBtn>
       </div>
 
       {/* Secondary tab bar: Session | Files Changed */}
       <div style={{ display: 'flex', gap: tokens.space4, padding: `0 ${tokens.space3}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
         <SubTab active={subtab === 'session'} onClick={() => setSubtab('session')}>Session</SubTab>
-        <SubTab active={subtab === 'files'} onClick={() => setSubtab('files')}>Files Changed{fileCount > 0 ? ` ${fileCount}` : ''}</SubTab>
+        <SubTab active={subtab === 'files'} onClick={() => setSubtab('files')}>Files Changed {changedFiles.length > 0 ? ` ${changedFiles.length}` : ''}</SubTab>
       </div>
 
       {/* Content */}
@@ -561,10 +594,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           </div>
         ) : (
           <FilesPanel
-            attachments={attachments}
-            messages={messages}
-            selectedSkills={selectedSkills}
-            onToggleSkill={toggleSkill}
+            changedFiles={changedFiles}
           />
         )}
 
@@ -1172,37 +1202,48 @@ function SessionPopover({ sessions, activeId, search, setSearch, onNew, onSelect
 }
 
 /* ------------------------------------------------------------------ */
-/* Files Changed panel (sub-tab)                                        */
+/* Files Changed panel (sub-tab) — only files actually changed          */
 /* ------------------------------------------------------------------ */
-function FilesPanel({ attachments, messages, selectedSkills, onToggleSkill }: { attachments: ChatAttachment[]; messages: ChatMessage[]; selectedSkills: string[]; onToggleSkill: (id: string) => void }) {
+const STATUS_LABEL: Record<string, string> = { added: 'Added', modified: 'Modified', deleted: 'Deleted' };
+const STATUS_COLOR: Record<string, string> = { added: '#2f9e44', modified: '#e6a23c', deleted: '#e03131' };
+function FilesPanel({ changedFiles }: { changedFiles: { path: string; status: string }[] }) {
   const { tokens } = useTheme();
-  const msgFiles = messages.flatMap((m) => (m as ChatMessage & { attachments?: ChatAttachment[] }).attachments ?? []);
-  const all = [...attachments, ...msgFiles];
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: tokens.space4 }}>
-      {all.length === 0 ? (
+    <div style={{ flex: 1, overflowY: 'auto', padding: tokens.space3 }}>
+      {changedFiles.length === 0 ? (
         <div style={{ textAlign: 'center', padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
-          No external files changed in this session.
+          No files changed in this session yet.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2, marginBottom: tokens.space4 }}>
-          {all.map((a) => (
-            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusMd, background: tokens.bgSubtle }}>
-              <span style={{ fontSize: 16 }}>{kindIcon[a.kind]}</span>
-              <span style={{ flex: 1, fontSize: tokens.fontSizeSm, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
-              <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
-                {a.kind === 'folder' ? `${a.children?.length ?? 0} files` : a.kind === 'link' ? 'link' : a.kind}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space1 }}>
+          {changedFiles.map((f) => (
+            <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd }}>
+              <span
+                style={{
+                  flexShrink: 0,
+                  fontSize: tokens.fontSizeXs,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: '#fff',
+                  background: STATUS_COLOR[f.status] ?? tokens.textMuted,
+                  padding: `2px 8px`,
+                  borderRadius: tokens.radiusFull,
+                  width: 76,
+                  textAlign: 'center',
+                }}
+              >
+                {STATUS_LABEL[f.status] ?? f.status}
               </span>
+              <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path}</span>
             </div>
           ))}
         </div>
       )}
-      <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontWeight: 600, textTransform: 'uppercase', marginBottom: tokens.space1 }}>Context & Skills</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {BUILTIN_SKILLS.map((s) => (
-          <SkillRow key={s.id} skill={s} active={selectedSkills.includes(s.id)} onToggle={() => onToggleSkill(s.id)} />
-        ))}
-      </div>
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Session popover (sidebar-style, from the top session chip)           */
+/* ------------------------------------------------------------------ */

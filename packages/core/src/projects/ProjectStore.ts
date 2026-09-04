@@ -1,5 +1,13 @@
 import type { ChatMessage, ProviderId } from '../types';
 
+export type FileChangeStatus = 'added' | 'modified' | 'deleted';
+
+export interface ChangedFile {
+  path: string;
+  status: FileChangeStatus;
+  changedAt: number;
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -7,6 +15,7 @@ export interface Conversation {
   provider: ProviderId;
   model: string;
   messages: ChatMessage[];
+  changedFiles: ChangedFile[];
   createdAt: number;
   updatedAt: number;
 }
@@ -114,6 +123,7 @@ export class ProjectStore {
       provider: input.provider,
       model: input.model,
       messages: [],
+      changedFiles: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -142,6 +152,29 @@ export class ProjectStore {
     }
   }
 
+  /** Record that a file was changed in a conversation (dedupes by path). */
+  addChangedFile(convId: string, path: string, status: FileChangeStatus = 'modified'): void {
+    const c = this.conversations.get(convId);
+    if (!c || !path.trim()) return;
+    const existing = c.changedFiles.find((f) => f.path === path);
+    if (existing) {
+      existing.status = status;
+      existing.changedAt = Date.now();
+    } else {
+      c.changedFiles.push({ path, status, changedAt: Date.now() });
+    }
+    c.updatedAt = Date.now();
+    this.persist();
+  }
+
+  /** Files changed in a conversation, most recent first. */
+  changedFilesFor(convId: string | null): ChangedFile[] {
+    const c = convId ? this.conversations.get(convId) : undefined;
+    return (c?.changedFiles ?? [])
+      .slice()
+      .sort((a, b) => b.changedAt - a.changedAt);
+  }
+
   /** Rename a conversation. */
   renameConversation(id: string, title: string): void {
     const c = this.conversations.get(id);
@@ -157,6 +190,7 @@ export class ProjectStore {
     const c = this.conversations.get(id);
     if (c) {
       c.messages = [];
+      c.changedFiles = [];
       c.updatedAt = Date.now();
       this.persist();
     }
