@@ -42,6 +42,7 @@ function formatContext(n: number): string {
   if (n >= 1000) return `${Math.round(n / 1000)}k`;
   return String(n);
 }
+type TabType = { id: string; title: string; type: "session" | "files" };
 
 // Detect files the assistant wrote/edited from a code-fence filename header,
 // e.g. ```ts src/app.ts ... or ``` filename.ts / path/to/file.js:12
@@ -154,6 +155,8 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [tabs, setTabs] = useState<TabType[]>([{ id: 'session-1', title: 'Session 1', type: 'session' }]);
+  const [activeTab, setActiveTab] = useState<string>('session-1');
   const [subtab, setSubtab] = useState<'session' | 'files'>('session');
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
@@ -271,6 +274,9 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setConvId(conv.id);
     setMessages([]);
     setAttachments([]);
+    const newTabId = `session-${Date.now()}`;
+    setTabs((prev) => [...prev, { id: newTabId, title: conv.title ?? 'New chat', type: 'session' }]);
+    setActiveTab(newTabId);
     if (isMobile) setSessionsOpen(false);
   };
 
