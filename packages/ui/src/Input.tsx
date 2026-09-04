@@ -44,7 +44,7 @@ export function Input({
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space1 }}>
       {label && <label style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary, fontWeight: 500 }}>{label}</label>}
       {textarea ? (
-        <textarea rows={rows ?? 4} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} style={base} />
+        <textarea rows={rows ?? 4} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onEnter ? (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onEnter(); } } : undefined} style={base} />
       ) : (
         <input type={type} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onEnter ? (e) => { if (e.key === 'Enter') onEnter(); } : undefined} style={base} />
       )}

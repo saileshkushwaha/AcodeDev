@@ -27,7 +27,7 @@ function I({ d }: { d: string }) {
 
 export const NAV: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: icons.dashboard },
-  { id: 'chat', label: 'Chat & Playground', icon: icons.chat, badge: 0 },
+  { id: 'chat', label: 'Chat', icon: icons.chat, badge: 0 },
   { id: 'workflows', label: 'Workflows', icon: icons.workflows },
   { id: 'prompts', label: 'Prompts & Evals', icon: icons.prompts },
   { id: 'agents', label: 'AI Agents', icon: icons.agents },
