@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install dependencies
         run: npm ci
@@ -26,16 +26,12 @@ jobs:
       - name: Build
         run: npm run build -w @acode/web
 
+      - name: Add nojekyll
+        run: touch packages/web/dist/.nojekyll
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./packages/web/dist
-
-      - name: Add nojekyll file to gh-pages
-        run: |
-          git checkout gh-pages
-          touch nojekyll
-          git add nojekyll
-          git commit -m "chore: add nojekyll file for GitHub Pages"
-          git push origin gh-pages
+          force_orphan: true
