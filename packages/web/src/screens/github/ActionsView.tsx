@@ -95,13 +95,25 @@ function RunLogs({ run, onBack }: { run: GitHubWorkflowRun; onBack: () => void }
   const { githubToken } = useApp();
   const [logs, setLogs] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const { repository } = run as unknown as { repository: string };
   const { owner, name } = splitRef(repository);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    makeClient(githubToken).workflowRunLogs(owner, name, run.id).then(setLogs).finally(() => setLoading(false));
-  }, [owner, name, run.id, githubToken]);
+    setError('');
+    try {
+      const text = await makeClient(githubToken).workflowRunLogs(owner, name, run.id);
+      if (text.startsWith('Failed')) setError(text);
+      setLogs(text);
+    } finally {
+      setLoading(false);
+    }
+  }, [githubToken, owner, name, run.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return (
     <div className="rise">
@@ -116,12 +128,20 @@ function RunLogs({ run, onBack }: { run: GitHubWorkflowRun; onBack: () => void }
         </div>
         <div style={{ flex: 1 }} />
         <Badge color={resultColor(run.conclusion ?? run.status, tokens)}>{run.conclusion ?? run.status}</Badge>
+        <Button variant="secondary" size="sm" onClick={() => void load()}>{loading ? <Spinner size={14} /> : '⟳ Retry'}</Button>
       </div>
-      <Card title={`Logs (${compact(logs.length)} chars)`}>
+      <Card title={error ? 'Logs unavailable' : `Logs (${compact(logs.length)} chars)`}>
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: tokens.space6 }}><Spinner /></div>
+        ) : error ? (
+          <div style={{ color: tokens.danger, fontSize: tokens.fontSizeSm, padding: tokens.space3 }}>
+            {error}
+            <div style={{ color: tokens.textMuted, fontSize: tokens.fontSizeXs, marginTop: tokens.space2 }}>
+              Make sure your token has the <b>repo</b> scope (includes Actions) and the run has produced logs. If a run is still in progress its logs may not be ready yet.
+            </div>
+          </div>
         ) : (
-          <pre style={{ background: 'var(--code-bg)', padding: tokens.space4, borderRadius: tokens.radiusMd, overflow: 'auto', fontSize: 12, lineHeight: 1.5, maxHeight: '60vh', margin: 0 }}>{logs || 'No logs available'}</pre>
+          <pre style={{ background: 'var(--code-bg)', padding: tokens.space4, borderRadius: tokens.radiusMd, overflow: 'auto', fontSize: 12, lineHeight: 1.55, maxHeight: '62vh', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{logs || 'No logs available.'}</pre>
         )}
       </Card>
     </div>

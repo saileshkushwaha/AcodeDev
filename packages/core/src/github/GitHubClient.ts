@@ -467,16 +467,50 @@ export class GitHubClient {
     }
   }
 
+  async workflowRunJobs(owner: string, repo: string, runId: string): Promise<{ id: string; name: string; status: string; conclusion: string | null; steps: { name: string; status: string; conclusion: string | null }[] }[]> {
+    try {
+      const r = await this.request<{ jobs: AnyJson[] }>(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs?per_page=100`);
+      return r.jobs.map((j) => ({
+        id: String(j.id),
+        name: j.name,
+        status: j.status,
+        conclusion: j.conclusion,
+        steps: (j.steps ?? []).map((s: AnyJson) => ({ name: s.name, status: s.status, conclusion: s.conclusion })),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Fetch the plain-text logs for a workflow run. GitHub's run-level
+   * `/logs` endpoint returns a compressed archive, so we pull per-job
+   * logs (which return readable text) and concatenate them.
+   */
   async workflowRunLogs(owner: string, repo: string, runId: string): Promise<string> {
     try {
-      const res = await fetch(`${this.apiBase}/repos/${owner}/${repo}/actions/runs/${runId}/logs`, {
-        headers: { Authorization: `Bearer ${this.token}`, Accept: 'application/vnd.github+json' },
-      });
-      if (!res.ok) return `Unable to fetch logs (${res.status})`;
-      return await res.text();
+      const jobs = await this.workflowRunJobs(owner, repo, runId);
+      if (!jobs.length) return 'No jobs found for this run.';
+      const parts: string[] = [];
+      for (const job of jobs) {
+        parts.push(`===== JOB: ${job.name || job.id} (${job.conclusion ?? job.status}) =====`);
+        const log = await this.fetchJobLog(owner, repo, job.id);
+        parts.push(log.trim());
+      }
+      return parts.join('\n\n');
     } catch (e) {
-      return `Failed: ${e instanceof Error ? e.message : String(e)}`;
+      return `Failed to fetch logs: ${e instanceof Error ? e.message : String(e)}`;
     }
+  }
+
+  private async fetchJobLog(owner: string, repo: string, jobId: string): Promise<string> {
+    const res = await fetch(`${this.apiBase}/repos/${owner}/${repo}/actions/jobs/${jobId}/logs`, {
+      headers: { Authorization: `Bearer ${this.token}`, Accept: 'application/vnd.github+json' },
+      redirect: 'follow',
+    });
+    if (!res.ok) return `(unable to fetch job log: ${res.status})`;
+    const text = await res.text();
+    return text || '(no log output)';
   }
 
   // ---------- Notifications ----------
