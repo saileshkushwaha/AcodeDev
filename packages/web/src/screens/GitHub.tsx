@@ -10,7 +10,6 @@ import { IssuesView } from './github/IssuesView';
 import { ActionsView } from './github/ActionsView';
 import { NotificationsView } from './github/NotificationsView';
 import { SearchView } from './github/SearchView';
-import { ProfileView } from './github/ProfileView';
 import type { NavId } from './github/GitHubScreenTypes';
 
 export function GitHubScreen() {
@@ -107,7 +106,6 @@ export function GitHubScreen() {
             { id: 'actions', label: 'Actions' },
             { id: 'notifications', label: 'Notifications' },
             { id: 'search', label: 'Search' },
-            { id: 'profile', label: 'Profile' },
           ] as { id: NavId; label: string }[]
         ).map((n) => (
           <button
@@ -155,7 +153,6 @@ export function GitHubScreen() {
         {nav === 'actions' && <ActionsView />}
         {nav === 'notifications' && <NotificationsView onUnread={setUnread} />}
         {nav === 'search' && <SearchView />}
-        {nav === 'profile' && <ProfileView user={user} />}
       </div>
     </div>
   );

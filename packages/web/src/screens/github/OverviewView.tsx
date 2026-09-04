@@ -63,9 +63,11 @@ export function OverviewView({
             <div style={{ fontSize: tokens.fontSizeLg, fontWeight: 700, marginTop: tokens.space3 }}>{user?.name || user?.login}</div>
             <div style={{ fontSize: tokens.fontSizeSm, color: tokens.textMuted }}>@{user?.login}</div>
             {user?.bio && <p style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary, margin: `${tokens.space2}px 0`, lineHeight: 1.5 }}>{user.bio}</p>}
-            <button onClick={() => onNavigate('profile')} style={{ marginTop: tokens.space2, background: 'transparent', border: `1px solid ${tokens.borderStrong}`, color: tokens.text, padding: `6px 14px`, borderRadius: tokens.radiusMd, fontWeight: 600, fontSize: tokens.fontSizeSm, cursor: 'pointer' }}>
-              View profile
-            </button>
+            <a href={`https://github.com/${user?.login ?? ''}`} target="_blank" rel="noreferrer">
+              <button style={{ marginTop: tokens.space2, background: 'transparent', border: `1px solid ${tokens.borderStrong}`, color: tokens.text, padding: `6px 14px`, borderRadius: tokens.radiusMd, fontWeight: 600, fontSize: tokens.fontSizeSm, cursor: 'pointer' }}>
+                Open GitHub profile
+              </button>
+            </a>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', borderTop: `1px solid ${tokens.border}` }}>
             {[
