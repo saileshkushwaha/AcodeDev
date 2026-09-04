@@ -675,8 +675,99 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
             )}
 
             {messages.length === 0 ? (
-              <div style={{ margin: 'auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space4 }}>
+              <div style={{ margin: 'auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space4, padding: tokens.space4 }}>
                 <div style={{ fontSize: 64, fontWeight: 900, color: `${tokens.textMuted}15`, letterSpacing: '-0.02em', userSelect: 'none', lineHeight: 1, fontFamily: 'monospace' }}>opencode</div>
+                {/* Centered composer for empty sessions */}
+                <div style={{ width: '100%', maxWidth: 560 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0, background: tokens.bg, border: `1.5px dashed ${paramsOpen ? tokens.primary : tokens.borderStrong}`, borderRadius: tokens.radiusLg, padding: tokens.space2, transition: 'border-color 0.12s ease' }}>
+                    <textarea
+                      ref={textareaRef}
+                      rows={2}
+                      placeholder="Ask anything, / for commands, @ for context..."
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onFocus={() => setContextOpen(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend(); }
+                      }}
+                      style={{ width: '100%', background: 'transparent', border: 'none', color: tokens.text, padding: `${tokens.space1}px ${tokens.space2}px`, fontSize: tokens.fontSizeMd, fontFamily: tokens.fontSans, outline: 'none', resize: 'none', boxSizing: 'border-box', lineHeight: 1.5, minHeight: 44, maxHeight: 220 }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space1 }}>
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        <button
+                          title="Add attachment"
+                          onClick={() => setAttachOpen((o) => !o)}
+                          style={{ width: 34, height: 34, borderRadius: tokens.radiusMd, background: attachOpen ? `${tokens.primary}1a` : 'transparent', border: `1px solid ${attachOpen ? tokens.primary : 'transparent'}`, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: attachOpen ? tokens.primary : tokens.textSecondary }}
+                        >+</button>
+                        {attachOpen && (
+                          <AddMenu
+                            onFile={() => { setAttachOpen(false); fileRef.current?.click(); }}
+                            onFolder={() => { setAttachOpen(false); folderRef.current?.click(); }}
+                            onLink={() => { setAttachOpen(false); setLinkDraft((d) => ({ ...d, open: !d.open })); }}
+                            onClose={() => setAttachOpen(false)}
+                          />
+                        )}
+                      </div>
+                      <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                        <button
+                          onClick={() => setParamsOpen((o) => !o)}
+                          title="Model & settings"
+                          style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, maxWidth: '100%', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, overflow: 'hidden' }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M4 5h16M4 12h16M4 19h16" /><circle cx="9" cy="5" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="7" cy="19" r="2" /></svg>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{model.split('/').pop() || 'Select model'}</span>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6" /></svg>
+                        </button>
+                        {paramsOpen && (
+                          <ParamsMenu
+                            freeOnly={freeOnly}
+                            setFreeOnly={setFreeOnly}
+                            temperature={temperature}
+                            setTemperature={setTemperature}
+                            maxTokens={maxTokens}
+                            setMaxTokens={setMaxTokens}
+                            onClose={() => setParamsOpen(false)}
+                            provider={provider}
+                            setProvider={setProvider}
+                            minContext={minContext}
+                            setMinContext={setMinContext}
+                            models={providerModels}
+                            model={model}
+                            setModel={setModel}
+                            gatewayProviders={gatewayProviders}
+                            directProviders={directProviders}
+                          />
+                        )}
+                      </div>
+                      <div style={{ flexShrink: 0 }}>
+                        <button
+                          onClick={() => void handleSend()}
+                          disabled={(!input.trim() && attachments.length === 0) || streaming}
+                          title="Send"
+                          aria-label="Send"
+                          style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: (!input.trim() && attachments.length === 0) || streaming ? tokens.surfaceHover : tokens.primary, color: (!input.trim() && attachments.length === 0) || streaming ? tokens.textMuted : '#fff', cursor: (!input.trim() && attachments.length === 0) || streaming ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                        >
+                          {streaming ? <Spinner size={16} color="#fff" /> : (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5m0 0l-6 6m6-6l6 6" /></svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space1 }}>
+                  <button
+                    style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, background: 'transparent', border: 'none', cursor: 'pointer', color: tokens.textSecondary, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans }}
+                  >
+                    <span style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10 }}>P</span>
+                    <span>Projects</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 9l6 6 6-6" /></svg>
+                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, color: tokens.textMuted, fontSize: tokens.fontSizeXs }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M18 9a9 9 0 01-9 9" /></svg>
+                    <span>main</span>
+                  </div>
+                </div>
               </div>
             ) : (
               messages.map((m, i) => (
@@ -714,7 +805,8 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         )}
       </div>
 
-      {/* Fixed bottom composer */}
+      {/* Fixed bottom composer - only show when there are messages */}
+      {messages.length > 0 && (
       <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
         <div style={{ maxWidth: 960, margin: '0 auto', padding: tokens.space3, position: 'relative' }}>
           <div
@@ -814,6 +906,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           </div>
         </div>
       </div>
+      )}
 
       {attachOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 70, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 120 }}>
