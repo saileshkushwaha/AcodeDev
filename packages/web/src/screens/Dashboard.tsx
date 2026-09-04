@@ -1,17 +1,29 @@
+import { useEffect, useState } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
-import { Card, Button, Badge, useTheme } from '@acode/ui';
-import { listModels, getFreeModels, PROVIDER_LIST, type ProviderId } from '@acode/core';
+import { Card, Button, Badge, useTheme, Spinner } from '@acode/ui';
+import { listModels, getFreeModels, listProviders, getProvider, type ProviderId } from '@acode/core';
 
 export function Dashboard({ onNavigate }: { onNavigate: (id: string) => void }) {
   const { tokens } = useTheme();
-  const { projects, prompts, chat, githubToken, hasKey } = useApp();
+  const { projects, prompts, chat, githubToken, hasKey, syncCatalog, catalogVersion } = useApp();
+  void catalogVersion;
+
+  const providers = listProviders();
+  const gateways = providers.filter((p) => p.gateway);
+  const [syncing, setSyncing] = useState(false);
+
+  const sync = async () => {
+    setSyncing(true);
+    await syncCatalog();
+    setSyncing(false);
+  };
 
   const models = listModels();
   const freeCount = getFreeModels().length;
   const projectsList = projects.projectsList();
   const promptCount = prompts.all().length;
-  const connectedProviders = PROVIDER_LIST.filter((p) => hasKey(p.id as ProviderId)).length;
+  const connectedProviders = providers.filter((p) => hasKey(p.id as ProviderId) || p.id === 'local').length;
 
   const stats = [
     { label: 'Projects', value: projectsList.length, dest: 'dashboard' },
@@ -61,15 +73,30 @@ export function Dashboard({ onNavigate }: { onNavigate: (id: string) => void }) 
             )}
           </Card>
 
-          <Card title="Model availability" subtitle="Free models across all supported providers">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2 }}>
-              {PROVIDER_LIST.slice(0, 9).map((p) => {
-                const n = listModels(p.id as ProviderId).length;
+          <Card
+            title="Model providers"
+            subtitle={`Free & live models — ${gateways.length} gateways synced from OpenRouter`}
+            actions={
+              <Button size="sm" variant="ghost" onClick={() => void sync()} disabled={syncing}>
+                {syncing ? <Spinner size={14} /> : '⇄ Sync'}
+              </Button>
+            }
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2, maxHeight: 320, overflowY: 'auto' }}>
+              {providers.map((p) => {
+                const all = listModels(p.id).length;
+                const free = listModels(p.id).filter((m) => m.isFree).length;
+                const connected = hasKey(p.id as ProviderId) || (p.id === 'local');
                 return (
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: tokens.space3 }}>
-                    <span style={{ flex: 1, fontSize: tokens.fontSizeSm }}>{p.name}</span>
-                    <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{n} models</span>
-                    <DotConnected connected={hasKey(p.id as ProviderId)} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 500 }}>{p.name}</span>
+                      {p.gateway && <Badge style={{ marginLeft: 6, fontSize: 10 }} color={tokens.info}>gateway</Badge>}
+                    </div>
+                    <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, whiteSpace: 'nowrap' }}>
+                      {free} free · {all} models
+                    </span>
+                    <DotConnected connected={connected} />
                   </div>
                 );
               })}
@@ -87,9 +114,12 @@ export function Dashboard({ onNavigate }: { onNavigate: (id: string) => void }) 
             </div>
           </Card>
           <Card title="Providers to configure" subtitle="Connect keys to unlock free models">
-            {PROVIDER_LIST.filter((p) => !hasKey(p.id as ProviderId) && p.id !== 'local').slice(0, 5).map((p) => (
+            {providers.filter((p) => !hasKey(p.id as ProviderId) && p.id !== 'local').sort((a, b) => Number(b.gateway) - Number(a.gateway)).slice(0, 6).map((p) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space1}px 0` }}>
-                <span style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary }}>{p.name}</span>
+                <span style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary }}>
+                  {p.name}
+                  {p.gateway && <Badge style={{ fontSize: 9, marginLeft: 5 }} color={tokens.info}>gateway</Badge>}
+                </span>
                 <Button size="sm" variant="ghost" onClick={() => onNavigate('keys')}>Add</Button>
               </div>
             ))}

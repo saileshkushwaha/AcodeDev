@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useRef, useState, useCallback } from 'react';
+import React, { createContext, useContext, useRef, useState, useCallback, useEffect } from 'react';
 import {
   KeyVault,
   webCryptoAdapter,
@@ -11,6 +11,10 @@ import {
   PromptRegistry,
   ProjectStore,
   GitHubClient,
+  loadCatalog,
+  persistCatalog,
+  onCatalogChange,
+  syncOpenRouterData,
   type ChatMessage,
   type ProviderId,
 } from '@acode/core';
@@ -30,6 +34,9 @@ export interface AppState {
   currentProjectId: string | null;
   setCurrentProjectId: (id: string | null) => void;
   hasKey: (p: ProviderId) => boolean;
+  catalogVersion: number;
+  refreshCatalog: () => void;
+  syncCatalog: () => Promise<number>;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -49,12 +56,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [catalogVersion, setCatalogVersion] = useState(0);
 
   const vaultRef = useRef<KeyVault | null>(null);
   if (!vaultRef.current) vaultRef.current = new KeyVault(webCryptoAdapter());
 
   const engineRef = useRef<ChatEngine | null>(null);
   if (!engineRef.current) engineRef.current = new ChatEngine({ vault: vaultRef.current });
+
+  // Load persisted provider/model catalog, then refresh from OpenRouter in the
+  // background and persist the enriched catalog for offline use.
+  useEffect(() => {
+    loadCatalog();
+    setCatalogVersion((v) => v + 1);
+    const off = onCatalogChange(() => setCatalogVersion((v) => v + 1));
+    void syncOpenRouterData()
+      .then(() => {
+        persistCatalog();
+        setCatalogVersion((v) => v + 1);
+      })
+      .catch(() => {});
+    return off;
+  }, []);
+
+  const refreshCatalog = useCallback(() => setCatalogVersion((v) => v + 1), []);
+  const syncCatalog = useCallback(async () => {
+    const added = await syncOpenRouterData();
+    persistCatalog();
+    setCatalogVersion((v) => v + 1);
+    return added;
+  }, []);
 
   const state: AppState = {
     vault: vaultRef.current,
@@ -78,6 +109,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     currentProjectId,
     setCurrentProjectId,
     hasKey: (p) => vaultRef.current?.hasKey(p) ?? false,
+    catalogVersion,
+    refreshCatalog,
+    syncCatalog,
   };
 
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;

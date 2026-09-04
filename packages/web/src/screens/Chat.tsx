@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Button, Select, Input, Toggle, Spinner, useTheme, Badge, useIsMobile } from '@acode/ui';
-import { listModels, PROVIDER_LIST, type ChatMessage, type ProviderId } from '@acode/core';
+import { listModels, listProviders, type ChatMessage, type ProviderId } from '@acode/core';
 import type { Conversation } from '@acode/core';
 import { Markdown } from '../components/Markdown';
 
@@ -13,6 +13,13 @@ const SUGGESTIONS = [
   'Help me debug this code',
   'Write a prompt for code review',
 ];
+
+function formatContext(n: number): string {
+  if (n <= 0) return '?';
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${Math.round(n / 1000)}k`;
+  return String(n);
+}
 
 export function ChatScreen() {
   const { tokens } = useTheme();
@@ -28,6 +35,7 @@ export function ChatScreen() {
   const [maxTokens, setMaxTokens] = useState(2048);
   const [showParams, setShowParams] = useState(false);
   const [freeOnly, setFreeOnly] = useState(true);
+  const [minContext, setMinContext] = useState('0');
   const [sessions, setSessions] = useState<Conversation[]>([]);
   const [convId, setConvId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -36,7 +44,14 @@ export function ChatScreen() {
   const [renameValue, setRenameValue] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const providerModels = listModels(provider).filter((m) => (freeOnly ? m.isFree : true));
+  const { catalogVersion } = useApp();
+  void catalogVersion; // re-render when the provider/model catalog updates
+
+  const allProviders = listProviders();
+  const gatewayProviders = allProviders.filter((p) => p.gateway);
+  const directProviders = allProviders.filter((p) => !p.gateway && p.id !== 'local');
+  const minCtx = Number(minContext) || 0;
+  const providerModels = listModels(provider).filter((m) => (freeOnly ? m.isFree : true)).filter((m) => (minCtx > 0 ? m.contextWindow >= minCtx : true));
 
   const refreshSessions = useCallback(() => {
     setSessions(projects.conversationsFor(currentProjectId ?? undefined));
@@ -259,13 +274,23 @@ export function ChatScreen() {
             <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{convId ? `${messages.filter((m) => m.role === 'user').length} messages` : 'No active session'}</div>
           </div>
           <div style={{ flex: 1 }} />
-          <div style={{ width: 180, minWidth: 140 }}>
-            <Select value={provider} onChange={(v) => setProvider(v as ProviderId)} options={PROVIDER_LIST.map((p) => ({ label: p.name, value: p.id }))} />
+          <div style={{ width: 220, minWidth: 160 }}>
+            <GroupedSelect
+              value={provider}
+              onChange={(v) => setProvider(v)}
+              groups={[
+                { label: 'Gateways', options: gatewayProviders.map((p) => ({ label: `${p.name} · many models`, value: p.id })) },
+                { label: 'Direct providers', options: directProviders.map((p) => ({ label: p.name, value: p.id })) },
+              ]}
+            />
           </div>
-          <div style={{ width: 240, minWidth: 180 }}>
-            <Select value={model} onChange={setModel} options={providerModels.map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id }))} />
+          <div style={{ width: 260, minWidth: 200 }}>
+            <Select value={model} onChange={setModel} options={providerModels.map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''} · ${formatContext(m.contextWindow)} ctx`, value: m.id }))} />
           </div>
           <Toggle checked={freeOnly} onChange={setFreeOnly} label="Free" />
+          <div style={{ width: 110, minWidth: 90 }}>
+            <Input value={minContext} onChange={setMinContext} placeholder="min ctx" hint="" />
+          </div>
           <Button size="sm" variant="ghost" onClick={() => setShowParams((s) => !s)}>{showParams ? 'Hide' : 'Params'}</Button>
           {convId && (
             <Button size="sm" variant="ghost" onClick={() => clearSession(convId)}>Clear</Button>
@@ -469,5 +494,40 @@ function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
         )}
       </div>
     </div>
+  );
+}
+
+function GroupedSelect({
+  value,
+  onChange,
+  groups,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  groups: { label: string; options: { label: string; value: string }[] }[];
+}) {
+  const { tokens } = useTheme();
+  const base: React.CSSProperties = {
+    width: '100%',
+    background: tokens.bg,
+    border: `1px solid ${tokens.borderStrong}`,
+    borderRadius: tokens.radiusMd,
+    color: tokens.text,
+    padding: `${tokens.space2}px ${tokens.space3}px`,
+    fontSize: tokens.fontSizeSm,
+    fontFamily: tokens.fontSans,
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} style={base}>
+      {groups.map((g) => (
+        <optgroup key={g.label} label={g.label}>
+          {g.options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
   );
 }

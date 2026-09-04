@@ -5,6 +5,7 @@ import type {
   ChatStreamChunk,
   ToolDefinition,
 } from '../types';
+import { getProvider } from '../models/catalog';
 
 export interface AbstractProvider {
   chat(req: ChatRequest): Promise<ChatResponse>;
@@ -277,25 +278,12 @@ export class AnthropicProvider implements AbstractProvider {
   }
 }
 
-export function createProvider(provider: ChatRequest['provider'], apiBase?: string): AbstractProvider {
-  switch (provider) {
-    case 'google':
-      return new GoogleProvider();
-    case 'anthropic':
-      return new AnthropicProvider();
-    case 'openai':
-      return new OpenAICompatibleProvider('openai', apiBase ?? 'https://api.openai.com/v1');
-    case 'openrouter':
-      return new OpenAICompatibleProvider('openrouter', apiBase ?? 'https://openrouter.ai/api/v1');
-    case 'groq':
-      return new OpenAICompatibleProvider('groq', apiBase ?? 'https://api.groq.com/openai/v1');
-    case 'deepseek':
-      return new OpenAICompatibleProvider('deepseek', apiBase ?? 'https://api.deepseek.com/v1');
-    case 'together':
-      return new OpenAICompatibleProvider('together', apiBase ?? 'https://api.together.xyz/v1');
-    case 'mistral':
-      return new OpenAICompatibleProvider('mistral', apiBase ?? 'https://api.mistral.ai/v1');
-    case 'local':
-      return new OpenAICompatibleProvider('local', apiBase ?? 'http://localhost:11434/v1');
-  }
+export function createProvider(provider: string, apiBase?: string): AbstractProvider {
+  const def = getProvider(provider);
+  const base = apiBase ?? def?.baseUrl;
+  if (def?.kind === 'google') return new GoogleProvider();
+  if (def?.kind === 'anthropic') return new AnthropicProvider();
+  // Everything else — direct OpenAI vendors, gateways, custom providers and any
+  // unknown id — speaks the OpenAI-compatible protocol against its base URL.
+  return new OpenAICompatibleProvider(provider, base ?? '');
 }

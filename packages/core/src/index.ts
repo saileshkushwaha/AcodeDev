@@ -3,6 +3,7 @@ export * from './models/catalog';
 export * from './llm/provider';
 export * from './llm/ChatEngine';
 export * from './keys/KeyVault';
+export * from './keys/connectors';
 export * from './agents/AgentEngine';
 export * from './agents/Toolbox';
 export * from './agents/RAGMemory';

@@ -1,13 +1,11 @@
-export type ProviderId =
-  | 'openrouter'
-  | 'openai'
-  | 'google'
-  | 'anthropic'
-  | 'mistral'
-  | 'groq'
-  | 'deepseek'
-  | 'together'
-  | 'local';
+/**
+ * Provider identifier. Dynamic — any OpenAI-compatible gateway or vendor id is
+ * accepted. The built-in ids (openrouter, openai, google, anthropic, mistral,
+ * groq, deepseek, together, local) are seeded by the catalog registry and can
+ * be extended at runtime (e.g. from OpenRouter's live model list or custom
+ * gateways).
+ */
+export type ProviderId = string;
 
 export type ConnectionMode = 'openrouter' | 'direct' | 'local';
 

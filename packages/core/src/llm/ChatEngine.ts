@@ -1,7 +1,7 @@
 import { createProvider } from './provider';
 import { KeyVault } from '../keys/KeyVault';
 import type { ChatMessage, ChatRequest, ChatResponse, ChatStreamChunk, CryptoAdapter, ProviderId } from '../types';
-import { DEFAULT_BASE_URLS } from '../models/catalog';
+import { baseUrlFor } from '../models/catalog';
 
 export interface ChatEngineOpts {
   vault: KeyVault;
@@ -24,7 +24,7 @@ export class ChatEngine {
     return {
       ...req,
       apiKey: key,
-      baseUrl: req.baseUrl ?? DEFAULT_BASE_URLS[req.provider],
+      baseUrl: req.baseUrl ?? baseUrlFor(req.provider),
     };
   }
 
