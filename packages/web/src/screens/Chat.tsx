@@ -560,9 +560,15 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
             >
               <span style={{ position: 'relative', width: 20, height: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {isActive ? (
-                  <span style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                  </span>
+                  tab.convId ? (
+                    <span style={{ width: 20, height: 20, borderRadius: '50%', background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10 }}>
+                      {tab.title.replace(/\s+/g, ' ').trim().charAt(0).toUpperCase() || 'P'}
+                    </span>
+                  ) : (
+                    <span style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                    </span>
+                  )
                 ) : (
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                 )}
