@@ -518,7 +518,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   }, []);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: tokens.bg, overflow: 'hidden' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: tokens.bg, overflow: 'hidden', position: 'relative' }}>
       {/* Top app bar: grid button · session tabs · + button */}
       <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `0 ${tokens.space2}px`, height: 44, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated, overflowX: 'auto', overflowY: 'hidden' }}>
         <button
