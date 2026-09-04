@@ -15,6 +15,7 @@ import {
   type AttachmentKind,
   type ModelCapability,
 } from '@acode/core';
+import type { Conversation } from '@acode/core';
 import { Markdown } from '../components/Markdown';
 
 const SYSTEM_PROMPT = 'You are AcodeDev assistant, a helpful AI. Be concise and accurate.';
@@ -129,6 +130,8 @@ const kindIcon: Record<AttachmentKind, string> = {
   link: '🔗',
 };
 
+type SessionTab = { id: string; title: string; convId: string | null };
+
 export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const { tokens } = useTheme();
   const { chat, projects, currentProjectId, hasKey } = useApp();
@@ -144,10 +147,17 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const [freeOnly, setFreeOnly] = useState(true);
   const [minContext, setMinContext] = useState('0');
   const [convId, setConvId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<Conversation[]>([]);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const [subtab, setSubtab] = useState<'session' | 'files'>('session');
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
   const [changedFiles, setChangedFiles] = useState<{ path: string; status: string; changedAt: number }[]>([]);
+  const [tabs, setTabs] = useState<SessionTab[]>([]);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
 
   const [contextOpen, setContextOpen] = useState(!isMobile);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -178,13 +188,18 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const modelDef = providerModels.find((m) => m.id === model);
   const capabilities: ModelCapability[] = modelDef?.capabilities ?? inferCapabilities(modelDef?.tags);
 
+  const refreshSessions = useCallback(() => {
+    setSessions(projects.conversationsFor(currentProjectId ?? undefined));
+  }, [projects, currentProjectId]);
+
   const refreshChangedFiles = useCallback(() => {
     setChangedFiles((projects.changedFilesFor(convId) ?? []) as { path: string; status: string; changedAt: number }[]);
   }, [projects, convId]);
 
   useEffect(() => {
+    refreshSessions();
     refreshChangedFiles();
-  }, [refreshChangedFiles]);
+  }, [refreshSessions, refreshChangedFiles]);
 
   useEffect(() => {
     if (!providerModels.some((m) => m.id === model)) {
@@ -222,20 +237,91 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     }
   }, [input]);
 
+  const syncTabFromConv = useCallback((tabId: string, cid: string | null) => {
+    setTabs((prev) => prev.map((t) => {
+      if (t.id !== tabId) return t;
+      if (!cid) return { ...t, title: 'New session', convId: null };
+      const conv = projects.getConversation(cid);
+      return { ...t, title: conv?.title ?? 'New session', convId: cid };
+    }));
+  }, [projects]);
+
+  const selectTab = (tabId: string) => {
+    setActiveTab(tabId);
+    const tab = tabs.find((t) => t.id === tabId);
+    if (tab) {
+      setConvId(tab.convId);
+      setAttachments([]);
+    }
+  };
+
   const newSession = () => {
     const conv = projects.createConversation({
-      title: 'New chat',
+      title: 'New session',
       projectId: currentProjectId ?? undefined,
       provider,
       model,
     });
+    refreshSessions();
+    const tabId = `tab-${Date.now()}`;
+    const newTab: SessionTab = { id: tabId, title: conv.title, convId: conv.id };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTab(tabId);
     setConvId(conv.id);
     setMessages([]);
     setAttachments([]);
   };
 
+  const closeTab = (tabId: string) => {
+    setTabs((prev) => {
+      const next = prev.filter((t) => t.id !== tabId);
+      if (next.length === 0) {
+        const conv = projects.createConversation({
+          title: 'New session',
+          projectId: currentProjectId ?? undefined,
+          provider,
+          model,
+        });
+        refreshSessions();
+        const newTab: SessionTab = { id: `tab-${Date.now()}`, title: conv.title, convId: conv.id };
+        setActiveTab(newTab.id);
+        setConvId(conv.id);
+        return [newTab];
+      }
+      if (activeTab === tabId) {
+        const last = next[next.length - 1];
+        setActiveTab(last.id);
+        setConvId(last.convId);
+      }
+      return next;
+    });
+  };
+
   const deleteSession = (id: string) => {
     projects.deleteConversation(id);
+    refreshSessions();
+    setTabs((prev) => {
+      const next = prev.filter((t) => t.convId !== id);
+      if (next.length === 0) {
+        const conv = projects.createConversation({
+          title: 'New session',
+          projectId: currentProjectId ?? undefined,
+          provider,
+          model,
+        });
+        refreshSessions();
+        const newTab: SessionTab = { id: `tab-${Date.now()}`, title: conv.title, convId: conv.id };
+        setActiveTab(newTab.id);
+        setConvId(conv.id);
+        return [newTab];
+      }
+      if (convId === id) {
+        const last = next[next.length - 1];
+        setActiveTab(last.id);
+        setConvId(last.convId);
+      }
+      return next;
+    });
     if (convId === id) {
       setConvId(null);
       setMessages([]);
@@ -244,6 +330,8 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
 
   const renameSession = (id: string, title: string) => {
     projects.renameConversation(id, title);
+    refreshSessions();
+    setTabs((prev) => prev.map((t) => t.convId === id ? { ...t, title } : t));
   };
 
   const shareSession = async () => {
@@ -309,18 +397,28 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     let cid = convId;
     if (!cid) {
       const conv = projects.createConversation({
-        title: raw.slice(0, 40) || 'New chat',
+        title: raw.slice(0, 40) || 'New session',
         projectId: currentProjectId ?? undefined,
         provider,
         model,
       });
       cid = conv.id;
       setConvId(cid);
+      const tabId = activeTab ?? `tab-${Date.now()}`;
+      setTabs((prev) => {
+        const existing = prev.find((t) => t.id === tabId);
+        if (existing) return prev.map((t) => t.id === tabId ? { ...t, convId: cid, title: raw.slice(0, 40) || 'New session' } : t);
+        return [...prev, { id: tabId, title: raw.slice(0, 40) || 'New session', convId: cid }];
+      });
+      setActiveTab(tabId);
+      refreshSessions();
     }
 
     const conv = projects.getConversation(cid)!;
-    if (conv.title === 'New chat' && raw) {
+    if ((conv.title === 'New session' || conv.title === 'New chat') && raw) {
       projects.renameConversation(cid, raw.slice(0, 40));
+      refreshSessions();
+      setTabs((prev) => prev.map((t) => t.convId === cid ? { ...t, title: raw.slice(0, 40) } : t));
     }
 
     const userMsg: ChatMessage = { role: 'user', content: raw, attachments };
@@ -388,19 +486,70 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       }
     }
     setStreaming(false);
+    refreshSessions();
     refreshChangedFiles();
   };
+
+  const filteredSessions = sessions.filter((s) =>
+    !search || s.title.toLowerCase().includes(search.toLowerCase()),
+  );
 
   const activeSession = convId ? projects.getConversation(convId) : undefined;
   const sessionTitle = activeSession?.title ?? 'New session';
   const sessionLetter = (sessionTitle.replace(/\s+/g, ' ').trim().charAt(0) || 'N').toUpperCase();
+  const fileCount = changedFiles.length;
+
+  const activeTabObj = tabs.find((t) => t.id === activeTab);
+
+  useEffect(() => {
+    if (tabs.length === 0) {
+      newSession();
+    }
+  }, []);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: tokens.bg, overflow: 'hidden' }}>
+      {/* Top app bar: grid button · session tabs · + button */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `0 ${tokens.space2}px`, height: 44, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated, overflowX: 'auto', overflowY: 'hidden' }}>
+        <button
+          title="All screens"
+          onClick={() => onNavigate?.('dashboard')}
+          style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary, flexShrink: 0 }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+        </button>
+
+        {tabs.map((tab) => (
+          <div
+            key={tab.id}
+            onClick={() => selectTab(tab.id)}
+            style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusMd, background: tab.id === activeTab ? tokens.surface : 'transparent', border: `1px solid ${tab.id === activeTab ? tokens.borderStrong : 'transparent'}`, cursor: 'pointer', flexShrink: 0, maxWidth: 200, transition: 'background 0.1s ease' }}
+          >
+            <span style={{ width: 20, height: 20, borderRadius: '50%', background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>
+              {tab.title.replace(/\s+/g, ' ').trim().charAt(0).toUpperCase() || 'P'}
+            </span>
+            <span style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tab.id === activeTab ? tokens.text : tokens.textSecondary, maxWidth: 120 }}>
+              {tab.title}
+            </span>
+            <button
+              title="Close tab"
+              onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+              style={{ width: 18, height: 18, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 12, flexShrink: 0 }}
+            >×</button>
+          </div>
+        ))}
+
+        <button
+          title="New session"
+          onClick={newSession}
+          style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary, flexShrink: 0, fontSize: 18 }}
+        >+</button>
+      </div>
+
       {/* Secondary tab bar: Session | Files Changed */}
       <div style={{ display: 'flex', gap: tokens.space4, padding: `0 ${tokens.space3}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
         <SubTab active={subtab === 'session'} onClick={() => setSubtab('session')}>Session</SubTab>
-        <SubTab active={subtab === 'files'} onClick={() => setSubtab('files')}>Files Changed {changedFiles.length > 0 ? ` ${changedFiles.length}` : ''}</SubTab>
+        <SubTab active={subtab === 'files'} onClick={() => setSubtab('files')}>Files Changed {fileCount > 0 ? fileCount : ''}</SubTab>
       </div>
 
       {/* Content */}
@@ -509,7 +658,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
             <textarea
               ref={textareaRef}
               rows={2}
-              placeholder="Message AcodeDev… (Enter to send)"
+              placeholder="Ask anything, / for commands, @ for context..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => setContextOpen(true)}
@@ -760,9 +909,65 @@ function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
   const { tokens } = useTheme();
   const isUser = msg.role === 'user';
   const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const copy = () => {
     navigator.clipboard?.writeText(msg.content).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {});
   };
+
+  const renderToolCalls = (content: string) => {
+    const lines = content.split('\n');
+    const elements: React.ReactNode[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      const line = lines[i];
+
+      const writeMatch = line.match(/^Write\s+([^\s]+)\s+(.+)$/i);
+      if (writeMatch) {
+        elements.push(
+          <div key={`tool-${i}`} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, marginBottom: tokens.space1 }}>
+            <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.success, textTransform: 'uppercase' }}>Write</span>
+            <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, color: tokens.text }}>{writeMatch[1]}</span>
+            <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{writeMatch[2]}</span>
+          </div>
+        );
+        i++;
+        continue;
+      }
+
+      const shellMatch = line.match(/^Shell\s+(.+)$/i);
+      if (shellMatch) {
+        const cmd = shellMatch[1];
+        let output = '';
+        let j = i + 1;
+        if (j < lines.length && lines[j].startsWith('```')) {
+          j++;
+          const outputLines: string[] = [];
+          while (j < lines.length && !lines[j].startsWith('```')) {
+            outputLines.push(lines[j]);
+            j++;
+          }
+          output = outputLines.join('\n');
+          j++;
+        }
+        elements.push(
+          <ShellBlock key={`shell-${i}`} command={cmd} output={output} />
+        );
+        i = j;
+        continue;
+      }
+
+      elements.push(
+        <div key={`line-${i}`} style={{ marginBottom: tokens.space1 }}>
+          <Markdown content={line} />
+        </div>
+      );
+      i++;
+    }
+
+    return elements;
+  };
+
   return (
     <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', gap: tokens.space2 }}>
       {!isUser && (
@@ -794,7 +999,7 @@ function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
           {isUser ? (
             <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
           ) : (
-            <Markdown content={msg.content} />
+            <div>{renderToolCalls(msg.content)}</div>
           )}
           {streaming && <span style={{ display: 'inline-block', width: 8, height: 16, background: tokens.primary, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'acode-pulse 0.9s infinite' }} />}
         </div>
@@ -804,6 +1009,28 @@ function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function ShellBlock({ command, output }: { command: string; output: string }) {
+  const { tokens } = useTheme();
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginBottom: tokens.space2 }}>
+      <div
+        onClick={() => setOpen((v) => !v)}
+        style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, cursor: 'pointer' }}
+      >
+        <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.primary, textTransform: 'uppercase' }}>Shell</span>
+        <span style={{ flex: 1, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, color: tokens.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{command}</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}><path d="M6 9l6 6 6-6" /></svg>
+      </div>
+      {open && output && (
+        <pre style={{ marginTop: tokens.space1, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bg, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, color: tokens.textSecondary, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 300, overflowY: 'auto' }}>
+          {output}
+        </pre>
+      )}
     </div>
   );
 }
