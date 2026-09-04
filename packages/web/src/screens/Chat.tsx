@@ -1270,7 +1270,11 @@ function SidebarPanel({ sessions, activeId, onSelect, onNewSession, onClose, pro
             onClick={() => {/* new project */}}
             style={{ width: 24, height: 24, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14m0 0l-5-5m5 5l5-5" /></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+              <line x1="12" y1="11" x2="12" y2="17" />
+              <line x1="9" y1="14" x2="15" y2="14" />
+            </svg>
           </button>
         </div>
         {allProjects.length === 0 ? (
@@ -1285,6 +1289,16 @@ function SidebarPanel({ sessions, activeId, onSelect, onNewSession, onClose, pro
                 {p.name?.charAt(0).toUpperCase() || 'P'}
               </span>
               <span style={{ flex: 1, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{p.name}</span>
+              <button
+                title="More options"
+                style={{ width: 20, height: 20, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 12 }}
+              >···</button>
+              <button
+                title="Edit project"
+                style={{ width: 20, height: 20, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+              </button>
             </div>
           ))
         )}
@@ -1355,7 +1369,7 @@ function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getPr
   return (
     <div style={{ marginBottom: tokens.space3 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space2}px 0` }}>
-        <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, textTransform: 'uppercase' }}>{label}</span>
+        <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted }}>{label}</span>
         {onNewSession && (
           <button
             onClick={onNewSession}
