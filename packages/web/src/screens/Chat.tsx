@@ -158,6 +158,8 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const [changedFiles, setChangedFiles] = useState<{ path: string; status: string; changedAt: number }[]>([]);
   const [tabs, setTabs] = useState<SessionTab[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [completedTabs, setCompletedTabs] = useState<Set<string>>(new Set());
 
   const [contextOpen, setContextOpen] = useState(!isMobile);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -486,6 +488,13 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       }
     }
     setStreaming(false);
+    if (cid && activeTab) {
+      setCompletedTabs((prev) => {
+        const next = new Set(prev);
+        next.add(activeTab);
+        return next;
+      });
+    }
     refreshSessions();
     refreshChangedFiles();
   };
@@ -512,28 +521,54 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       {/* Top app bar: grid button · session tabs · + button */}
       <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `0 ${tokens.space2}px`, height: 44, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated, overflowX: 'auto', overflowY: 'hidden' }}>
         <button
-          title="All screens"
-          onClick={() => onNavigate?.('dashboard')}
-          style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary, flexShrink: 0 }}
+          title="Projects & Sessions"
+          onClick={() => {
+            if (sidebarOpen) {
+              setSidebarOpen(false);
+              if (tabs.length > 0) selectTab(tabs[0].id);
+            } else {
+              setSidebarOpen(true);
+            }
+          }}
+          style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: sidebarOpen ? `${tokens.primary}1a` : 'transparent', border: `1px solid ${sidebarOpen ? tokens.primary : 'transparent'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: sidebarOpen ? tokens.primary : tokens.textSecondary, flexShrink: 0 }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="6" height="6" rx="1" />
+            <rect x="14" y="3" width="6" height="6" rx="1" />
+            <rect x="3" y="14" width="6" height="6" rx="1" />
+            <line x1="17" y1="14" x2="17" y2="20" />
+            <line x1="14" y1="17" x2="20" y2="17" />
+          </svg>
         </button>
 
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab;
+          const hasBadge = completedTabs.has(tab.id) && !isActive;
           return (
             <div
               key={tab.id}
-              onClick={() => selectTab(tab.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusMd, background: isActive ? tokens.surface : 'transparent', border: `1px solid ${isActive ? tokens.borderStrong : 'transparent'}`, cursor: 'pointer', flexShrink: 0, maxWidth: 200, transition: 'background 0.1s ease' }}
+              onClick={() => {
+                selectTab(tab.id);
+                setCompletedTabs((prev) => {
+                  const next = new Set(prev);
+                  next.delete(tab.id);
+                  return next;
+                });
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusMd, background: isActive ? tokens.surface : 'transparent', border: `1px solid ${isActive ? tokens.borderStrong : 'transparent'}`, cursor: 'pointer', flexShrink: 0, maxWidth: 200, transition: 'background 0.1s ease', position: 'relative' }}
             >
-              {isActive ? (
-                <span style={{ width: 20, height: 20, borderRadius: '50%', background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>
-                  {tab.title.replace(/\s+/g, ' ').trim().charAt(0).toUpperCase() || 'P'}
-                </span>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-              )}
+              <span style={{ position: 'relative', width: 20, height: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {isActive ? (
+                  <span style={{ width: 20, height: 20, borderRadius: '50%', background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10 }}>
+                    {tab.title.replace(/\s+/g, ' ').trim().charAt(0).toUpperCase() || 'P'}
+                  </span>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                )}
+                {hasBadge && (
+                  <span style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', border: `2px solid ${tokens.bgElevated}` }} />
+                )}
+              </span>
               <span style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isActive ? tokens.text : tokens.textSecondary, maxWidth: 120 }}>
                 {tab.title}
               </span>
@@ -552,6 +587,32 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary, flexShrink: 0, fontSize: 18 }}
         >+</button>
       </div>
+
+      {/* Sidebar panel */}
+      {sidebarOpen && (
+        <SidebarPanel
+          sessions={sessions}
+          activeId={convId}
+          onSelect={(id) => {
+            const tab = tabs.find((t) => t.convId === id);
+            if (tab) selectTab(tab.id);
+            else {
+              const newTabId = `tab-${Date.now()}`;
+              setTabs((prev) => [...prev, { id: newTabId, title: sessions.find((s) => s.id === id)?.title ?? 'New session', convId: id }]);
+              setActiveTab(newTabId);
+              setConvId(id);
+            }
+            setSidebarOpen(false);
+          }}
+          onNewSession={() => {
+            newSession();
+            setSidebarOpen(false);
+          }}
+          onClose={() => setSidebarOpen(false)}
+          projects={projects}
+          currentProjectId={currentProjectId}
+        />
+      )}
 
       {/* Secondary tab bar: Session | Files Changed */}
       <div style={{ display: 'flex', gap: tokens.space4, padding: `0 ${tokens.space3}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
@@ -1071,6 +1132,182 @@ function ShellBlock({ command, output }: { command: string; output: string }) {
 
 const STATUS_LABEL: Record<string, string> = { added: 'Added', modified: 'Modified', deleted: 'Deleted' };
 const STATUS_COLOR: Record<string, string> = { added: '#2f9e44', modified: '#e6a23c', deleted: '#e03131' };
+
+function SidebarPanel({ sessions, activeId, onSelect, onNewSession, onClose, projects, currentProjectId }: {
+  sessions: Conversation[];
+  activeId: string | null;
+  onSelect: (id: string) => void;
+  onNewSession: () => void;
+  onClose: () => void;
+  projects: any;
+  currentProjectId: string | null;
+}) {
+  const { tokens } = useTheme();
+  const [search, setSearch] = useState('');
+
+  const allProjects = projects.listProjects?.() ?? [];
+  const filteredSessions = sessions.filter((s) =>
+    !search || s.title.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const todaySessions = filteredSessions.filter((s) => {
+    const d = new Date(s.updatedAt ?? s.createdAt);
+    return d >= today;
+  });
+  const yesterdaySessions = filteredSessions.filter((s) => {
+    const d = new Date(s.updatedAt ?? s.createdAt);
+    return d >= yesterday && d < today;
+  });
+  const olderSessions = filteredSessions.filter((s) => {
+    const d = new Date(s.updatedAt ?? s.createdAt);
+    return d < yesterday;
+  });
+
+  const getProjectName = (session: Conversation) => {
+    if (session.projectId) {
+      const proj = allProjects.find((p: any) => p.id === session.projectId);
+      return proj?.name ?? '';
+    }
+    return '';
+  };
+
+  return (
+    <div style={{ position: 'absolute', top: 44, left: 0, bottom: 0, width: 320, background: tokens.surface, borderRight: `1px solid ${tokens.border}`, zIndex: 50, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Projects section */}
+      <div style={{ padding: tokens.space3, borderBottom: `1px solid ${tokens.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
+          <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.text }}>Projects</span>
+          <button
+            title="New project"
+            onClick={() => {/* new project */}}
+            style={{ width: 24, height: 24, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14m0 0l-5-5m5 5l5-5" /></svg>
+          </button>
+        </div>
+        {allProjects.length === 0 ? (
+          <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>No projects</div>
+        ) : (
+          allProjects.slice(0, 5).map((p: any) => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space1}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2 }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = tokens.surfaceHover)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <span style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>
+                {p.name?.charAt(0).toUpperCase() || 'P'}
+              </span>
+              <span style={{ flex: 1, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{p.name}</span>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Search */}
+      <div style={{ padding: `${tokens.space2}px ${tokens.space3}px` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}` }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search sessions"
+            style={{ flex: 1, background: 'transparent', border: 'none', color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none' }}
+          />
+        </div>
+      </div>
+
+      {/* Sessions list */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: `0 ${tokens.space3}px` }}>
+        {todaySessions.length > 0 && (
+          <SessionGroup
+            label="Today"
+            sessions={todaySessions}
+            activeId={activeId}
+            onSelect={onSelect}
+            onNewSession={onNewSession}
+            getProjectName={getProjectName}
+          />
+        )}
+        {yesterdaySessions.length > 0 && (
+          <SessionGroup
+            label="Yesterday"
+            sessions={yesterdaySessions}
+            activeId={activeId}
+            onSelect={onSelect}
+            getProjectName={getProjectName}
+          />
+        )}
+        {olderSessions.length > 0 && (
+          <SessionGroup
+            label="Older"
+            sessions={olderSessions}
+            activeId={activeId}
+            onSelect={onSelect}
+            getProjectName={getProjectName}
+          />
+        )}
+        {filteredSessions.length === 0 && (
+          <div style={{ padding: tokens.space4, textAlign: 'center', color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
+            No sessions found
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getProjectName }: {
+  label: string;
+  sessions: Conversation[];
+  activeId: string | null;
+  onSelect: (id: string) => void;
+  onNewSession?: () => void;
+  getProjectName: (s: Conversation) => string;
+}) {
+  const { tokens } = useTheme();
+  return (
+    <div style={{ marginBottom: tokens.space3 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space2}px 0` }}>
+        <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, textTransform: 'uppercase' }}>{label}</span>
+        {onNewSession && (
+          <button
+            onClick={onNewSession}
+            style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, background: 'transparent', border: 'none', cursor: 'pointer', color: tokens.textSecondary, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+            New session
+          </button>
+        )}
+      </div>
+      {sessions.map((s) => {
+        const isActive = s.id === activeId;
+        const projectName = getProjectName(s);
+        return (
+          <div
+            key={s.id}
+            onClick={() => onSelect(s.id)}
+            style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2, background: isActive ? `${tokens.primary}1a` : 'transparent', borderLeft: isActive ? `2px solid ${tokens.primary}` : '2px solid transparent' }}
+            onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = tokens.surfaceHover; }}
+            onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+          >
+            <span style={{ width: 24, height: 24, borderRadius: '50%', background: isActive ? tokens.primary : tokens.surface, color: isActive ? '#fff' : tokens.text, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
+              {s.title?.replace(/\s+/g, ' ').trim().charAt(0).toUpperCase() || 'P'}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: tokens.fontSizeSm, fontWeight: isActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{s.title || 'New session'}</div>
+              {projectName && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{projectName}</div>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function FilesPanel({ changedFiles }: { changedFiles: { path: string; status: string }[] }) {
   const { tokens } = useTheme();
   return (
