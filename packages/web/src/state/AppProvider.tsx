@@ -14,7 +14,7 @@ import {
   loadCatalog,
   persistCatalog,
   onCatalogChange,
-  syncOpenRouterData,
+  syncAllGateways,
   type ChatMessage,
   type ProviderId,
 } from '@acode/core';
@@ -70,7 +70,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadCatalog();
     setCatalogVersion((v) => v + 1);
     const off = onCatalogChange(() => setCatalogVersion((v) => v + 1));
-    void syncOpenRouterData()
+    void syncAllGateways()
       .then(() => {
         persistCatalog();
         setCatalogVersion((v) => v + 1);
@@ -81,7 +81,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshCatalog = useCallback(() => setCatalogVersion((v) => v + 1), []);
   const syncCatalog = useCallback(async () => {
-    const added = await syncOpenRouterData();
+    const added = await syncAllGateways();
     persistCatalog();
     setCatalogVersion((v) => v + 1);
     return added;

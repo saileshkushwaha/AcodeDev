@@ -97,8 +97,8 @@ export function KeysScreen() {
         placeholder: d.needsKey ? 'Paste an API key' : 'No key needed',
         doc: d.website,
         needsKey: d.needsKey,
-        // Seeded gateways (openrouter etc.) are not removable; runtime-added ones are.
-        removable: !['openrouter'].includes(d.id) && !KNOWN_CONNECTORS.some((c) => c.id === d.id),
+        // Only runtime-added gateways (custom `gw-*`) are removable; seeds stay.
+        removable: d.id.startsWith('gw-'),
         description: d.description,
         isProvider: true,
       })),
@@ -178,7 +178,7 @@ export function KeysScreen() {
     persistCatalog();
     setSyncing(false);
     refresh();
-    setToast(added === -1 ? 'OpenRouter unavailable' : added > 0 ? `Synced ${added} new models` : 'Catalog is up to date');
+    setToast(added === -1 ? 'Gateways unavailable' : added > 0 ? `Synced ${added} new models` : 'Catalog is up to date');
   };
 
   const addGateway = (name: string, baseUrl: string, key: string) => {
@@ -317,7 +317,7 @@ export function KeysScreen() {
           )}
           {active === 'gateway' && (
             <Button size="sm" variant="ghost" onClick={() => void syncModels()} disabled={syncing}>
-              {syncing ? <Spinner size={14} /> : '⇄ Sync models from OpenRouter'}
+              {syncing ? <Spinner size={14} /> : '⇄ Sync free models from gateways'}
             </Button>
           )}
           {active === 'custom' && (

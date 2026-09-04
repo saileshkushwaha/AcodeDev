@@ -46,6 +46,8 @@ const SEED_PROVIDERS: ProviderDef[] = [
   { id: 'fireworks', name: 'Fireworks AI', baseUrl: 'https://api.fireworks.ai/inference/v1', kind: 'openai', auth: 'bearer', website: 'https://fireworks.ai', needsKey: true, description: 'Fast open-model serving gateway.' },
   { id: 'cerebras', name: 'Cerebras', baseUrl: 'https://api.cerebras.ai/v1', kind: 'openai', auth: 'bearer', website: 'https://cerebras.ai', needsKey: true, description: 'Wafer-scale, ultra-low latency models.' },
   { id: 'novita', name: 'Novita AI', baseUrl: 'https://api.novita.ai/v3/openai', kind: 'openai', auth: 'bearer', website: 'https://novita.ai', needsKey: true, description: 'Open-model GPU cloud gateway.' },
+  { id: 'opencode', name: 'OpenCode Zen', baseUrl: 'https://opencode.ai/zen/v1', kind: 'gateway', auth: 'bearer', website: 'https://opencode.ai/zen', gateway: true, needsKey: true, description: 'OpenCode-curated models incl. the free Big Pickle and other free coding models.' },
+  { id: 'kilocode', name: 'Kilo Gateway', baseUrl: 'https://api.kilo.ai/api/gateway', kind: 'gateway', auth: 'bearer', website: 'https://kilo.ai/gateway', gateway: true, needsKey: true, description: 'OpenRouter-compatible gateway to hundreds of models incl. free ones.' },
   { id: 'local', name: 'Local / Offline', baseUrl: 'http://localhost:11434/v1', kind: 'local', auth: 'bearer', needsKey: false, description: 'Local llama.cpp / Ollama-compatible server.' },
 ];
 
@@ -95,6 +97,20 @@ const FREE_MODELS: Record<string, ModelInfo[]> = {
   ],
   novita: [
     { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B (Novita)', provider: 'novita', contextWindow: 131072, maxOutput: 8192, isFree: false, tags: ['chat'] },
+  ],
+  opencode: [
+    { id: 'big-pickle', name: 'Big Pickle (free)', provider: 'opencode', contextWindow: 1048576, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'long-context'] },
+    { id: 'deepseek-v4-flash-free', name: 'DeepSeek V4 Flash (free)', provider: 'opencode', contextWindow: 1048576, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'fast', 'free'] },
+    { id: 'mimo-v2.5-free', name: 'MiMo V2.5 (free)', provider: 'opencode', contextWindow: 262144, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'free'] },
+    { id: 'nemotron-3-ultra-free', name: 'Nemotron 3 Ultra (free)', provider: 'opencode', contextWindow: 524288, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'free'] },
+    { id: 'north-mini-code-free', name: 'North Mini Code (free)', provider: 'opencode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding', 'fast', 'free'] },
+  ],
+  kilocode: [
+    { id: 'kilo-auto/free', name: 'Kilo Auto Free', provider: 'kilocode', contextWindow: 1000000, maxOutput: 65536, isFree: true, tags: ['chat', 'auto', 'free'] },
+    { id: 'google/gemma-4-26b-a4b-it:free', name: 'Gemma 4 26B (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'free'] },
+    { id: 'stepfun/step-3.7-flash:free', name: 'StepFun Step 3.7 Flash (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'fast', 'free'] },
+    { id: 'poolside/laguna-s-2.1:free', name: 'Poolside Laguna S 2.1 (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding', 'free'] },
+    { id: 'nvidia/nemotron-3.5-lightning:free', name: 'Nemotron 3.5 Lightning (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding', 'free'] },
   ],
   local: [
     { id: 'local/default', name: 'Local model (llama.cpp)', provider: 'local', contextWindow: 32768, maxOutput: 4096, isFree: true, tags: ['chat', 'offline'] },
@@ -245,7 +261,18 @@ export function DEFAULT_BASE_URLS(provider: string): Record<string, string> {
  * OpenRouter live sync.
  * ------------------------------------------------------------------------- */
 
-const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
+/** OpenAI-compatible gateways we can pull live model lists from (no key required). */
+export interface GatewaySource {
+  id: string; // registry provider id
+  modelsUrl: string;
+  /** Some gateways return pricing; others only expose free by id suffix. */
+  hasPricing?: boolean;
+}
+export const GATEWAY_SOURCES: GatewaySource[] = [
+  { id: 'openrouter', modelsUrl: 'https://openrouter.ai/api/v1/models', hasPricing: true },
+  { id: 'opencode', modelsUrl: 'https://opencode.ai/zen/v1/models' },
+  { id: 'kilocode', modelsUrl: 'https://api.kilo.ai/api/gateway/models', hasPricing: true },
+];
 
 function parseContext(spec: string | undefined): number {
   if (!spec) return 0;
@@ -256,69 +283,120 @@ function parseContext(spec: string | undefined): number {
     const n = parseFloat(m[1]);
     return m[2] === 'm' ? n * 1000000 : n * 1000;
   }
-  // plain number = raw token count (OpenRouter returns e.g. "131072")
+  // plain number = raw token count (e.g. "131072")
   const n = Number(s);
   if (Number.isFinite(n) && n > 0) return Math.round(n);
   return 0;
 }
 
+/** True if a model id is free (explicit flag, `:free`/`-free` suffix, or Big Pickle). */
+function isFreeModelId(id: string): boolean {
+  if (!id) return false;
+  const lower = id.toLowerCase();
+  return (
+    lower === 'big-pickle' ||
+    lower.startsWith('kilo-auto/free') ||
+    lower.endsWith(':free') ||
+    /(^|\/)([a-z0-9._-]+)-free$/i.test(lower) ||
+    /^[a-z0-9._-]+-free$/i.test(lower.split('/').pop() ?? '')
+  );
+}
+
+function priceOf(pricing: unknown, key: string): number | null {
+  if (pricing == null) return null;
+  if (typeof pricing === 'object') {
+    const v = (pricing as Record<string, unknown>)[key];
+    if (v != null) return parseFloat(String(v));
+  }
+  if (typeof pricing === 'string') {
+    // "free" or "0"
+    if (pricing.trim().toLowerCase() === 'free') return 0;
+    return parseFloat(pricing);
+  }
+  return null;
+}
+
 /**
- * Fetch OpenRouter's live model catalog and merge the free / big-context models
- * into the registry as OpenRouter provider models, keeping the seeded set.
- * Returns the number of models added.
+ * Fetch a gateway's live model catalog and merge usable models (free, or free
+ * with a real context window) into the registry under that provider id.
+ * Returns the number of models added, or -1 if the endpoint was unreachable.
  */
-export async function syncOpenRouterData(): Promise<number> {
-  let data: { data: Array<Record<string, unknown>> };
+export async function syncGatewayData(source: GatewaySource): Promise<number> {
+  let data: { data?: Array<Record<string, unknown>>; models?: Array<Record<string, unknown>> };
   try {
-    const res = await fetch(OPENROUTER_MODELS_URL, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) throw new Error(`OpenRouter ${res.status}`);
+    const res = await fetch(source.modelsUrl, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`${source.id} ${res.status}`);
     data = await res.json();
   } catch {
     return 0;
   }
-  if (!Array.isArray(data.data) || data.data.length === 0) return -1;
+  const arr = Array.isArray(data.data) ? data.data : Array.isArray((data as { models?: unknown }).models) ? (data as { models: Array<Record<string, unknown>> }).models : [];
+  if (!Array.isArray(arr) || arr.length === 0) return -1;
 
   let added = 0;
-  for (const m of data.data) {
+  for (const m of arr) {
     const id = String(m.id ?? '');
+    if (!id) continue;
     const name = String(m.name ?? id);
-    const ctx = parseContext(String(m.context_length ?? m.contextWindow ?? ''));
-    // pricing shape: { prompt: "0", completion: "0", request: "0", image: "0" }
-    const pricing = (m.pricing ?? {}) as Record<string, string | undefined>;
-    const promptPrice = parseFloat(pricing.prompt ?? '0');
-    const completionPrice = parseFloat(pricing.completion ?? '0');
-    const isFree = promptPrice === 0 && completionPrice === 0;
-    const tags: string[] = [];
-    const arch = (m.architecture ?? {}) as Record<string, unknown>;
-    if (arch.modalitiy_text || (Array.isArray(arch.input_modalities) && arch.input_modalities.includes('text'))) tags.push('chat');
+    const ctx = parseContext(String(m.context_length ?? m.contextWindow ?? m.context ?? ''));
+    const isFree =
+      source.hasPricing === false
+        ? isFreeModelId(id)
+        : isFreeModelId(id) ||
+          (m.isFree === true) ||
+          (priceOf((m as { pricing?: unknown }).pricing, 'prompt') === 0 && priceOf((m as { pricing?: unknown }).pricing, 'completion') === 0);
+
+    // Skip paid models with no context (junk); keep all free so the free catalog is rich.
+    if (!isFree && ctx === 0) continue;
+
+    const promptPrice = priceOf((m as { pricing?: unknown }).pricing, 'prompt');
+    const completionPrice = priceOf((m as { pricing?: unknown }).pricing, 'completion');
+    const topProvider = (m.top_provider as Record<string, unknown> | undefined)?.context_length;
+    const maxOutput = (typeof topProvider === 'number' && topProvider > 0 ? Number(topProvider) : Number(m.max_tokens ?? 0)) || 8192;
+
+    const tags: string[] = ['chat'];
     if (isFree) tags.push('free');
     if (ctx >= 64000) tags.push('long-context');
-    const topProvider = (m.top_provider as Record<string, unknown> | undefined)?.context_length;
-    const maxOutput = typeof topProvider === 'number' && topProvider > 0 ? Number(topProvider) : 8192;
-
-    // Only register models that are usable (free OR real context), skip junk.
-    if (!id) continue;
-    if (!isFree && ctx === 0) continue;
 
     const record: ModelRecord = {
       id,
       name,
-      provider: 'openrouter',
+      provider: source.id,
       contextWindow: ctx,
       maxOutput,
       isFree,
-      costPer1kIn: promptPrice * 1000,
-      costPer1kOut: completionPrice * 1000,
+      costPer1kIn: promptPrice != null ? promptPrice * 1000 : undefined,
+      costPer1kOut: completionPrice != null ? completionPrice * 1000 : undefined,
       tags,
     };
-    // Do not overwrite curated seeds with worse data; only add new ids.
-    if (!registryModels.has(keyOf('openrouter', id))) {
-      registerModel(record);
+    // Don't overwrite curated seeds with worse data; only add new ids.
+    if (!registryModels.has(keyOf(source.id, id))) {
+      registryModels.set(keyOf(source.id, id), record);
       added++;
     }
   }
   notify();
   return added;
+}
+
+/** Sync a single remote sources (by registry provider id). Returns models added. */
+export async function syncGatewayById(providerId: string): Promise<number> {
+  const src = GATEWAY_SOURCES.find((s) => s.id === providerId);
+  if (!src) return 0;
+  return syncGatewayData(src);
+}
+
+/** Sync every configured gateway (OpenRouter, OpenCode Zen, Kilo). Returns total added. */
+export async function syncAllGateways(): Promise<number> {
+  const results = await Promise.all(GATEWAY_SOURCES.map((s) => syncGatewayData(s)));
+  const added = results.reduce((a, b) => a + (b > 0 ? b : 0), 0);
+  const reachable = results.some((r) => r >= 0);
+  return reachable ? added : -1;
+}
+
+/** Backward-compatible single source sync (OpenRouter). */
+export async function syncOpenRouterData(): Promise<number> {
+  return syncGatewayById('openrouter');
 }
 
 /* Persistence helpers for synced/runtime catalog data (offline-first).

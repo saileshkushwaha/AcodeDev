@@ -75,7 +75,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (id: string) => void }) 
 
           <Card
             title="Model providers"
-            subtitle={`Free & live models — ${gateways.length} gateways synced from OpenRouter`}
+            subtitle={`Free & live models — ${gateways.length} gateways (OpenRouter, OpenCode Zen, Kilo & more)`}
             actions={
               <Button size="sm" variant="ghost" onClick={() => void sync()} disabled={syncing}>
                 {syncing ? <Spinner size={14} /> : '⇄ Sync'}
