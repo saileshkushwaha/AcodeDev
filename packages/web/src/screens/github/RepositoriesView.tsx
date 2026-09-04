@@ -1,10 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTheme, Card, Button, Input, Badge, TabBar, Spinner, Select, Modal, Chip } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubContent, GitHubCommit, GitHubBranch, GitHubRelease, GitHubPullRequest, GitHubIssue, GitHubWorkflowRun } from '@acode/core';
 import { makeClient, timeAgo, compact, splitRef, renderMd, trimSha } from './shared';
 
-export function RepositoriesView() {
+export function RepositoriesView({ initialRepo, onInitialRepoConsumed }: { initialRepo?: string; onInitialRepoConsumed?: () => void }) {
   const { tokens } = useTheme();
   const { githubToken } = useApp();
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
@@ -13,16 +13,27 @@ export function RepositoriesView() {
   const [filter, setFilter] = useState('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<GitHubRepo | null>(null);
+  const [openedFromOverview, setOpenedFromOverview] = useState<string | null>(initialRepo ?? null);
+  const consumedRef = useRef(onInitialRepoConsumed);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const c = makeClient(githubToken);
-      setRepos(await c.repos({ perPage: 100 }));
+      const list = await c.repos({ perPage: 100 });
+      setRepos(list);
+      if (openedFromOverview) {
+        const target = list.find((r) => r.fullName === openedFromOverview);
+        if (target) {
+          setSelected(target);
+          setOpenedFromOverview(null);
+          consumedRef.current?.();
+        }
+      }
     } finally {
       setLoading(false);
     }
-  }, [githubToken]);
+  }, [githubToken, openedFromOverview]);
 
   useEffect(() => {
     void load();

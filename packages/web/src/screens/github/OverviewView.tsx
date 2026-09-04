@@ -9,10 +9,12 @@ export function OverviewView({
   user,
   onNavigate,
   onUnread,
+  onOpenRepo,
 }: {
   user: GitHubUserInfo | null;
   onNavigate: (n: NavId) => void;
   onUnread: (n: number) => void;
+  onOpenRepo: (fullName: string) => void;
 }) {
   const { tokens } = useTheme();
   const { githubToken } = useApp();
@@ -104,13 +106,24 @@ export function OverviewView({
         <Card title="Top repositories" actions={<button onClick={() => onNavigate('repositories')} style={{ background: 'transparent', border: 'none', color: tokens.primary, fontSize: tokens.fontSizeXs, cursor: 'pointer', fontWeight: 600 }}>View all</button>}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2 }}>
             {topRepos.map((r) => (
-              <div key={r.fullName} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: tokens.space2, background: tokens.bgSubtle, borderRadius: tokens.radiusMd }}>
+              <button
+                key={r.fullName}
+                onClick={() => onOpenRepo(r.fullName)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: tokens.space2, padding: tokens.space2,
+                  background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: 'none', cursor: 'pointer',
+                  width: '100%', textAlign: 'left', fontFamily: tokens.fontSans,
+                  transition: 'background 0.12s ease',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = tokens.bgSubtle; }}
+              >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                  <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{r.name}</div>
                   <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{r.language || 'Repository'}</div>
                 </div>
                 <Badge color={tokens.warning}>★ {compact(r.stars)}</Badge>
-              </div>
+              </button>
             ))}
             {!topRepos.length && <div style={{ fontSize: tokens.fontSizeSm, color: tokens.textMuted, padding: tokens.space2 }}>No repositories yet</div>}
           </div>

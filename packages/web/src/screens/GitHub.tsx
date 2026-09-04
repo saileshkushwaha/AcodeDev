@@ -21,6 +21,12 @@ export function GitHubScreen() {
   const [user, setUser] = useState<GitHubUserInfo | null>(null);
   const [nav, setNav] = useState<NavId>('overview');
   const [unread, setUnread] = useState(0);
+  const [pendingRepo, setPendingRepo] = useState<string | null>(null);
+
+  const openRepo = (fullName: string) => {
+    setPendingRepo(fullName);
+    setNav('repositories');
+  };
 
   const connect = async () => {
     setGithubToken(tokenInput);
@@ -110,7 +116,10 @@ export function GitHubScreen() {
         ).map((n) => (
           <button
             key={n.id}
-            onClick={() => setNav(n.id)}
+            onClick={() => {
+              if (n.id === 'repositories') setPendingRepo(null);
+              setNav(n.id);
+            }}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -146,8 +155,8 @@ export function GitHubScreen() {
 
       {/* Content */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {nav === 'overview' && <OverviewView user={user} onNavigate={setNav} onUnread={setUnread} />}
-        {nav === 'repositories' && <RepositoriesView />}
+        {nav === 'overview' && <OverviewView user={user} onNavigate={setNav} onUnread={setUnread} onOpenRepo={openRepo} />}
+        {nav === 'repositories' && <RepositoriesView initialRepo={pendingRepo ?? undefined} onInitialRepoConsumed={() => setPendingRepo(null)} />}
         {nav === 'pulls' && <PullRequestsView />}
         {nav === 'issues' && <IssuesView />}
         {nav === 'actions' && <ActionsView />}
