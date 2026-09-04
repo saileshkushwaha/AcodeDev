@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Sidebar, useTheme, useIsMobile, type NavItem } from '@acode/ui';
+import { useApp } from '../state/AppProvider';
 
 export interface ShellAction {
   id: string;
@@ -27,7 +28,7 @@ function I({ d }: { d: string }) {
 
 export const NAV: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: icons.dashboard },
-  { id: 'chat', label: 'Chat', icon: icons.chat, badge: 0 },
+  { id: 'chat', label: 'Chat', icon: icons.chat },
   { id: 'workflows', label: 'Workflows', icon: icons.workflows },
   { id: 'prompts', label: 'Prompts & Evals', icon: icons.prompts },
   { id: 'agents', label: 'AI Agents', icon: icons.agents },
@@ -50,6 +51,11 @@ export function AppShell({
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Honest chat badge: number of open conversations (sessions) across projects.
+  const { projects } = useApp();
+  const chatCount = projects.projectsList().reduce((n, p) => n + (p.conversations?.length ?? 0), 0);
+  const items = NAV.map((item) => (item.id === 'chat' && chatCount > 0 ? { ...item, badge: chatCount } : item));
 
   const logo = (
     <div
@@ -82,7 +88,7 @@ export function AppShell({
         onSelect(id);
         setDrawerOpen(false);
       }}
-      items={NAV}
+      items={items}
       header={logo}
       footer={!isMobile && !collapsed ? <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center', paddingBottom: tokens.space1 }}>v0.1 · all-in-one</div> : undefined}
     />
