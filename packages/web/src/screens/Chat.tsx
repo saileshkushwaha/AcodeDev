@@ -136,6 +136,9 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [linkDraft, setLinkDraft] = useState({ open: false, url: '', title: '' });
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [skillOpen, setSkillOpen] = useState(false);
+  const [paramsOpen, setParamsOpen] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
@@ -210,6 +213,10 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setConvId(id);
     setAttachments([]);
     if (isMobile) setSessionsOpen(false);
+  };
+
+  const toggleSkill = (id: string) => {
+    setSelectedSkills((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
   };
 
   const newSession = () => {
@@ -434,7 +441,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           {convId && (
             <Button size="sm" variant="ghost" onClick={() => clearSession(convId)}>Clear</Button>
           )}
-          <Button size="sm" onClick={() => setContextOpen((v) => !v)}>{contextOpen ? 'Hide context' : 'Context'}</Button>
+          <Button size="sm" variant={contextOpen ? undefined : 'ghost'} onClick={() => setContextOpen((v) => !v)}>{contextOpen ? 'Hide context' : 'Show context'}</Button>
         </div>
 
         {/* Not-connected banner */}
@@ -480,9 +487,53 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           <div ref={bottomRef} />
         </div>
 
-        {/* Composer */}
-        <div style={{ padding: tokens.space3, borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
-          <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        {/* Unified bottom section: context strip + model row + composer */}
+        <div style={{ borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
+          <div style={{ maxWidth: 960, margin: '0 auto', padding: tokens.space3, position: 'relative' }}>
+
+            {/* Context strip (horizontal, collapsible) */}
+            <ContextStrip
+              open={contextOpen}
+              onToggle={() => setContextOpen((v) => !v)}
+              skills={selectedSkills}
+              capabilities={capabilities}
+              attachmentCount={attachments.length}
+              onOpenAttach={() => setAttachOpen((o) => !o)}
+              onOpenSkills={() => setSkillOpen((o) => !o)}
+            />
+
+            {/* Model row — below the context, same section */}
+            <div style={{ display: 'flex', gap: tokens.space2, alignItems: 'center', flexWrap: 'wrap', marginBottom: tokens.space2 }}>
+              <div style={{ flex: '1 1 170px', minWidth: 150 }}>
+                <Select
+                  value={provider}
+                  onChange={setProvider}
+                  options={[
+                    ...gatewayProviders.map((p) => ({ label: `${p.name} · gateway`, value: p.id })),
+                    ...directProviders.map((p) => ({ label: p.name, value: p.id })),
+                  ]}
+                />
+              </div>
+              <div style={{ flex: '2 1 260px', minWidth: 200 }}>
+                <Select
+                  label={`Model · ${formatContext(providerModels.find((m) => m.id === model)?.contextWindow ?? 0)} ctx`}
+                  value={model}
+                  onChange={setModel}
+                  options={providerModels.map((m) => ({
+                    label: `${m.name}${m.isFree ? ' · free' : ''} · ${formatContext(m.contextWindow)} ctx`,
+                    value: m.id,
+                  }))}
+                />
+              </div>
+              <div style={{ flexShrink: 0 }}>
+                <Toggle checked={freeOnly} onChange={setFreeOnly} label="Free only" />
+              </div>
+              <div style={{ width: 86, flexShrink: 0 }}>
+                <Input value={minContext} onChange={setMinContext} placeholder="min ctx" />
+              </div>
+            </div>
+
+            {/* Attachments chips */}
             {attachments.length > 0 && (
               <div style={{ display: 'flex', gap: tokens.space2, flexWrap: 'wrap', marginBottom: tokens.space2 }}>
                 {attachments.map((a) => (
@@ -490,12 +541,22 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                 ))}
               </div>
             )}
+
+            {/* Composer */}
             <div style={{ display: 'flex', gap: tokens.space2, alignItems: 'flex-end' }}>
-              <div style={{ display: 'flex', gap: tokens.space1, flexShrink: 0 }}>
-                <IconBtn title="Attach file" onClick={() => fileRef.current?.click()}>📄</IconBtn>
-                <IconBtn title="Attach folder" onClick={() => folderRef.current?.click()}>📁</IconBtn>
-                <IconBtn title="Attach link" onClick={() => setLinkDraft((d) => ({ ...d, open: !d.open }))}>🔗</IconBtn>
+              {/* + icon with attachment submenu */}
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <IconBtn title="Add attachment" onClick={() => setAttachOpen((o) => !o)} active={attachOpen}><b style={{ fontSize: 22, lineHeight: 1 }}>+</b></IconBtn>
+                {attachOpen && (
+                  <AddMenu
+                    onFile={() => { setAttachOpen(false); fileRef.current?.click(); }}
+                    onFolder={() => { setAttachOpen(false); folderRef.current?.click(); }}
+                    onLink={() => { setAttachOpen(false); setLinkDraft((d) => ({ ...d, open: !d.open })); }}
+                    onClose={() => setAttachOpen(false)}
+                  />
+                )}
               </div>
+
               <div style={{ flex: 1 }}>
                 <textarea
                   ref={textareaRef}
@@ -527,10 +588,63 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                   }}
                 />
               </div>
-              <Button onClick={() => void handleSend()} disabled={(!input.trim() && attachments.length === 0) || streaming} style={{ height: 48, whiteSpace: 'nowrap' }}>
-                {streaming ? <Spinner size={16} color="#fff" /> : 'Send'}
-              </Button>
+
+              {/* Skills icon -> popup */}
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <IconBtn title="Skills" onClick={() => setSkillOpen((o) => !o)} active={skillOpen || selectedSkills.length > 0}>✨</IconBtn>
+                {skillOpen && (
+                  <SkillsMenu
+                    selected={selectedSkills}
+                    onToggle={toggleSkill}
+                    onClose={() => setSkillOpen(false)}
+                  />
+                )}
+              </div>
+
+              {/* Params icon -> popup */}
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <IconBtn title="Generation settings" onClick={() => setParamsOpen((o) => !o)} active={paramsOpen}>⚙</IconBtn>
+                {paramsOpen && (
+                  <ParamsMenu
+                    showParams={showParams}
+                    setShowParams={setShowParams}
+                    temperature={temperature}
+                    setTemperature={setTemperature}
+                    maxTokens={maxTokens}
+                    setMaxTokens={setMaxTokens}
+                    onClose={() => setParamsOpen(false)}
+                  />
+                )}
+              </div>
+
+              {/* Send icon */}
+              <div style={{ flexShrink: 0 }}>
+                <button
+                  onClick={() => void handleSend()}
+                  disabled={(!input.trim() && attachments.length === 0) || streaming}
+                  title="Send"
+                  aria-label="Send"
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: tokens.radiusMd,
+                    border: 'none',
+                    background: (!input.trim() && attachments.length === 0) || streaming ? tokens.surfaceHover : tokens.primary,
+                    color: (!input.trim() && attachments.length === 0) || streaming ? tokens.textMuted : '#fff',
+                    cursor: (!input.trim() && attachments.length === 0) || streaming ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'background 0.12s ease',
+                  }}
+                >
+                  {streaming ? <Spinner size={18} color="#fff" /> : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4z" /></svg>
+                  )}
+                </button>
+              </div>
             </div>
+
             {linkDraft.open && (
               <div style={{ display: 'flex', gap: tokens.space2, marginTop: tokens.space2, alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 160 }}>
@@ -552,50 +666,17 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         <input ref={fileRef} type="file" multiple style={{ display: 'none' }} onChange={onPickFiles} />
         <input ref={folderRef} type="file" multiple style={{ display: 'none' }} {...({ webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>)} onChange={onPickFolder} />
       </div>
-
-      {/* Context panel */}
-      {contextOpen && (
-        <ContextPanel
-          provider={provider}
-          setProvider={setProvider}
-          model={model}
-          setModel={setModel}
-          providerModels={providerModels}
-          gatewayProviders={gatewayProviders}
-          directProviders={directProviders}
-          capabilities={capabilities}
-          freeOnly={freeOnly}
-          setFreeOnly={setFreeOnly}
-          minContext={minContext}
-          setMinContext={setMinContext}
-          showParams={showParams}
-          setShowParams={setShowParams}
-          temperature={temperature}
-          setTemperature={setTemperature}
-          maxTokens={maxTokens}
-          setMaxTokens={setMaxTokens}
-          selectedSkills={selectedSkills}
-          setSelectedSkills={setSelectedSkills}
-          connected={connected}
-          onNavigate={onNavigate}
-          isMobile={isMobile}
-          onClose={() => setContextOpen(false)}
-          onTriggerFile={() => fileRef.current?.click()}
-          onTriggerFolder={() => folderRef.current?.click()}
-          onTriggerLink={() => setLinkDraft((d) => ({ ...d, open: !d.open }))}
-        />
-      )}
     </div>
   );
 }
 
-function IconBtn({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
+function IconBtn({ title, onClick, children, active }: { title: string; onClick: () => void; children: React.ReactNode; active?: boolean }) {
   const { tokens } = useTheme();
   return (
     <button
       title={title}
       onClick={onClick}
-      style={{ background: tokens.bg, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, width: 44, height: 44, cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+      style={{ background: active ? `${tokens.primary}1a` : tokens.bg, border: `1px solid ${active ? tokens.primary : tokens.borderStrong}`, borderRadius: tokens.radiusMd, width: 44, height: 44, cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: active ? tokens.primary : tokens.text }}
     >
       {children}
     </button>
@@ -615,208 +696,76 @@ function AttachmentChip({ attachment: a, onRemove }: { attachment: ChatAttachmen
   );
 }
 
-function ContextPanel(props: {
-  provider: string;
-  setProvider: (v: string) => void;
-  model: string;
-  setModel: (v: string) => void;
-  providerModels: { id: string; name: string; isFree: boolean; contextWindow: number }[];
-  gatewayProviders: { id: string; name: string }[];
-  directProviders: { id: string; name: string }[];
+
+/* ------------------------------------------------------------------ */
+/* Context strip: horizontal, wide, below header, collapsible          */
+/* ------------------------------------------------------------------ */
+function ContextStrip({
+  open, onToggle, skills, capabilities, attachmentCount, onOpenAttach, onOpenSkills,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  skills: string[];
   capabilities: ModelCapability[];
-  freeOnly: boolean;
-  setFreeOnly: (v: boolean) => void;
-  minContext: string;
-  setMinContext: (v: string) => void;
-  showParams: boolean;
-  setShowParams: React.Dispatch<React.SetStateAction<boolean>>;
-  temperature: number;
-  setTemperature: (v: number) => void;
-  maxTokens: number;
-  setMaxTokens: (v: number) => void;
-  selectedSkills: string[];
-  setSelectedSkills: React.Dispatch<React.SetStateAction<string[]>>;
-  connected: boolean;
-  onNavigate?: (tab: string) => void;
-  isMobile: boolean;
-  onClose: () => void;
-  onTriggerFile: () => void;
-  onTriggerFolder: () => void;
-  onTriggerLink: () => void;
+  attachmentCount: number;
+  onOpenAttach: () => void;
+  onOpenSkills: () => void;
 }) {
   const { tokens } = useTheme();
-  const {
-    provider, setProvider, model, setModel, providerModels, gatewayProviders, directProviders,
-    capabilities, freeOnly, setFreeOnly, minContext, setMinContext,
-    showParams, setShowParams, temperature, setTemperature, maxTokens, setMaxTokens,
-    selectedSkills, setSelectedSkills, connected, onNavigate, isMobile, onClose,
-    onTriggerFile, onTriggerFolder, onTriggerLink,
-  } = props;
-
-  const toggleSkill = (id: string) => {
-    setSelectedSkills((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
-  };
-
-  const groups = [...new Set(BUILTIN_SKILLS.map((s) => s.group))];
-
   return (
-    <>
-      {isMobile && <div className="fade-in" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 60 }} />}
-      <aside
-        className="rise"
+    <div style={{ marginBottom: tokens.space2 }}>
+      <button
+        onClick={onToggle}
         style={{
-          width: isMobile ? 'min(88vw, 360px)' : 340,
-          flexShrink: 0,
-          background: tokens.bgSubtle,
-          borderLeft: `1px solid ${tokens.border}`,
+          width: '100%',
           display: 'flex',
-          flexDirection: 'column',
-          zIndex: isMobile ? 61 : 'auto',
-          position: isMobile ? 'fixed' : 'relative',
-          top: 0, bottom: 0, right: 0,
-          overflowY: 'auto',
+          alignItems: 'center',
+          gap: tokens.space2,
+          padding: `${tokens.space1 + 4}px ${tokens.space3}px`,
+          border: `1px solid ${tokens.borderStrong}`,
+          borderRadius: tokens.radiusMd,
+          background: open ? `${tokens.primary}0d` : tokens.bg,
+          cursor: 'pointer',
+          fontFamily: tokens.fontSans,
+          color: tokens.textSecondary,
+          fontSize: tokens.fontSizeSm,
+          textAlign: 'left',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, borderBottom: `1px solid ${tokens.border}` }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd }}>Chat context</div>
-            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>Model, skills & attached resources</div>
-          </div>
-          {isMobile && (
-            <Button size="sm" variant="ghost" onClick={onClose}>✕</Button>
-          )}
-        </div>
-
-        {/* Model + capabilities */}
-        <div style={{ padding: tokens.space3, borderBottom: `1px solid ${tokens.border}` }}>
-          <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, marginBottom: tokens.space2 }}>Model</div>
-          <Select
-            label="Provider"
-            value={provider}
-            onChange={setProvider}
-            options={[
-              ...gatewayProviders.map((p) => ({ label: `${p.name} · gateway`, value: p.id })),
-              ...directProviders.map((p) => ({ label: p.name, value: p.id })),
-            ]}
-          />
-          <div style={{ marginTop: tokens.space2 }}>
-            <Select
-              label={`Model · ${formatContext(providerModels.find((m) => m.id === model)?.contextWindow ?? 0)} ctx`}
-              value={model}
-              onChange={setModel}
-              options={providerModels.map((m) => ({
-                label: `${m.name}${m.isFree ? ' · free' : ''} · ${formatContext(m.contextWindow)} ctx`,
-                value: m.id,
-              }))}
-            />
-          </div>
-
-          {/* Capabilities the model can accept */}
-          <div style={{ marginTop: tokens.space2 }}>
-            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginBottom: tokens.space1 }}>Accepts</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.space1 }}>
-              {CAP_ORDER.filter((c) => capabilities.includes(c)).map((c) => (
-                <Badge key={c} color={tokens.success}>{CAPABILITY_LABELS[c]}</Badge>
-              ))}
-              {capabilities.length === 0 && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>—</span>}
-            </div>
-          </div>
-
-          {!connected && onNavigate && (
-            <div style={{ marginTop: tokens.space2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: tokens.space2 }}>
-              <span style={{ fontSize: tokens.fontSizeXs, color: tokens.warning }}>Not connected</span>
-              <Button size="sm" onClick={() => onNavigate('keys')}>Configure</Button>
-            </div>
-          )}
-        </div>
-
-        {/* Skills */}
-        <div style={{ padding: tokens.space3, borderBottom: `1px solid ${tokens.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
-            <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600 }}>Skills</div>
-            {selectedSkills.length > 0 && (
-              <Button size="sm" variant="ghost" onClick={() => setSelectedSkills([])}>Clear</Button>
-            )}
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.space1 }}>
-            {selectedSkills.length === 0 && (
-              <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginBottom: tokens.space1 }}>Enable skills to steer the model's approach.</span>
-            )}
-            {selectedSkills.map((id) => {
-              const s = getSkill(id);
-              return (
-                <Badge key={id} color={tokens.primary} style={{ cursor: 'pointer' }} >
-                  <span onClick={() => toggleSkill(id)} title={s?.description}>{s?.icon} {s?.name} ✕</span>
-                </Badge>
-              );
-            })}
-          </div>
-          <div style={{ marginTop: tokens.space2 }}>
-            {groups.map((g) => (
-              <div key={g} style={{ marginBottom: tokens.space2 }}>
-                <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, textTransform: 'uppercase', fontWeight: 600, marginBottom: tokens.space1 }}>{g}</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space1 }}>
-                  {BUILTIN_SKILLS.filter((s) => s.group === g).map((s) => (
-                    <SkillRow key={s.id} skill={s} active={selectedSkills.includes(s.id)} onToggle={() => toggleSkill(s.id)} />
-                  ))}
-                </div>
-              </div>
+        <span style={{ fontSize: 14, color: tokens.primary, width: 16, display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>▶</span>
+        <span style={{ fontWeight: 600, color: tokens.text }}>Chat context</span>
+        {capabilities.length > 0 && (
+          <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {CAP_ORDER.filter((c) => capabilities.includes(c)).slice(0, 6).map((c) => (
+              <Badge key={c} color={tokens.success}>{CAPABILITY_LABELS[c]}</Badge>
             ))}
-          </div>
-        </div>
-
-        {/* Attachments */}
-        <div style={{ padding: tokens.space3, borderBottom: `1px solid ${tokens.border}` }}>
-          <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, marginBottom: tokens.space2 }}>Attachments</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.space1, marginBottom: tokens.space2 }}>
-            <AttachBtn icon="📄" label="File" onClick={onTriggerFile} />
-            <AttachBtn icon="🖼" label="Image" onClick={onTriggerFile} />
-            <AttachBtn icon="📁" label="Folder" onClick={onTriggerFolder} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.space1 }}>
-            <AttachBtn icon="◫" label="SVG" onClick={onTriggerFile} />
-            <AttachBtn icon="⬡" label="draw.io" onClick={onTriggerFile} />
-            <AttachBtn icon="🔗" label="Link" onClick={onTriggerLink} />
-          </div>
-          <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginTop: tokens.space2 }}>
-            Attachments travel with your next message. Files, folders, images, SVGs, draw.io diagrams and links are all supported.
-          </div>
-        </div>
-
-        {/* Params */}
-        <div style={{ padding: tokens.space3 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
-            <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600 }}>Generation</div>
-            <Button size="sm" variant="ghost" onClick={() => setShowParams((s) => !s)}>{showParams ? 'Hide' : 'Show'}</Button>
-          </div>
-          <div style={{ display: 'flex', gap: tokens.space3, alignItems: 'center', marginBottom: tokens.space2, flexWrap: 'wrap' }}>
-            <Toggle checked={freeOnly} onChange={setFreeOnly} label="Free only" />
-            <div style={{ width: 110 }}>
-              <Input value={minContext} onChange={setMinContext} placeholder="min ctx" />
-            </div>
-          </div>
-          {showParams && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>
-              <Input label={`Temperature: ${temperature}`} value={String(temperature)} onChange={(v) => setTemperature(Math.max(0, Math.min(2, Number(v) || 0)))} type="number" />
-              <Input label="Max tokens" value={String(maxTokens)} onChange={(v) => setMaxTokens(Math.max(1, Number(v) || 2048))} type="number" />
-            </div>
-          )}
-        </div>
-      </aside>
-    </>
-  );
-}
-
-function AttachBtn({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
-  const { tokens } = useTheme();
-  return (
-    <button
-      onClick={onClick}
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: `${tokens.space2}px 4px`, border: `1px dashed ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, background: tokens.bg, cursor: 'pointer', color: tokens.textSecondary, fontFamily: tokens.fontSans, fontSize: tokens.fontSizeXs }}
-    >
-      <span style={{ fontSize: 18 }}>{icon}</span>
-      <span>{label}</span>
-    </button>
+          </span>
+        )}
+        {skills.length > 0 && (
+          <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {skills.map((id) => {
+              const s = getSkill(id);
+              return <Badge key={id} color={tokens.primary}>{s?.icon} {s?.name}</Badge>;
+            })}
+          </span>
+        )}
+        {attachmentCount > 0 && <Badge color={tokens.accent}>📎 {attachmentCount}</Badge>}
+        {open && (
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: tokens.space2, alignItems: 'center' }}>
+            <span
+              role="button"
+              onClick={(e) => { e.stopPropagation(); onOpenAttach(); }}
+              style={{ color: tokens.primary, fontWeight: 600 }}
+            >+ Attach</span>
+            <span
+              role="button"
+              onClick={(e) => { e.stopPropagation(); onOpenSkills(); }}
+              style={{ color: tokens.primary, fontWeight: 600 }}
+            >+ Skill</span>
+          </span>
+        )}
+      </button>
+    </div>
   );
 }
 
@@ -828,6 +777,100 @@ function SkillRow({ skill, active, onToggle }: { skill: { id: string; name: stri
       <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: active ? tokens.primary : tokens.text }}>{skill.icon} {skill.name}</span>
       <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontFamily: tokens.fontSans }}>— {skill.description}</span>
     </label>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* "+" attachment submenu (anchored above the button)                  */
+/* ------------------------------------------------------------------ */
+function AddMenu({ onFile, onFolder, onLink, onClose }: { onFile: () => void; onFolder: () => void; onLink: () => void; onClose: () => void }) {
+  const { tokens } = useTheme();
+  const items = [
+    { icon: '📄', label: 'File', fn: onFile },
+    { icon: '🖼', label: 'Image', fn: onFile },
+    { icon: '📁', label: 'Folder', fn: onFolder },
+    { icon: '◫', label: 'SVG', fn: onFile },
+    { icon: '⬡', label: 'draw.io', fn: onFile },
+    { icon: '🔗', label: 'Link', fn: onLink },
+  ];
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
+      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 71, width: 220, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
+        <div style={{ padding: `${tokens.space1}px ${tokens.space2}px`, fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontWeight: 600 }}>Add attachment</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.space1 }}>
+          {items.map((it) => (
+            <button key={it.label} onClick={() => it.fn()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: `${tokens.space2}px 4px`, border: `1px dashed ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, background: tokens.bg, cursor: 'pointer', color: tokens.textSecondary, fontFamily: tokens.fontSans, fontSize: tokens.fontSizeXs }}>
+              <span style={{ fontSize: 18 }}>{it.icon}</span>
+              <span>{it.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Skills popup (anchored above the ✨ button)                          */
+/* ------------------------------------------------------------------ */
+function SkillsMenu({ selected, onToggle, onClose }: { selected: string[]; onToggle: (id: string) => void; onClose: () => void }) {
+  const { tokens } = useTheme();
+  const groups = [...new Set(BUILTIN_SKILLS.map((s) => s.group))];
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
+      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', right: 0, zIndex: 71, width: 320, maxHeight: '60vh', overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space1 }}>
+          <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 700 }}>Skills</div>
+          {selected.length > 0 && (
+            <button onClick={() => { selected.slice().forEach((id) => onToggle(id)); }} style={{ background: 'transparent', border: 'none', color: tokens.primary, cursor: 'pointer', fontSize: tokens.fontSizeXs, fontFamily: tokens.fontSans }}>Clear all</button>
+          )}
+        </div>
+        {groups.map((g) => (
+          <div key={g} style={{ marginBottom: tokens.space2 }}>
+            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>{g}</div>
+            {BUILTIN_SKILLS.filter((s) => s.group === g).map((s) => (
+              <SkillRow key={s.id} skill={s} active={selected.includes(s.id)} onToggle={() => onToggle(s.id)} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Generation params popup (anchored above the ⚙ button)               */
+/* ------------------------------------------------------------------ */
+function ParamsMenu({ showParams, setShowParams, temperature, setTemperature, maxTokens, setMaxTokens, onClose }:
+  {
+    showParams: boolean;
+    setShowParams: React.Dispatch<React.SetStateAction<boolean>>;
+    temperature: number;
+    setTemperature: (v: number) => void;
+    maxTokens: number;
+    setMaxTokens: (v: number) => void;
+    onClose: () => void;
+  }) {
+  const { tokens } = useTheme();
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
+      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', right: 0, zIndex: 71, width: 300, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space3 }}>
+        <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 700, marginBottom: tokens.space2 }}>Generation</div>
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
+          <span style={{ fontSize: tokens.fontSizeSm }}>Advanced</span>
+          <input type="checkbox" checked={showParams} onChange={() => setShowParams((s) => !s)} />
+        </label>
+        {showParams && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>
+            <Input label={`Temperature: ${temperature}`} value={String(temperature)} onChange={(v) => setTemperature(Math.max(0, Math.min(2, Number(v) || 0)))} type="number" />
+            <Input label="Max tokens" value={String(maxTokens)} onChange={(v) => setMaxTokens(Math.max(1, Number(v) || 2048))} type="number" />
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
