@@ -17,7 +17,7 @@ export function App() {
     dashboard: <Dashboard onNavigate={setTab} />,
     chat: <ChatScreen onNavigate={setTab} />,
     workflows: <WorkflowsScreen />,
-    prompts: <PromptsScreen />,
+    prompts: <PromptsScreen onNavigate={setTab} />,
     agents: <AgentsScreen />,
     keys: <KeysScreen />,
     github: <GitHubScreen />,
