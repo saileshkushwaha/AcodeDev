@@ -519,25 +519,32 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
         </button>
 
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            onClick={() => selectTab(tab.id)}
-            style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusMd, background: tab.id === activeTab ? tokens.surface : 'transparent', border: `1px solid ${tab.id === activeTab ? tokens.borderStrong : 'transparent'}`, cursor: 'pointer', flexShrink: 0, maxWidth: 200, transition: 'background 0.1s ease' }}
-          >
-            <span style={{ width: 20, height: 20, borderRadius: '50%', background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>
-              {tab.title.replace(/\s+/g, ' ').trim().charAt(0).toUpperCase() || 'P'}
-            </span>
-            <span style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tab.id === activeTab ? tokens.text : tokens.textSecondary, maxWidth: 120 }}>
-              {tab.title}
-            </span>
-            <button
-              title="Close tab"
-              onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
-              style={{ width: 18, height: 18, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 12, flexShrink: 0 }}
-            >×</button>
-          </div>
-        ))}
+        {tabs.map((tab) => {
+          const isActive = tab.id === activeTab;
+          return (
+            <div
+              key={tab.id}
+              onClick={() => selectTab(tab.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusMd, background: isActive ? tokens.surface : 'transparent', border: `1px solid ${isActive ? tokens.borderStrong : 'transparent'}`, cursor: 'pointer', flexShrink: 0, maxWidth: 200, transition: 'background 0.1s ease' }}
+            >
+              {isActive ? (
+                <span style={{ width: 20, height: 20, borderRadius: '50%', background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>
+                  {tab.title.replace(/\s+/g, ' ').trim().charAt(0).toUpperCase() || 'P'}
+                </span>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+              )}
+              <span style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isActive ? tokens.text : tokens.textSecondary, maxWidth: 120 }}>
+                {tab.title}
+              </span>
+              <button
+                title="Close tab"
+                onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                style={{ width: 18, height: 18, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 12, flexShrink: 0 }}
+              >×</button>
+            </div>
+          );
+        })}
 
         <button
           title="New session"
@@ -577,6 +584,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                 }}
                 onShare={() => { setOverflowOpen(false); void shareSession(); }}
                 onExport={() => { setOverflowOpen(false); exportSession(); }}
+                onArchive={() => { setOverflowOpen(false); /* Archive functionality */ }}
                 onDelete={() => { setOverflowOpen(false); if (convId) deleteSession(convId); }}
                 onClose={() => setOverflowOpen(false)}
               />
@@ -865,12 +873,13 @@ function SubTab({ active, onClick, children }: { active: boolean; onClick: () =>
   );
 }
 
-function OverflowMenu({ hasSession, onNewSession, onRename, onShare, onExport, onDelete, onClose }: {
+function OverflowMenu({ hasSession, onNewSession, onRename, onShare, onExport, onArchive, onDelete, onClose }: {
   hasSession: boolean;
   onNewSession: () => void;
   onRename: () => void;
   onShare: () => void;
   onExport: () => void;
+  onArchive: () => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
@@ -879,28 +888,28 @@ function OverflowMenu({ hasSession, onNewSession, onRename, onShare, onExport, o
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
       <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 71, minWidth: 180, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
-        <MenuItem label="New chat" icon="✦" onClick={onNewSession} />
-        <MenuItem label="Rename" icon="✎" onClick={onRename} disabled={!hasSession} />
-        <MenuItem label="Share…" icon="↗" onClick={onShare} disabled={!hasSession} />
-        <MenuItem label="Export…" icon="↓" onClick={onExport} disabled={!hasSession} />
+        <MenuItem label="Rename" onClick={onRename} disabled={!hasSession} />
+        <MenuItem label="Share..." onClick={onShare} disabled={!hasSession} />
+        <MenuItem label="Export..." onClick={onExport} disabled={!hasSession} />
+        <MenuItem label="Archive" onClick={onArchive} disabled={!hasSession} />
         <div style={{ height: 1, background: tokens.border, margin: `${tokens.space1}px 0` }} />
-        <MenuItem label="Delete…" icon="🗑" danger onClick={onDelete} disabled={!hasSession} />
+        <MenuItem label="Delete..." danger onClick={onDelete} disabled={!hasSession} />
       </div>
     </>
   );
 }
 
-function MenuItem({ label, icon, onClick, danger, disabled }: { label: string; icon: string; onClick: () => void; danger?: boolean; disabled?: boolean }) {
+function MenuItem({ label, onClick, danger, disabled }: { label: string; onClick: () => void; danger?: boolean; disabled?: boolean }) {
   const { tokens } = useTheme();
   return (
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
-      style={{ width: '100%', textAlign: 'left', padding: `${tokens.space1}px ${tokens.space2}px`, background: 'transparent', border: 'none', borderRadius: tokens.radiusSm, color: disabled ? tokens.textMuted : danger ? tokens.danger : tokens.text, fontSize: tokens.fontSizeSm, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: tokens.fontSans, opacity: disabled ? 0.6 : 1 }}
+      style={{ width: '100%', textAlign: 'left', padding: `${tokens.space2}px ${tokens.space3}px`, background: 'transparent', border: 'none', borderRadius: tokens.radiusSm, color: disabled ? tokens.textMuted : danger ? tokens.danger : tokens.text, fontSize: tokens.fontSizeSm, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: tokens.fontSans, opacity: disabled ? 0.6 : 1 }}
       onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover; }}
       onMouseLeave={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
     >
-      <span style={{ marginRight: 6 }}>{icon}</span>{label}
+      {label}
     </button>
   );
 }
@@ -929,6 +938,31 @@ function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
             <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.success, textTransform: 'uppercase' }}>Write</span>
             <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, color: tokens.text }}>{writeMatch[1]}</span>
             <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{writeMatch[2]}</span>
+          </div>
+        );
+        i++;
+        continue;
+      }
+
+      const exploredMatch = line.match(/^Explored\s+(\d+)\s+read$/i);
+      if (exploredMatch) {
+        elements.push(
+          <div key={`tool-${i}`} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, marginBottom: tokens.space1 }}>
+            <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.primary, textTransform: 'uppercase' }}>Explored</span>
+            <span style={{ fontSize: tokens.fontSizeSm, color: tokens.text }}>{exploredMatch[1]} read</span>
+          </div>
+        );
+        i++;
+        continue;
+      }
+
+      const webfetchMatch = line.match(/^Webfetch\s+(.+)$/i);
+      if (webfetchMatch) {
+        elements.push(
+          <div key={`tool-${i}`} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, marginBottom: tokens.space1 }}>
+            <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.accent, textTransform: 'uppercase' }}>Webfetch</span>
+            <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, color: tokens.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{webfetchMatch[1]}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
           </div>
         );
         i++;
