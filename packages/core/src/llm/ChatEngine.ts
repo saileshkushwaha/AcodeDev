@@ -1,5 +1,7 @@
 import { createProvider } from './provider';
 import { KeyVault } from '../keys/KeyVault';
+import { getProxyBase } from '../proxy';
+import { getProvider } from '../models/catalog';
 import type { ChatMessage, ChatRequest, ChatResponse, ChatStreamChunk, CryptoAdapter, ProviderId } from '../types';
 import { baseUrlFor } from '../models/catalog';
 
@@ -19,13 +21,16 @@ export class ChatEngine {
   }
 
   private resolve(req: ChatRequest): ChatRequest {
-    if (req.apiKey || req.baseUrl) return req;
+    if (req.apiKey && req.baseUrl) return req;
     const key = this.vault.getKey(req.provider);
-    return {
-      ...req,
-      apiKey: key,
-      baseUrl: req.baseUrl ?? baseUrlFor(req.provider),
-    };
+    const realBase = req.baseUrl ?? baseUrlFor(req.provider) ?? '';
+    const proxy = getProxyBase();
+    const isGateway = getProvider(req.provider)?.gateway;
+    // Route browser-blocked gateway calls (no CORS) through the local relay.
+    if (proxy && isGateway && realBase) {
+      return { ...req, apiKey: key, baseUrl: proxy, upstreamBase: realBase };
+    }
+    return { ...req, apiKey: key, baseUrl: realBase, upstreamBase: undefined };
   }
 
   async chat(req: ChatRequest): Promise<ChatResponse> {

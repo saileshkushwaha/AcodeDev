@@ -15,6 +15,10 @@ import {
   unregisterProvider,
   registerModel,
   persistCatalog,
+  getProxyBase,
+  setProxyBase,
+  upstreamFromModelsUrl,
+  routeThroughProxy,
   type ConnectorCategory,
   type KnownConnector,
   type ProviderDef,
@@ -61,6 +65,8 @@ export function KeysScreen() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState('');
+  const [proxyUrl, setProxyUrlState] = useState(getProxyBase());
+  const setProxyUrl = (v: string) => { setProxyUrlState(v); setProxyBase(v); };
 
   // Seed the GitHub dev connector from the existing GitHub token so both stay in sync.
   useEffect(() => {
@@ -159,12 +165,18 @@ export function KeysScreen() {
     setTesting((s) => ({ ...s, [c.id]: 'testing' }));
     try {
       let url = TEST_ENDPOINTS[c.id]?.url;
-      if (c.gateway) url = `${(c.baseUrl || getProvider(c.id)?.baseUrl || '').replace(/\/+$/, '')}/models`;
+      let headers: Record<string, string> = { Authorization: `Bearer ${key}` };
+      if (c.gateway) {
+        const realBase = (c.baseUrl || getProvider(c.id)?.baseUrl || '').replace(/\/+$/, '');
+        const realModels = `${realBase}/models`;
+        const proxy = routeThroughProxy(realModels, headers, upstreamFromModelsUrl(realModels));
+        url = proxy.url;
+        headers = proxy.headers;
+      }
       if (!url) {
         setTesting((s) => ({ ...s, [c.id]: 'fail' }));
         return;
       }
-      const headers: Record<string, string> = { Authorization: `Bearer ${key}` };
       const res = await fetch(url, { headers, signal: AbortSignal.timeout(9000) });
       setTesting((s) => ({ ...s, [c.id]: res.ok ? 'ok' : 'fail' }));
     } catch {
@@ -327,6 +339,32 @@ export function KeysScreen() {
       </div>
 
       {/* Connector grid */}
+      {active === 'gateway' && (
+        <Card style={{ marginBottom: tokens.space3, padding: tokens.space3 }}>
+          <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, marginBottom: tokens.space2 }}>
+            LOCAL PROXY (optional — needed for gateways without CORS headers)
+          </div>
+          <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary, marginBottom: tokens.space3, lineHeight: 1.5 }}>
+            Some gateways (OpenCode Zen, Kilo) block direct browser calls. Run <code>node proxy.mjs</code> in the repo root, then set the URL below.
+          </div>
+          <div style={{ display: 'flex', gap: tokens.space2, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}>
+              <Input
+                label="Gateway proxy URL"
+                monospace
+                value={proxyUrl}
+                onChange={setProxyUrl}
+                placeholder="http://localhost:8787"
+              />
+            </div>
+          </div>
+          {proxyUrl && (
+            <div style={{ marginTop: tokens.space2, fontSize: tokens.fontSizeXs, color: tokens.success, fontWeight: 600 }}>
+              ✓ Proxy configured — gateway calls route through {proxyUrl}
+            </div>
+          )}
+        </Card>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: tokens.space3 }}>
         {list.map((c) => (
           <ConnectorCard

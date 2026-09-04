@@ -100,6 +100,8 @@ export interface ChatRequest {
   tools?: ToolDefinition[];
   baseUrl?: string;
   apiKey?: string;
+  /** When the request is relayed through a gateway proxy, the real upstream base URL. */
+  upstreamBase?: string;
 }
 
 export interface ChatStreamChunk {

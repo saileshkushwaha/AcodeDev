@@ -1,4 +1,5 @@
 import type { ModelCapability, ModelInfo, ProviderId } from '../types';
+import { routeThroughProxy, upstreamFromModelsUrl } from '../proxy';
 
 /**
  * Derive the resource capabilities a model can accept from its tags and any
@@ -371,7 +372,11 @@ function priceOf(pricing: unknown, key: string): number | null {
 export async function syncGatewayData(source: GatewaySource): Promise<number> {
   let data: { data?: Array<Record<string, unknown>>; models?: Array<Record<string, unknown>> };
   try {
-    const res = await fetch(source.modelsUrl, { signal: AbortSignal.timeout(15000) });
+    const proxy = routeThroughProxy(source.modelsUrl, {}, upstreamFromModelsUrl(source.modelsUrl));
+    const res = await fetch(proxy.url, {
+      headers: proxy.headers,
+      signal: AbortSignal.timeout(15000),
+    });
     if (!res.ok) throw new Error(`${source.id} ${res.status}`);
     data = await res.json();
   } catch {

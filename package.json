@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "web": "npm run dev -w @acode/web",
+    "proxy": "node proxy.mjs",
     "web:build": "npm run build -w @acode/web",
     "mobile": "npm run start -w @acode/mobile",
     "mobile:android": "npm run android -w @acode/mobile",

@@ -23,6 +23,18 @@ npm run mobile       # start the mobile app (Expo)
 npm run web:build    # production build
 ```
 
+## Using OpenCode Zen / Kilo gateways (local proxy)
+
+Some OpenAI-compatible gateways — **OpenCode Zen** (`opencode.ai`) and **Kilo** (`api.kilo.ai`) — don't send the `Access-Control-Allow-Origin` header, so a browser running the app can't call them directly (CORS blocks the request even with a correct API key). To use their models from the web app, run the bundled relay proxy and point the app at it:
+
+```bash
+npm run proxy        # or: node proxy.mjs   (listens on http://127.0.0.1:8787)
+```
+
+Then, in the app, open **Connections → Gateways** and set **Gateway proxy URL** to `http://localhost:8787`. Gateway requests (model sync, connection tests, and live chat) are relayed through it, which injects the missing CORS header. Your API keys only travel from your machine to the gateway — never through a third party.
+
+The proxy only forwards to an allowlist of known hosts (see `proxy.mjs`; override with `UPSTREAM_ALLOW`), includes CORS preflight handling, and a 30s upstream timeout.
+
 ## Features
 
 - **Chat + Prompt Playground** — multi-model chat with streaming, parameter tuning, prompt templates
@@ -38,7 +50,8 @@ Three modes, switchable per conversation/project:
 
 1. **OpenRouter** — one key, 300+ free models across providers
 2. **Direct providers** — OpenAI, Google Gemini, Anthropic, Mistral, Groq, DeepSeek, Together
-3. **Local** — offline models via a local HTTP endpoint (e.g. llama.cpp)
+3. **OpenCode Zen / Kilo** — free model gateways (require the local proxy, see above)
+4. **Local** — offline models via a local HTTP endpoint (e.g. llama.cpp)
 
 ## License
 

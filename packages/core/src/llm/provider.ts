@@ -138,9 +138,10 @@ function buildOpenAIMessages(messages: ChatMessage[]) {
 export class OpenAICompatibleProvider implements AbstractProvider {
   constructor(public readonly providerId: string, public readonly apiBase: string) {}
 
-  private headers(apiKey?: string) {
+  private headers(apiKey?: string, upstream?: string) {
     const h: Record<string, string> = { 'Content-Type': 'application/json' };
     if (apiKey) h.Authorization = `Bearer ${apiKey}`;
+    if (upstream) h['x-proxy-upstream'] = upstream;
     return h;
   }
 
@@ -158,7 +159,7 @@ export class OpenAICompatibleProvider implements AbstractProvider {
     const base = req.baseUrl ?? this.apiBase;
     const res = await fetch(`${base}/chat/completions`, {
       method: 'POST',
-      headers: this.headers(req.apiKey),
+      headers: this.headers(req.apiKey, req.upstreamBase),
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`LLM error ${res.status}: ${await res.text()}`);
@@ -188,7 +189,7 @@ export class OpenAICompatibleProvider implements AbstractProvider {
     const base = req.baseUrl ?? this.apiBase;
     const res = await fetch(`${base}/chat/completions`, {
       method: 'POST',
-      headers: { ...this.headers(req.apiKey), Accept: 'text/event-stream' },
+      headers: { ...this.headers(req.apiKey, req.upstreamBase), Accept: 'text/event-stream' },
       body: JSON.stringify(body),
     });
     if (!res.ok || !res.body) throw new Error(`LLM error ${res.status}: ${await res.text()}`);
