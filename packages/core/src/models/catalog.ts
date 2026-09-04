@@ -89,8 +89,8 @@ const SEED_PROVIDERS: ProviderDef[] = [
   { id: 'fireworks', name: 'Fireworks AI', baseUrl: 'https://api.fireworks.ai/inference/v1', kind: 'openai', auth: 'bearer', website: 'https://fireworks.ai', needsKey: true, description: 'Fast open-model serving gateway.' },
   { id: 'cerebras', name: 'Cerebras', baseUrl: 'https://api.cerebras.ai/v1', kind: 'openai', auth: 'bearer', website: 'https://cerebras.ai', needsKey: true, description: 'Wafer-scale, ultra-low latency models.' },
   { id: 'novita', name: 'Novita AI', baseUrl: 'https://api.novita.ai/v3/openai', kind: 'openai', auth: 'bearer', website: 'https://novita.ai', needsKey: true, description: 'Open-model GPU cloud gateway.' },
-  { id: 'opencode', name: 'OpenCode Zen', baseUrl: 'https://opencode.ai/zen/v1', kind: 'gateway', auth: 'bearer', website: 'https://opencode.ai/zen', gateway: true, needsKey: true, description: 'OpenCode-curated models incl. the free Big Pickle and other free coding models.' },
-  { id: 'kilocode', name: 'Kilo Gateway', baseUrl: 'https://api.kilo.ai/api/gateway', kind: 'gateway', auth: 'bearer', website: 'https://kilo.ai/gateway', gateway: true, needsKey: true, description: 'OpenRouter-compatible gateway to hundreds of models incl. free ones.' },
+  { id: 'opencode', name: 'OpenCode Zen', baseUrl: 'https://opencode.ai/zen/v1', kind: 'gateway', auth: 'bearer', website: 'https://opencode.ai/zen', gateway: true, needsKey: false, description: 'OpenCode-curated models incl. the free Big Pickle and other free coding models. Works without an API key.' },
+  { id: 'kilocode', name: 'Kilo Gateway', baseUrl: 'https://api.kilo.ai/api/gateway', kind: 'gateway', auth: 'bearer', website: 'https://kilo.ai/gateway', gateway: true, needsKey: false, description: 'OpenRouter-compatible gateway to hundreds of models incl. free ones. Works without an API key.' },
   { id: 'local', name: 'Local / Offline', baseUrl: 'http://localhost:11434/v1', kind: 'local', auth: 'bearer', needsKey: false, description: 'Local llama.cpp / Ollama-compatible server.' },
 ];
 
@@ -142,18 +142,17 @@ const FREE_MODELS: Record<string, ModelInfo[]> = {
     { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B (Novita)', provider: 'novita', contextWindow: 131072, maxOutput: 8192, isFree: false, tags: ['chat'] },
   ],
   opencode: [
-    { id: 'big-pickle', name: 'Big Pickle (free)', provider: 'opencode', contextWindow: 1048576, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'long-context'] },
-    { id: 'deepseek-v4-flash-free', name: 'DeepSeek V4 Flash (free)', provider: 'opencode', contextWindow: 1048576, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'fast', 'free'] },
-    { id: 'mimo-v2.5-free', name: 'MiMo V2.5 (free)', provider: 'opencode', contextWindow: 262144, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'free'] },
+    { id: 'nemotron-3.5-lightning-free', name: 'Nemotron 3.5 Lightning (free)', provider: 'opencode', contextWindow: 262144, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'fast', 'free'] },
+    { id: 'laguna-s-2.1-free', name: 'Laguna S 2.1 (free)', provider: 'opencode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding', 'free'] },
+    { id: 'ling-3.0-flash-fin-free', name: 'Ling 3.0 Flash (free)', provider: 'opencode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'fast', 'free'] },
     { id: 'nemotron-3-ultra-free', name: 'Nemotron 3 Ultra (free)', provider: 'opencode', contextWindow: 524288, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'free'] },
-    { id: 'north-mini-code-free', name: 'North Mini Code (free)', provider: 'opencode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding', 'fast', 'free'] },
+    { id: 'big-pickle', name: 'Big Pickle (free, high demand)', provider: 'opencode', contextWindow: 1048576, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'long-context'] },
   ],
   kilocode: [
-    { id: 'kilo-auto/free', name: 'Kilo Auto Free', provider: 'kilocode', contextWindow: 1000000, maxOutput: 65536, isFree: true, tags: ['chat', 'auto', 'free'] },
-    { id: 'google/gemma-4-26b-a4b-it:free', name: 'Gemma 4 26B (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'free'] },
-    { id: 'stepfun/step-3.7-flash:free', name: 'StepFun Step 3.7 Flash (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'fast', 'free'] },
+    { id: 'nvidia/nemotron-3.5-lightning:free', name: 'Nemotron 3.5 Lightning (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding', 'fast', 'free'] },
     { id: 'poolside/laguna-s-2.1:free', name: 'Poolside Laguna S 2.1 (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding', 'free'] },
-    { id: 'nvidia/nemotron-3.5-lightning:free', name: 'Nemotron 3.5 Lightning (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding', 'free'] },
+    { id: 'stepfun/step-3.7-flash:free', name: 'StepFun Step 3.7 Flash (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'fast', 'free'] },
+    { id: 'kilo-auto/free', name: 'Kilo Auto Free', provider: 'kilocode', contextWindow: 1000000, maxOutput: 65536, isFree: true, tags: ['chat', 'auto', 'free'] },
   ],
   local: [
     { id: 'local/default', name: 'Local model (llama.cpp)', provider: 'local', contextWindow: 32768, maxOutput: 4096, isFree: true, tags: ['chat', 'offline'] },
