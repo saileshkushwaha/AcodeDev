@@ -1228,6 +1228,8 @@ function SidebarPanel({ sessions, activeId, onSelect, onNewSession, onClose, pro
 }) {
   const { tokens } = useTheme();
   const [search, setSearch] = useState('');
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [folderSearch, setFolderSearch] = useState('');
 
   const allProjects = projects.listProjects?.() ?? [];
   const filteredSessions = sessions.filter((s) =>
@@ -1260,6 +1262,24 @@ function SidebarPanel({ sessions, activeId, onSelect, onNewSession, onClose, pro
     return '';
   };
 
+  const recentProjects = [
+    { name: '~/Projects/', path: '~/Projects/' },
+    { name: '~/.local/', path: '~/.local/' },
+    { name: '~/.npm/', path: '~/.npm/' },
+  ];
+
+  const openProjects = [
+    { name: '~/.cache/', path: '~/.cache/' },
+    { name: '~/.config/', path: '~/.config/' },
+  ];
+
+  const filteredRecent = recentProjects.filter((p) =>
+    !folderSearch || p.name.toLowerCase().includes(folderSearch.toLowerCase())
+  );
+  const filteredOpen = openProjects.filter((p) =>
+    !folderSearch || p.name.toLowerCase().includes(folderSearch.toLowerCase())
+  );
+
   return (
     <div style={{ position: 'absolute', top: 44, left: 0, bottom: 0, width: 320, background: tokens.surface, borderRight: `1px solid ${tokens.border}`, zIndex: 50, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Projects section */}
@@ -1267,8 +1287,8 @@ function SidebarPanel({ sessions, activeId, onSelect, onNewSession, onClose, pro
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
           <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.text }}>Projects</span>
           <button
-            title="New project"
-            onClick={() => {/* new project */}}
+            title="Open project"
+            onClick={() => setProjectModalOpen(true)}
             style={{ width: 24, height: 24, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1354,6 +1374,77 @@ function SidebarPanel({ sessions, activeId, onSelect, onNewSession, onClose, pro
           </div>
         )}
       </div>
+
+      {/* Open project modal */}
+      {projectModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 80 }}>
+          <div onClick={() => setProjectModalOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
+          <div style={{ position: 'relative', width: '90%', maxWidth: 400, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusLg, boxShadow: tokens.shadowLg, overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space3}px ${tokens.space4}px`, borderBottom: `1px solid ${tokens.border}` }}>
+              <span style={{ fontSize: tokens.fontSizeMd, fontWeight: 600, color: tokens.text }}>Open project</span>
+              <button
+                onClick={() => setProjectModalOpen(false)}
+                style={{ width: 28, height: 28, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 16 }}
+              >×</button>
+            </div>
+
+            {/* Search */}
+            <div style={{ padding: `${tokens.space3}px ${tokens.space4}px` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}` }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+                <input
+                  value={folderSearch}
+                  onChange={(e) => setFolderSearch(e.target.value)}
+                  placeholder="Search folders"
+                  autoFocus
+                  style={{ flex: 1, background: 'transparent', border: 'none', color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none' }}
+                />
+              </div>
+            </div>
+
+            {/* Recent projects */}
+            {filteredRecent.length > 0 && (
+              <div style={{ padding: `0 ${tokens.space4}px ${tokens.space3}px` }}>
+                <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, marginBottom: tokens.space2 }}>Recent projects</div>
+                {filteredRecent.map((p) => (
+                  <div
+                    key={p.path}
+                    style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = tokens.surfaceHover)}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                    </svg>
+                    <span style={{ fontSize: tokens.fontSizeSm, color: tokens.text }}>{p.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Open project */}
+            {filteredOpen.length > 0 && (
+              <div style={{ padding: `0 ${tokens.space4}px ${tokens.space3}px` }}>
+                <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, marginBottom: tokens.space2 }}>Open project</div>
+                {filteredOpen.map((p) => (
+                  <div
+                    key={p.path}
+                    style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = tokens.surfaceHover)}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                    </svg>
+                    <span style={{ fontSize: tokens.fontSizeSm, color: tokens.text }}>{p.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
