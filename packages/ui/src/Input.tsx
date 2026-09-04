@@ -12,6 +12,7 @@ export function Input({
   error,
   textarea,
   rows,
+  onEnter,
 }: {
   label?: string;
   value: string;
@@ -23,6 +24,7 @@ export function Input({
   error?: string;
   textarea?: boolean;
   rows?: number;
+  onEnter?: () => void;
 }) {
   const { tokens } = useTheme();
   const base: React.CSSProperties = {
@@ -44,7 +46,7 @@ export function Input({
       {textarea ? (
         <textarea rows={rows ?? 4} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} style={base} />
       ) : (
-        <input type={type} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} style={base} />
+        <input type={type} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onEnter ? (e) => { if (e.key === 'Enter') onEnter(); } : undefined} style={base} />
       )}
       {hint && !error && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{hint}</span>}
       {error && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.danger }}>{error}</span>}

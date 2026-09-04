@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
-import { Sidebar, useTheme, type NavItem } from '@acode/ui';
+import { Sidebar, useTheme, useIsMobile, type NavItem } from '@acode/ui';
+
+export interface ShellAction {
+  id: string;
+  label: string;
+  icon?: React.ReactNode;
+}
 
 const icons: Record<string, React.ReactNode> = {
   dashboard: <I d="M4 13h6V4H4v9zm10 7h6v-7h-6v7zM4 20h6v-3H4v3zm10-16v6h6V4h-6z" />,
@@ -21,7 +27,7 @@ function I({ d }: { d: string }) {
 
 export const NAV: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: icons.dashboard },
-  { id: 'chat', label: 'Chat & Playground', icon: icons.chat },
+  { id: 'chat', label: 'Chat & Playground', icon: icons.chat, badge: 0 },
   { id: 'workflows', label: 'Workflows', icon: icons.workflows },
   { id: 'prompts', label: 'Prompts & Evals', icon: icons.prompts },
   { id: 'agents', label: 'AI Agents', icon: icons.agents },
@@ -41,43 +47,127 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const { tokens } = useTheme();
+  const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const logo = (
+    <div
+      style={{
+        padding: collapsed ? `${tokens.space4}px ${tokens.space2}px` : tokens.space4,
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.space2,
+        borderBottom: `1px solid ${tokens.border}`,
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: tokens.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: tokens.fontSizeMd, flexShrink: 0 }}>A</div>
+      {!collapsed && (
+        <div style={{ whiteSpace: 'nowrap' }}>
+          <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, lineHeight: 1.1 }}>AcodeDev</div>
+          <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>AI Studio</div>
+        </div>
+      )}
+    </div>
+  );
+
+  const sidebarNav = (
+    <Sidebar
+      collapsed={isMobile ? true : collapsed}
+      onToggleCollapse={isMobile ? undefined : () => setCollapsed((c) => !c)}
+      active={active}
+      onSelect={(id) => {
+        onSelect(id);
+        setDrawerOpen(false);
+      }}
+      items={NAV}
+      header={logo}
+      footer={!isMobile && !collapsed ? <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center', paddingBottom: tokens.space1 }}>v0.1 · all-in-one</div> : undefined}
+    />
+  );
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: tokens.bg, color: tokens.text }}>
-      <Sidebar
-        collapsed={collapsed}
-        onToggleCollapse={() => setCollapsed((c) => !c)}
-        active={active}
-        onSelect={onSelect}
-        items={NAV}
-        header={
+    <div style={{ display: 'flex', height: '100dvh', background: tokens.bg, color: tokens.text }}>
+      {isMobile ? (
+        <>
+          {/* Mobile drawer */}
+          {drawerOpen && (
+            <div
+              className="fade-in"
+              onClick={() => setDrawerOpen(false)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000 }}
+            />
+          )}
           <div
             style={{
-              padding: collapsed ? `${tokens.space4}px ${tokens.space2}px` : tokens.space4,
-              display: 'flex',
-              alignItems: 'center',
-              gap: tokens.space2,
-              borderBottom: `1px solid ${tokens.border}`,
-              justifyContent: collapsed ? 'center' : 'flex-start',
-              overflow: 'hidden',
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              bottom: 0,
+              zIndex: 1001,
+              transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+              transition: 'transform 0.25s cubic-bezier(0.2,0.8,0.2,1)',
+              boxShadow: drawerOpen ? tokens.shadowLg : 'none',
             }}
           >
-            <div style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: tokens.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: tokens.fontSizeMd, flexShrink: 0 }}>A</div>
-            {!collapsed && (
-              <div style={{ whiteSpace: 'nowrap' }}>
-                <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, lineHeight: 1.1 }}>AcodeDev</div>
-                <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>AI Studio</div>
-              </div>
-            )}
+            {sidebarNav}
           </div>
-        }
-        footer={!collapsed ? <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center', paddingBottom: tokens.space1 }}>v0.1 · all-in-one</div> : undefined}
-      />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {header}
-        <main style={{ flex: 1, overflow: 'auto' }}>{children}</main>
-      </div>
+          {/* Mobile top bar */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.space2,
+                padding: `${tokens.space2}px ${tokens.space3}px`,
+                background: tokens.bgElevated,
+                borderBottom: `1px solid ${tokens.border}`,
+                position: 'sticky',
+                top: 0,
+                zIndex: 50,
+              }}
+            >
+              <button
+                onClick={() => setDrawerOpen(true)}
+                aria-label="Open menu"
+                style={{ background: 'transparent', border: 'none', color: tokens.text, width: 36, height: 36, borderRadius: tokens.radiusMd, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+              </button>
+              <div style={{ width: 28, height: 28, borderRadius: tokens.radiusMd, background: tokens.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: tokens.fontSizeSm }}>A</div>
+              <span style={{ fontWeight: 700, fontSize: tokens.fontSizeMd }}>AcodeDev</span>
+              <div style={{ flex: 1 }} />
+              {header ? <MobileHeaderActions /> : null}
+            </div>
+            <main style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>{children}</main>
+          </div>
+        </>
+      ) : (
+        <>
+          {sidebarNav}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {header}
+            <main style={{ flex: 1, overflow: 'auto' }}>{children}</main>
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+function MobileHeaderActions() {
+  const { tokens } = useTheme();
+  return (
+    <button
+      onClick={() => {
+        /* placeholder for mobile menu extras */
+      }}
+      aria-label="More"
+      style={{ background: 'transparent', border: 'none', color: tokens.text, width: 36, height: 36, borderRadius: tokens.radiusMd, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
+    </button>
   );
 }

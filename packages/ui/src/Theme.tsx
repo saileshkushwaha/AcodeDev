@@ -38,6 +38,8 @@ export function ThemeProvider({ children, initialMode = 'dark' }: { children: Re
     root.style.setProperty('--danger', tokens.danger);
     root.style.setProperty('--info', tokens.info);
     root.style.setProperty('--code-bg', tokens.codeBg);
+    root.style.setProperty('--font-sans', tokens.fontSans);
+    root.style.setProperty('--font-mono', tokens.fontMono);
   }, [mode, tokens]);
 
   return (

@@ -1,5 +1,6 @@
 export * from './tokens';
 export * from './Theme';
+export * from './responsive';
 export * from './Button';
 export * from './Card';
 export * from './Input';
