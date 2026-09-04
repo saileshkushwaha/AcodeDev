@@ -60,7 +60,7 @@ export class AgentEngine {
     for (let i = 0; i < maxIter; i++) {
       const req: ChatRequest = {
         provider: config.providerId ?? 'openrouter',
-        model: config.model ?? 'meta-llama/llama-3.3-70b-instruct:free',
+        model: config.model ?? 'nvidia/nemotron-3.5-lightning:free',
         messages: conversation,
         tools,
       };

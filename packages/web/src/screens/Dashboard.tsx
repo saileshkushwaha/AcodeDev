@@ -4,7 +4,7 @@ import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Badge, useTheme, Spinner } from '@acode/ui';
 import { listModels, getFreeModels, listProviders, getProvider, type ProviderId } from '@acode/core';
 
-export function Dashboard({ onNavigate }: { onNavigate: (id: string) => void }) {
+export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: string) => void; onOpenEvaluations?: () => void }) {
   const { tokens } = useTheme();
   const { projects, prompts, chat, githubToken, hasKey, syncCatalog, catalogVersion } = useApp();
   void catalogVersion;
@@ -110,7 +110,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (id: string) => void }) 
               <Button variant="secondary" full onClick={() => onNavigate('chat')}>💬 New chat</Button>
               <Button variant="secondary" full onClick={() => onNavigate('workflows')}>⚡ New workflow</Button>
               <Button variant="secondary" full onClick={() => onNavigate('agents')}>🤖 New agent</Button>
-              <Button variant="secondary" full onClick={() => onNavigate('prompts')}>🧪 Run eval</Button>
+              <Button variant="secondary" full onClick={() => onOpenEvaluations ? onOpenEvaluations() : onNavigate('prompts')}>🧪 Run eval</Button>
             </div>
           </Card>
           <Card title="Providers to configure" subtitle="Connect keys to unlock free models">

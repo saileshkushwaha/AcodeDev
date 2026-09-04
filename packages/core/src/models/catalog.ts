@@ -97,12 +97,12 @@ const SEED_PROVIDERS: ProviderDef[] = [
 
 const FREE_MODELS: Record<string, ModelInfo[]> = {
   openrouter: [
-    { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B (free)', provider: 'openrouter', contextWindow: 128000, maxOutput: 4096, isFree: true, tags: ['chat', 'fast'] },
-    { id: 'deepseek/deepseek-chat-v3-0324:free', name: 'DeepSeek V3 (free)', provider: 'openrouter', contextWindow: 128000, maxOutput: 4096, isFree: true, tags: ['chat', 'reasoning'] },
-    { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash (free)', provider: 'openrouter', contextWindow: 1000000, maxOutput: 8192, isFree: true, tags: ['chat', 'fast', 'vision'] },
-    { id: 'mistralai/mistral-small-3.1-24b-instruct:free', name: 'Mistral Small 3.1 (free)', provider: 'openrouter', contextWindow: 128000, maxOutput: 4096, isFree: true, tags: ['chat'] },
-    { id: 'meta-llama/llama-3.1-8b-instruct:free', name: 'Llama 3.1 8B (free)', provider: 'openrouter', contextWindow: 128000, maxOutput: 4096, isFree: true, tags: ['chat', 'fast', 'small'] },
-    { id: 'qwen/qwen-2.5-72b-instruct:free', name: 'Qwen 2.5 72B (free)', provider: 'openrouter', contextWindow: 32768, maxOutput: 4096, isFree: true, tags: ['chat'] },
+    { id: 'nvidia/nemotron-3.5-lightning:free', name: 'Nemotron 3.5 Lightning (free)', provider: 'openrouter', contextWindow: 1000000, maxOutput: 32768, isFree: true, tags: ['chat', 'fast', 'coding'] },
+    { id: 'poolside/laguna-s-2.1:free', name: 'Laguna S 2.1 (free)', provider: 'openrouter', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding'] },
+    { id: 'inclusionai/ling-3.0-flash-fin:free', name: 'Ling 3.0 Flash Fin (free)', provider: 'openrouter', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'fast'] },
+    { id: 'z-ai/glm-5.2:free', name: 'GLM 5.2 (free)', provider: 'openrouter', contextWindow: 256000, maxOutput: 32768, isFree: true, tags: ['chat', 'reasoning'] },
+    { id: 'thinkingmachines/inkling:free', name: 'Inkling (free)', provider: 'openrouter', contextWindow: 1048576, maxOutput: 32768, isFree: true, tags: ['chat', 'reasoning', 'long-context'] },
+    { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B (free)', provider: 'openrouter', contextWindow: 262144, maxOutput: 8192, isFree: true, tags: ['chat', 'fast'] },
   ],
   openai: [
     { id: 'gpt-4o-mini', name: 'GPT-4o mini', provider: 'openai', contextWindow: 128000, maxOutput: 16384, isFree: false, costPer1kIn: 0.00015, costPer1kOut: 0.0006, tags: ['chat'] },
@@ -386,9 +386,11 @@ export async function syncGatewayData(source: GatewaySource): Promise<number> {
   if (!Array.isArray(arr) || arr.length === 0) return -1;
 
   let added = 0;
+  const liveIds = new Set<string>();
   for (const m of arr) {
     const id = String(m.id ?? '');
     if (!id) continue;
+    liveIds.add(id);
     const name = String(m.name ?? id);
     const ctx = parseContext(String(m.context_length ?? m.contextWindow ?? m.context ?? ''));
     const isFree =
@@ -436,6 +438,17 @@ export async function syncGatewayData(source: GatewaySource): Promise<number> {
       added++;
     }
   }
+
+  // Prune stale models for this gateway that are no longer offered live, so the
+  // dropdown never lists deprecated ids (they return "model not found" on send).
+  const prefix = `${source.id}::`;
+  for (const k of [...registryModels.keys()]) {
+    if (k.startsWith(prefix)) {
+      const mid = k.slice(prefix.length);
+      if (!liveIds.has(mid)) registryModels.delete(k);
+    }
+  }
+
   notify();
   return added;
 }

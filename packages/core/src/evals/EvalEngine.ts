@@ -52,7 +52,7 @@ export class EvalEngine {
   constructor(private engine: ChatEngine) {}
 
   async run(def: EvalDefinition, overrideModel?: string, overrideProvider?: ProviderId): Promise<EvalRunResult> {
-    const model = overrideModel ?? def.model ?? 'meta-llama/llama-3.3-70b-instruct:free';
+    const model = overrideModel ?? def.model ?? 'nvidia/nemotron-3.5-lightning:free';
     const provider = overrideProvider ?? def.provider ?? 'openrouter';
     const started = Date.now();
     const results: EvalCaseResult[] = [];
@@ -124,7 +124,7 @@ export class EvalEngine {
     ]
       .filter(Boolean)
       .join('\n');
-    const res = await this.engine.chat({ provider, model: 'meta-llama/llama-3.3-70b-instruct:free', messages: [{ role: 'user', content: prompt }] });
+    const res = await this.engine.chat({ provider, model: 'nvidia/nemotron-3.5-lightning:free', messages: [{ role: 'user', content: prompt }] });
     try {
       const m = res.content.match(/\{[\s\S]*\}/);
       if (!m) return { pass: false, score: 0, explanation: res.content };

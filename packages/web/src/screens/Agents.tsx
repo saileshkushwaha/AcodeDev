@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Input, Select, Toggle, Badge, useTheme, Spinner } from '@acode/ui';
-import { Toolbox, listModels, PROVIDER_LIST, type ProviderId } from '@acode/core';
+import { Toolbox, listModels, listProviders, type ProviderId } from '@acode/core';
 
 const TOOL_NAMES: Record<string, string> = {
   web_search: 'Web search',
@@ -13,11 +13,11 @@ const TOOL_NAMES: Record<string, string> = {
 
 export function AgentsScreen() {
   const { tokens } = useTheme();
-  const { agents, rag } = useApp();
+  const { agents, rag, hasKey } = useApp();
   const [name, setName] = useState('My Agent');
   const [systemPrompt, setSystemPrompt] = useState('You are a helpful AI assistant. Answer based on the provided context when available.');
   const [provider, setProvider] = useState<ProviderId>('openrouter');
-  const [model, setModel] = useState('meta-llama/llama-3.3-70b-instruct:free');
+  const [model, setModel] = useState('nvidia/nemotron-3.5-lightning:free');
   const [tools, setTools] = useState<string[]>(['web_search', 'calculator']);
   const [enableRAG, setEnableRAG] = useState(false);
   const [docs, setDocs] = useState('');
@@ -30,7 +30,14 @@ export function AgentsScreen() {
 
   const allTools = Toolbox.all();
   const activeTools = allTools.filter((t) => tools.includes(t.name));
-  const models = PROVIDER_LIST.flatMap((p) => listModels(p.id as ProviderId).map((m) => ({ label: `${p.name} · ${m.name}`, value: m.id })));
+  // Keep the provider/model dropdowns in sync with Chat: models filtered per provider.
+  const allProviders = listProviders();
+  const provDef = allProviders.find((p) => p.id === provider);
+  const needsKey = !!(provDef && provDef.needsKey !== false && provDef.kind !== 'local');
+  const connected = !needsKey || hasKey(provider);
+  const providerModels = listModels(provider);
+  const models = providerModels.map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id }));
+  const providerOptions = allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id }));
 
   const ingestDocs = () => {
     if (!docs.trim()) return;
@@ -40,6 +47,12 @@ export function AgentsScreen() {
 
   const runAgent = async () => {
     if (!chat.trim() || running) return;
+    if (!connected) {
+      setConv((c) => [...c, { role: 'user', content: chat }]);
+      setConv((c) => [...c, { role: 'assistant', content: `⚠️ ${provDef?.name ?? provider} isn't connected. Add an API key (Connections → Keys) or pick a key-free provider such as OpenCode Zen or Kilo Gateway.` }]);
+      setChat('');
+      return;
+    }
     setRunning(true);
     setConv((c) => [...c, { role: 'user', content: chat }]);
     const input = chat;
@@ -77,8 +90,9 @@ export function AgentsScreen() {
               <Input label="Agent name" value={name} onChange={setName} />
               <Input label="System prompt" textarea rows={4} value={systemPrompt} onChange={setSystemPrompt} />
               <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flex: 1 }}><Select label="Provider" value={provider} onChange={(v) => setProvider(v as ProviderId)} options={PROVIDER_LIST.map((p) => ({ label: p.name, value: p.id }))} /></div>
+                <div style={{ flex: 1 }}><Select label="Provider" value={provider} onChange={(v) => { setProvider(v as ProviderId); setModel(listModels(v as ProviderId)[0]?.id ?? model); }} options={providerOptions} /></div>
                 <div style={{ flex: 2 }}><Select label="Model" value={model} onChange={setModel} options={models} /></div>
+                {!connected && <Badge color={tokens.danger}>No key</Badge>}
               </div>
               <Input label="Max tool iterations" type="number" value={String(maxIter)} onChange={(v) => setMaxIter(Math.max(1, Number(v) || 4))} />
             </div>

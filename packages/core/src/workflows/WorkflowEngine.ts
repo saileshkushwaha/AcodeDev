@@ -89,7 +89,7 @@ export class WorkflowEngine {
       switch (node.type) {
         case 'llm': {
           const provider = (node.config.provider as ProviderId) ?? def.provider ?? 'openrouter';
-          const model = String(node.config.model ?? def.model ?? 'meta-llama/llama-3.3-70b-instruct:free');
+          const model = String(node.config.model ?? def.model ?? 'nvidia/nemotron-3.5-lightning:free');
           const messages: ChatMessage[] = [
             { role: 'system', content: String(node.config.systemPrompt ?? 'You are a helpful AI assistant.') },
             { role: 'user', content: upstreamText || 'Please respond.' },

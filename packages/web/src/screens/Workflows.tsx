@@ -6,7 +6,7 @@ import {
   type WorkflowDefinition,
   type WorkflowNode,
   listModels,
-  PROVIDER_LIST,
+  listProviders,
   type ProviderId,
 } from '@acode/core';
 
@@ -14,10 +14,10 @@ let nodeSeq = 0;
 
 export function WorkflowsScreen() {
   const { tokens } = useTheme();
-  const { workflows } = useApp();
+  const { workflows, hasKey } = useApp();
   const [nodes, setNodes] = useState<WorkflowNode[]>([
     { id: 'n_input', type: 'input', name: 'Input', config: { value: 'Summarize the following: {{input}}' }, position: { x: 0, y: 0 } },
-    { id: 'n_llm', type: 'llm', name: 'LLM 1', config: { provider: 'openrouter', model: 'meta-llama/llama-3.3-70b-instruct:free', systemPrompt: 'You are a helpful summarizer.', temperature: 0.4 }, position: { x: 1, y: 1 } },
+    { id: 'n_llm', type: 'llm', name: 'LLM 1', config: { provider: 'openrouter', model: 'nvidia/nemotron-3.5-lightning:free', systemPrompt: 'You are a helpful summarizer.', temperature: 0.4 }, position: { x: 1, y: 1 } },
     { id: 'n_out', type: 'output', name: 'Output', config: {}, position: { x: 2, y: 2 } },
   ]);
   const [edges, setEdges] = useState([
@@ -27,11 +27,12 @@ export function WorkflowsScreen() {
   const [input, setInput] = useState('The team shipped a new feature for the dashboard. It includes streaming responses and a new provider selector. Users can now switch between multiple LLM providers from one screen.');
   const [result, setResult] = useState<{ results: { nodeId: string; nodeType: string; output: string; durationMs?: number }[]; final: string } | null>(null);
   const [running, setRunning] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const addNode = (type: WorkflowNode['type']) => {
     const id = `n_${type}_${++nodeSeq}`;
     let config: Record<string, unknown> = {};
-    if (type === 'llm') config = { provider: 'openrouter', model: 'meta-llama/llama-3.3-70b-instruct:free', systemPrompt: '', temperature: 0.7 };
+    if (type === 'llm') config = { provider: 'openrouter', model: 'nvidia/nemotron-3.5-lightning:free', systemPrompt: '', temperature: 0.7 };
     if (type === 'transform') config = { operation: 'uppercase' };
     if (type === 'condition') config = { expression: 'upstream.length > 100' };
     if (type === 'prompt_template') config = { template: 'Hello, {{input}}' };
@@ -50,6 +51,14 @@ export function WorkflowsScreen() {
   };
 
   const runWorkflow = async () => {
+    const llmNode = nodes.find((n) => n.type === 'llm');
+    const p = (llmNode?.config.provider as ProviderId) ?? 'openrouter';
+    const pdef = listProviders().find((x) => x.id === p);
+    const needsKey = !!(pdef && pdef.needsKey !== false && pdef.kind !== 'local');
+    if (needsKey && !hasKey(p)) {
+      setResult({ results: [{ nodeId: 'err', nodeType: 'error', output: `⚠️ ${pdef?.name ?? p} isn't connected. Add an API key (Connections → Keys) or pick a key-free provider such as OpenCode Zen or Kilo Gateway.` }], final: '' });
+      return;
+    }
     setRunning(true);
     setResult(null);
     const def: WorkflowDefinition = {
@@ -103,15 +112,15 @@ export function WorkflowsScreen() {
               <div key={n.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 {i > 0 && <div style={{ width: 20, textAlign: 'center', color: tokens.textMuted }}>↓</div>}
                 <div
-                  onClick={() => updateNode(n.id, { name: n.id })}
+                  onClick={() => setSelectedNodeId(n.id)}
                   style={{
                     flex: 1,
                     padding: 12,
-                    border: `1px solid ${n.type === 'llm' ? tokens.primary : tokens.borderStrong}`,
+                    border: `1px solid ${selectedNodeId === n.id ? tokens.primary : n.type === 'llm' ? tokens.primary : tokens.borderStrong}`,
                     borderRadius: 12,
-                    background: tokens.surfaceHover,
+                    background: selectedNodeId === n.id ? `${tokens.primary}0d` : tokens.surfaceHover,
                     cursor: 'pointer',
-                    boxShadow: tokens.shadowSm,
+                    boxShadow: selectedNodeId === n.id ? `0 0 0 2px ${tokens.primary}33` : tokens.shadowSm,
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -127,8 +136,10 @@ export function WorkflowsScreen() {
 
         <Card title="Selected node" subtitle="Configure the selected node">
           {(() => {
-            // Simple selection: last edited is the focused one; default to first llm node
-            const focus = nodes.find((n) => n.type === 'llm') ?? nodes[0];
+            const focus =
+              nodes.find((n) => n.id === selectedNodeId) ??
+              nodes.find((n) => n.type === 'llm') ??
+              nodes[0];
             return <NodeConfig node={focus} updateConfig={updateConfig} rename={(id, name) => updateNode(id, { name })} />;
           })()}
         </Card>
@@ -158,7 +169,10 @@ export function WorkflowsScreen() {
 
 function NodeConfig({ node, updateConfig, rename }: { node: WorkflowNode; updateConfig: (id: string, key: string, value: unknown) => void; rename: (id: string, name: string) => void }) {
   const { tokens } = useTheme();
-  const models = PROVIDER_LIST.flatMap((p) => listModels(p.id as ProviderId).map((m) => ({ label: `${p.name} · ${m.name}`, value: m.id })));
+  const nodeProvider = (node.config.provider as ProviderId) || 'openrouter';
+  const allProviders = listProviders();
+  const providerOptions = allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id }));
+  const models = listModels(nodeProvider).map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id }));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -167,6 +181,7 @@ function NodeConfig({ node, updateConfig, rename }: { node: WorkflowNode; update
       </div>
       {node.type === 'llm' && (
         <>
+          <Select label="Provider" value={nodeProvider} onChange={(v) => updateConfig(node.id, 'provider', v)} options={providerOptions} />
           <Select label="Model" value={String(node.config.model)} onChange={(v) => updateConfig(node.id, 'model', v)} options={models} />
           <Input label="System prompt" textarea rows={3} value={String(node.config.systemPrompt ?? '')} onChange={(v) => updateConfig(node.id, 'systemPrompt', v)} />
           <Input label="Temperature" type="number" value={String(node.config.temperature ?? 0.7)} onChange={(v) => updateConfig(node.id, 'temperature', Number(v))} />

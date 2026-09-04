@@ -8,6 +8,7 @@ import {
   estimateTokens,
   estimatePromptTokens,
   listModels,
+  listProviders,
   PROVIDER_LIST,
   type PromptRecord,
   type PromptVersion,
@@ -17,11 +18,11 @@ import { Markdown } from '../components/Markdown';
 
 // re-export nothing; Chip is used via the ui package in some places below
 
-export function PromptsScreen({ onNavigate }: { onNavigate?: (tab: string) => void }) {
+export function PromptsScreen({ onNavigate, initialTab = 'prompts' }: { onNavigate?: (tab: string) => void; initialTab?: 'prompts' | 'evals' }) {
   const { prompts, evals } = useApp();
   const [, force] = useState(0);
   const refresh = useCallback(() => force((x) => x + 1), []);
-  const [tab, setTab] = useState('prompts');
+  const [tab, setTab] = useState<'prompts' | 'evals'>(initialTab);
   const isMobile = useIsMobile();
 
   // Editor (create / edit) state
@@ -44,7 +45,7 @@ export function PromptsScreen({ onNavigate }: { onNavigate?: (tab: string) => vo
           { id: 'evals', label: 'Evals' },
         ]}
         active={tab}
-        onChange={setTab}
+        onChange={(id) => setTab(id as 'prompts' | 'evals')}
       />
       {tab === 'prompts' ? (
         <PromptsWorkspace
@@ -545,7 +546,7 @@ function UseInChatModal({ id, onClose, onNavigate, refresh }: { id: string; onCl
   const { prompts } = useApp();
   const { tokens } = useTheme();
   const [provider, setProvider] = useState('openrouter');
-  const [model, setModel] = useState('meta-llama/llama-3.3-70b-instruct:free');
+  const [model, setModel] = useState('nvidia/nemotron-3.5-lightning:free');
   const [values, setValues] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState(false);
 
@@ -576,7 +577,7 @@ function UseInChatModal({ id, onClose, onNavigate, refresh }: { id: string; onCl
   return (
     <Modal open onClose={onClose} title={`Use “${p.name}” in chat`} width={720}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.space3, marginBottom: tokens.space3 }}>
-        <Select label="Provider" value={provider} onChange={setProvider} options={PROVIDER_LIST.map((x) => ({ label: x.name, value: x.id }))} />
+        <Select label="Provider" value={provider} onChange={setProvider} options={listProviders().filter((x) => x.id !== 'local').map((x) => ({ label: x.gateway ? `${x.name} · gateway` : x.name, value: x.id }))} />
         <Select label="Model" value={model} onChange={setModel} options={modelOpts} />
       </div>
 
@@ -696,7 +697,7 @@ function EvalPanel() {
   const app = useApp();
   const { evals } = app;
   const [open, setOpen] = useState(false);
-  const [def, setDef] = useState<Partial<{ name: string; model: string; provider: string; type: string; criteria?: string }>>({ name: '', model: 'meta-llama/llama-3.3-70b-instruct:free', provider: 'openrouter', type: 'contains' });
+  const [def, setDef] = useState<Partial<{ name: string; model: string; provider: string; type: string; criteria?: string }>>({ name: '', model: 'nvidia/nemotron-3.5-lightning:free', provider: 'openrouter', type: 'contains' });
   const [sysPrompt, setSysPrompt] = useState('');
   const [inputText, setInputText] = useState('');
   const [expected, setExpected] = useState('');
@@ -704,7 +705,11 @@ function EvalPanel() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<{ name: string; passRate: number; results: { caseId: string; pass: boolean; score: number; input: string; actual: string; llmJudge?: string }[] } | null>(null);
 
-  const modelOpts = PROVIDER_LIST.flatMap((p) => listModels(p.id as never).map((m) => ({ label: `${p.name} · ${m.name}`, value: m.id })));
+  const allProviders = listProviders();
+  const providerOpts = allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id }));
+  const modelOpts = listModels((def.provider ?? 'openrouter') as never).map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id }));
+  const pdef = allProviders.find((x) => x.id === def.provider);
+  const needsKey = !!(pdef && pdef.needsKey !== false && pdef.kind !== 'local') && !app.hasKey((def.provider ?? 'openrouter') as never);
 
   return (
     <>
@@ -738,7 +743,7 @@ function EvalPanel() {
           <Input label="Eval name" value={def.name ?? ''} onChange={(v) => setDef((d) => ({ ...d, name: v }))} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.space3 }}>
             <Select label="Model" value={def.model ?? ''} onChange={(v) => setDef((d) => ({ ...d, model: v }))} options={modelOpts} />
-            <Select label="Provider" value={def.provider ?? ''} onChange={(v) => setDef((d) => ({ ...d, provider: v }))} options={PROVIDER_LIST.map((p) => ({ label: p.name, value: p.id }))} />
+            <Select label="Provider" value={def.provider ?? ''} onChange={(v) => setDef((d) => ({ ...d, provider: v }))} options={providerOpts} />
           </div>
           <Select label="Scoring type" value={def.type ?? 'contains'} onChange={(v) => setDef((d) => ({ ...d, type: v }))} options={[
             { label: 'Contains expected text', value: 'contains' },
@@ -758,6 +763,10 @@ function EvalPanel() {
           </div>
           <Button
             onClick={async () => {
+              if (needsKey) {
+                setResult({ name: def.name || 'Untitled eval', passRate: 0, results: [{ caseId: '1', pass: false, score: 0, input: '(no key)', actual: '⚠️ Add an API key for this provider, or pick a key-free provider (OpenCode Zen / Kilo Gateway) in Connections → Keys.' }] });
+                return;
+              }
               setRunning(true);
               setResult(null);
               const r = await app.evals.run(

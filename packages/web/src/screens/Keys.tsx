@@ -431,8 +431,12 @@ export function KeysScreen() {
 /** Fetch a gateway's OpenAI-compatible /models and register them so they appear in Chat/Agents. */
 async function syncGatewayModels(gatewayId: string, baseUrl: string, apiKey: string): Promise<void> {
   try {
-    const url = `${baseUrl.replace(/\/+$/, '')}/models`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(10000) });
+    const realBase = `${baseUrl.replace(/\/+$/, '')}`;
+    const realModels = `${realBase}/models`;
+    const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` };
+    // CORS-blocked gateways (OpenCode Zen, Kilo, custom) must go through the local relay.
+    const proxy = routeThroughProxy(realModels, headers, upstreamFromModelsUrl(realModels));
+    const res = await fetch(proxy.url, { headers: proxy.headers, signal: AbortSignal.timeout(12000) });
     if (!res.ok) return;
     const data = await res.json();
     const models = Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];

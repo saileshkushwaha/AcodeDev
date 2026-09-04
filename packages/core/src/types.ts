@@ -106,6 +106,8 @@ export interface ChatRequest {
 
 export interface ChatStreamChunk {
   delta: string;
+  /** Reasoning text surfaced by reasoning models (fallback when content is empty). */
+  reasoning?: string;
   toolCalls?: ToolCall[];
   done?: boolean;
   finishReason?: string;

@@ -138,32 +138,48 @@ const server = createServer(async (req, res) => {
         : await readBody(req);
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    // Long model responses (esp. reasoning/long-output) can take a while for the
+    // first byte; allow a generous header timeout. The body then streams through.
+    const timeout = setTimeout(() => controller.abort(), 120_000);
 
+    let r;
     try {
-      const r = await fetch(target, {
+      r = await fetch(target, {
         method: req.method,
         headers,
         ...(body && body.length ? { body } : {}),
         redirect: 'follow',
         signal: controller.signal,
       });
-
-      clearTimeout(timeout);
-      const ctype = r.headers.get('content-type');
-      const buf = Buffer.from(await r.arrayBuffer());
-
-      res.writeHead(r.status, {
-        ...CORS,
-        ...(ctype ? { 'Content-Type': ctype } : {}),
-      });
-      res.end(buf);
     } catch (upErr) {
       clearTimeout(timeout);
       const msg = upErr.name === 'AbortError' ? 'upstream timed out' : upErr.message;
       res.writeHead(502, { ...CORS, 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: `upstream request failed: ${msg}` }));
+      return;
     }
+
+    clearTimeout(timeout);
+    const ctype = r.headers.get('content-type');
+    res.writeHead(r.status, {
+      ...CORS,
+      ...(ctype ? { 'Content-Type': ctype } : {}),
+    });
+
+    // Stream the upstream body through so SSE (chat streaming) works in real time.
+    if (r.body) {
+      const reader = r.body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value && value.length) res.write(value);
+        }
+      } catch {
+        /* connection may have closed early */
+      }
+    }
+    res.end();
   } catch (err) {
     // Failsafe: always close the response
     try {

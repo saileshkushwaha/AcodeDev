@@ -217,8 +217,13 @@ export class OpenAICompatibleProvider implements AbstractProvider {
           const data = JSON.parse(payload);
           const delta = data.choices?.[0]?.delta ?? {};
           if (data.usage) usage = { promptTokens: data.usage.prompt_tokens, completionTokens: data.usage.completion_tokens };
+          // Some providers stream only reasoning in `delta.reasoning` and never
+          // set `delta.content` until the final chunk; surface reasoning text too
+          // so the reply is never silently empty.
+          const reasoning = typeof delta.reasoning === 'string' ? delta.reasoning : delta.reasoning_content;
           yield {
             delta: delta.content ?? '',
+            reasoning: typeof reasoning === 'string' ? reasoning : '',
             toolCalls: delta.tool_calls,
             finishReason: data.choices?.[0]?.finish_reason,
             usage,

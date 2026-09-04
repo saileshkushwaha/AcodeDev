@@ -115,7 +115,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const isMobile = useIsMobile();
 
   const [provider, setProvider] = useState<ProviderId>('openrouter');
-  const [model, setModel] = useState('meta-llama/llama-3.3-70b-instruct:free');
+  const [model, setModel] = useState('nvidia/nemotron-3.5-lightning:free');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -328,27 +328,52 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     const assistantId = `assist_${Date.now()}`;
     setMessages((prev) => [...prev, { role: 'assistant', content: '', name: assistantId }]);
 
+    const body = { provider, model, messages: history, params: { temperature, maxTokens } };
     let full = '';
+    let reasoning = '';
+    let contentStreamed = false;
     try {
-      const ws = await chat.stream({ provider, model, messages: history, params: { temperature, maxTokens } });
+      const ws = await chat.stream(body);
       for await (const chunk of ws) {
-        full += chunk.delta;
+        if (chunk.delta) {
+          contentStreamed = true;
+          full += chunk.delta;
+        }
+        if (chunk.reasoning) reasoning += chunk.reasoning;
+        const shown = full || (contentStreamed ? '' : reasoning);
         setMessages((prev) => {
           const next = [...prev];
           const idx = next.findIndex((m) => m.name === assistantId);
-          if (idx >= 0) next[idx] = { role: 'assistant', content: full };
+          if (idx >= 0) next[idx] = { role: 'assistant', content: shown };
           return next;
         });
+      }
+      if (!full && reasoning) {
+        full = `🧠 ${reasoning}`;
       }
       setMessages((prev) => prev.map((m) => (m.name === assistantId ? { role: 'assistant', content: full } : m)));
       projects.appendMessage(cid, { role: 'assistant', content: full });
     } catch (e) {
       const errMsg = `⚠️ ${e instanceof Error ? e.message : String(e)}\n\nTip: check your API key or connectivity.`;
       setMessages((prev) => prev.map((m) => (m.name === assistantId ? { role: 'assistant', content: errMsg } : m)));
-    } finally {
-      setStreaming(false);
-      refreshSessions();
     }
+    // Fallback: streaming produced nothing (empty reply / provider quirk) but a
+    // plain request works — fetch the answer via the non-streaming path we know works.
+    if (!full && contentStreamed === false) {
+      try {
+        const res = await chat.chat(body);
+        const text = res.content ?? '';
+        if (text) {
+          full = text;
+          setMessages((prev) => prev.map((m) => (m.name === assistantId ? { role: 'assistant', content: text } : m)));
+          projects.appendMessage(cid, { role: 'assistant', content: text });
+        }
+      } catch {
+        /* keep whatever the stream produced */
+      }
+    }
+    setStreaming(false);
+    refreshSessions();
   };
 
   const filteredSessions = sessions.filter((s) =>
