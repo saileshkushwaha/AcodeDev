@@ -1283,7 +1283,7 @@ function SidebarPanel({ sessions, activeId, onSelect, onNewSession, onClose, pro
   );
 
   return (
-    <div style={{ position: 'absolute', top: 44, left: 0, bottom: 0, width: 320, background: tokens.surface, borderRight: `1px solid ${tokens.border}`, zIndex: 50, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ position: 'absolute', top: 44, left: 0, width: 320, maxHeight: 'calc(100vh - 44px)', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: `0 0 ${tokens.radiusMd} ${tokens.radiusMd}`, zIndex: 50, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: tokens.shadowLg }}>
       {/* Projects section */}
       <div style={{ padding: tokens.space3, borderBottom: `1px solid ${tokens.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
