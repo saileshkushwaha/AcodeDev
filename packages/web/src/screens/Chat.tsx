@@ -628,7 +628,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: `0 ${tokens.space4}px` }}>
         {/* Content header: title · spinner · overflow menu */}
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space3}px ${tokens.space4}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}` }}>
           <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sessionTitle}</div>
@@ -675,10 +675,25 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
             )}
 
             {messages.length === 0 ? (
-              <div style={{ margin: 'auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space4, padding: tokens.space4 }}>
-                <div style={{ fontSize: 64, fontWeight: 900, color: `${tokens.textMuted}15`, letterSpacing: '-0.02em', userSelect: 'none', lineHeight: 1, fontFamily: 'monospace' }}>opencode</div>
+              <div style={{ margin: 'auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space6, padding: `${tokens.space6}px ${tokens.space4}px` }}>
+                <style>{`
+                  @keyframes opencode-fadein { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+                  @keyframes opencode-glow { 0%, 100% { text-shadow: 0 0 20px ${tokens.primary}40, 0 0 40px ${tokens.primary}20; } 50% { text-shadow: 0 0 30px ${tokens.primary}60, 0 0 60px ${tokens.primary}30; } }
+                  @keyframes opencode-shimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+                  @keyframes opencode-dot-pulse { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+                `}</style>
+                <div style={{ animation: 'opencode-fadein 0.8s ease-out', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space3 }}>
+                  <div style={{ fontSize: 72, fontWeight: 800, letterSpacing: '-0.03em', userSelect: 'none', lineHeight: 1, fontFamily: tokens.fontSans, background: `linear-gradient(135deg, ${tokens.textMuted}40, ${tokens.primary}80, ${tokens.textMuted}40)`, backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', animation: 'opencode-shimmer 4s linear infinite, opencode-glow 3s ease-in-out infinite' }}>
+                    opencode
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: tokens.space1 }}>
+                    {[0, 1, 2].map((i) => (
+                      <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: tokens.primary, animation: `opencode-dot-pulse 1.4s ease-in-out ${i * 0.2}s infinite` }} />
+                    ))}
+                  </div>
+                </div>
                 {/* Centered composer for empty sessions */}
-                <div style={{ width: '100%', maxWidth: 560 }}>
+                <div style={{ width: '100%', maxWidth: 640, animation: 'opencode-fadein 0.8s ease-out 0.2s both' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 0, background: tokens.bg, border: `1.5px dashed ${paramsOpen ? tokens.primary : tokens.borderStrong}`, borderRadius: tokens.radiusLg, padding: tokens.space2, transition: 'border-color 0.12s ease' }}>
                     <textarea
                       ref={textareaRef}
@@ -807,7 +822,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
 
       {/* Fixed bottom composer - only show when there are messages */}
       {messages.length > 0 && (
-      <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
+      <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated, padding: `0 ${tokens.space4}px` }}>
         <div style={{ maxWidth: 960, margin: '0 auto', padding: tokens.space3, position: 'relative' }}>
           <div
             style={{ display: 'flex', flexDirection: 'column', gap: 0, background: tokens.bg, border: `1.5px dashed ${paramsOpen ? tokens.primary : tokens.borderStrong}`, borderRadius: tokens.radiusLg, padding: tokens.space2, transition: 'border-color 0.12s ease' }}
