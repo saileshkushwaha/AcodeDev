@@ -23,7 +23,7 @@ export function App() {
   const screens: Record<string, React.ReactNode> = {
     dashboard: <Dashboard onNavigate={setTab} onOpenEvaluations={() => openPromptTab('evals')} />,
     chat: <ChatScreen onNavigate={setTab} />,
-    workflows: <WorkflowsScreen />,
+    workflows: <WorkflowsScreen onNavigate={setTab} />,
     prompts: <PromptsScreen key={promptIntent.key} initialTab={promptIntent.tab} onNavigate={setTab} />,
     agents: <AgentsScreen />,
     keys: <KeysScreen />,

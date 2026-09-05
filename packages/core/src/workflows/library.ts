@@ -312,6 +312,120 @@ export const WORKFLOW_LIBRARY: WorkflowDefinition[] = [
       return { nodes: [input, advisor, output], edges: wire([input.id, advisor.id, output.id]) };
     },
   }),
+  build({
+    id: 'wf_pr_summary',
+    name: 'Pull Request Writer',
+    description: 'Turns a diff/feature summary into a ready-to-paste PR: title, motivation, test plan and a self-review checklist.',
+    category: 'planning',
+    tags: ['github', 'pull-request', 'writing'],
+    graph: () => {
+      const { node, wire } = graph();
+      const input = node('input', 'Input', { value: 'Changes / diff:\n{{input}}' });
+      const writer = node('llm', 'PR writer', llmConfig(
+        'You are a senior engineer about to open a pull request. From the change description below, produce a Markdown PR body: a concise title (conventional), a "What & why" section, a bullet list of key changes, a "Test plan" section with concrete steps, and a self-review checklist (edge cases, performance, security, docs). Keep the title under 72 chars.',
+        0.3,
+      ));
+      const output = node('output', 'Output', {});
+      return { nodes: [input, writer, output], edges: wire([input.id, writer.id, output.id]) };
+    },
+  }),
+  build({
+    id: 'wf_eval_designer',
+    name: 'Eval Suite Designer',
+    description: 'Designs golden evaluation cases for a feature — inputs, expected outputs and the scoring type — ready to run in the Evals engine.',
+    category: 'data-ai',
+    tags: ['evals', 'testing', 'quality'],
+    graph: () => {
+      const { node, wire } = graph();
+      const input = node('input', 'Input', { value: 'Feature to evaluate:\n{{input}}' });
+      const brief = node('prompt_template', 'Brief', {
+        template: 'Design a golden eval suite for the feature below.\n\nFeature / behavior:\n{{input}}\n\nDeliver a set of eval cases, each with: a test input, the expected output, the scoring type to use (contains, exact, regex, or llm_judge with judge criteria), and why the case matters. Cover happy path, boundaries, empty/malformed inputs, and failure modes. Format as a Markdown table.',
+      });
+      const designer = node('llm', 'Evaluator', llmConfig(
+        'You are an ML evaluation engineer. Produce a practical golden dataset: 8-12 varied cases, concrete inputs (not placeholders), explicit expectations, and a recommended scoring strategy per case.',
+        0.3,
+      ));
+      const output = node('output', 'Output', {});
+      return { nodes: [input, brief, designer, output], edges: wire([input.id, brief.id, designer.id, output.id]) };
+    },
+  }),
+  build({
+    id: 'wf_ci_pipeline',
+    name: 'CI/CD Pipeline Designer',
+    description: 'Designs a production CI/CD pipeline for your repo: stages, quality gates, caching, secrets and promotion.',
+    category: 'ops',
+    tags: ['cicd', 'github-actions', 'devops'],
+    graph: () => {
+      const { node, wire } = graph();
+      const input = node('input', 'Input', { value: 'Repo / stack:\n{{input}}' });
+      const brief = node('prompt_template', 'Brief', {
+        template: 'Design a production CI/CD pipeline for this repo.\n\nRepo / stack:\n{{input}}\n\nDeliver: pipeline stages (lint → test → build → scan → deploy), caching strategy, quality gates that block a merge, secret handling, environment promotion (dev/stage/prod), rollback strategy, and observability of the pipeline itself. Reference GitHub Actions workflow concepts concretely.',
+      });
+      const designer = node('llm', 'Designer', llmConfig(
+        'You are a DevOps engineer who ships pipelines for high-velocity teams. Be prescriptive: name real actions, triggers and caches. Call out the gate that matters most for this stack.',
+        0.3,
+      ));
+      const output = node('output', 'Output', {});
+      return { nodes: [input, brief, designer, output], edges: wire([input.id, brief.id, designer.id, output.id]) };
+    },
+  }),
+  build({
+    id: 'wf_model_advisor',
+    name: 'Model & Cost Advisor',
+    description: 'Recommends a provider + model for your task based on the platform catalog: free tiers, context window, cost, reasoning and vision needs.',
+    category: 'data-ai',
+    tags: ['models', 'providers', 'cost', 'llm'],
+    graph: () => {
+      const { node, wire } = graph();
+      const input = node('input', 'Input', { value: 'Task, language and constraints:\n{{input}}' });
+      const advisor = node('llm', 'Advisor', llmConfig(
+        'You are a pragmatic ML platform engineer who knows this app\'s model catalog: OpenRouter (300+ models, many free), direct providers (OpenAI, Google, Anthropic, Mistral, Groq, DeepSeek, Together) and local models. From the task below, recommend 1-3 concrete provider+model options. For each: why it fits (context window, speed, reasoning, cost), the free/paid status, and a fallback for when the primary is rate-limited.',
+        0.3,
+      ));
+      const output = node('output', 'Output', {});
+      return { nodes: [input, advisor, output], edges: wire([input.id, advisor.id, output.id]) };
+    },
+  }),
+  build({
+    id: 'wf_agent_scaffold',
+    name: 'AI Agent Scaffold',
+    description: 'Drafts an agent spec for the Agent Builder: identity, system prompt, tools, memory, RAG corpus and guardrails.',
+    category: 'development',
+    tags: ['agents', 'tools', 'rag', 'scaffold'],
+    graph: () => {
+      const { node, wire } = graph();
+      const input = node('input', 'Input', { value: 'What should the agent do?\n{{input}}' });
+      const brief = node('prompt_template', 'Brief', {
+        template: 'Draft a complete agent spec for the goal below.\n\nGoal / responsibilities:\n{{input}}\n\nInclude: a short name and one-line identity, the system prompt (role + boundaries), which tools it should have and when to use them (from: search files, read URL, run shell, math, web search), memory strategy (conversation + RAG over which corpus), and safety guardrails. End with a minimal first-version scope.',
+      });
+      const designer = node('llm', 'Designer', llmConfig(
+        'You design reliable, tool-using agents. Keep the system prompt crisp and the guardrails explicit: least-destructive first, confirm side effects, never fabricate tool results. Reference the Toolbox tool names that exist in this platform.',
+        0.3,
+      ));
+      const output = node('output', 'Output', {});
+      return { nodes: [input, brief, designer, output], edges: wire([input.id, brief.id, designer.id, output.id]) };
+    },
+  }),
+  build({
+    id: 'wf_api_contract',
+    name: 'API Contract Designer',
+    description: 'Designs a production REST contract — methods, schemas, auth, pagination, errors and versioning — for your feature.',
+    category: 'development',
+    tags: ['api', 'rest', 'contract', 'design'],
+    graph: () => {
+      const { node, wire } = graph();
+      const input = node('input', 'Input', { value: 'Domain / resources / constraints:\n{{input}}' });
+      const brief = node('prompt_template', 'Brief', {
+        template: 'Design a production API contract for the following.\n\nDomain / resources:\n{{input}}\n\nFor each endpoint give: method + path, request response schemas, authentication, idempotency, pagination and rate-limiting, and the error format. Call out versioning strategy and backward-compatibility.',
+      });
+      const designer = node('llm', 'Designer', llmConfig(
+        'You are an API design lead. Prefer resource-oriented REST, consistent naming, and explicit error codes. Flag every endpoint that mutates state and how failures are handled.',
+        0.3,
+      ));
+      const output = node('output', 'Output', {});
+      return { nodes: [input, brief, designer, output], edges: wire([input.id, brief.id, designer.id, output.id]) };
+    },
+  }),
 ];
 
 export function getWorkflowLibrary(id: string): WorkflowDefinition | undefined {
