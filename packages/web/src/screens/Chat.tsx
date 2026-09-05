@@ -826,7 +826,8 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
 
       {/* Content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: 0 }}>
-        {/* Content header: title · spinner · overflow menu */}
+        {/* Content header: title · spinner · overflow menu — only when there are messages */}
+        {messages.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space3}px ${tokens.space4}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}` }}>
           <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sessionTitle}</div>
           {streaming && <Spinner size={16} color={tokens.primary} />}
@@ -856,6 +857,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
             )}
           </div>
         </div>
+        )}
 
         {/* Body */}
         {(subtab === 'session' || messages.length === 0) ? (
