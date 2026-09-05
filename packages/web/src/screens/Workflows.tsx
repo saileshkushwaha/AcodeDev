@@ -7,6 +7,7 @@ import {
   type WorkflowNode,
   type WorkflowEdge,
   type WorkflowRunResult,
+  type WorkflowRunRecord,
   WORKFLOW_CATEGORIES,
   listModels,
   listProviders,
@@ -14,6 +15,9 @@ import {
   writeRaw,
   readJSON,
   writeJSON,
+  loadRunHistory,
+  saveRunHistory,
+  MAX_RUN_HISTORY,
   type ProviderId,
 } from '@acode/core';
 
@@ -21,10 +25,7 @@ let nodeSeq = 0;
 
 const ACTIVE_KEY = 'acode.workflows.active';
 const BLANK_ID = 'wf_blank';
-const RUNS_KEY = 'acode.workflows.runs.v1';
-const LEGACY_LAST_RUN_KEY = 'acode.workflows.lastRun.v1';
 const DRAFT_KEY = 'acode.workflows.draft.v1';
-const MAX_RUNS = 30;
 
 const DEFAULT_INPUT = 'The team shipped a new feature for the dashboard. It includes streaming responses and a new provider selector. Users can now switch between multiple LLM providers from one screen.';
 
@@ -45,32 +46,6 @@ function saveDraft(id: string, draft: WorkflowDraft) {
   const map = readJSON<Record<string, WorkflowDraft>>(DRAFT_KEY) ?? {};
   map[id] = draft;
   writeJSON(DRAFT_KEY, map);
-}
-
-interface RunRecord {
-  at: number;
-  results: WorkflowRunResult[];
-  final: string;
-  input: string;
-  /** Estimated USD cost of this run (sum of step costs). */
-  cost: number;
-  /** Total wall-clock duration of the run in ms. */
-  elapsedMs: number;
-}
-
-function loadRunHistory(id: string): RunRecord[] {
-  const map = readJSON<Record<string, RunRecord[]>>(RUNS_KEY);
-  const runs = map?.[id] ?? [];
-  if (runs.length > 0) return runs;
-  // Migration: the pre-history layout stored a single last run under a flat key.
-  const legacy = readJSON<Record<string, RunRecord>>(LEGACY_LAST_RUN_KEY)?.[id];
-  return legacy ? [{ ...legacy, cost: 0, elapsedMs: 0 }] : [];
-}
-
-function saveRunHistory(id: string, runs: RunRecord[]) {
-  const map = readJSON<Record<string, RunRecord[]>>(RUNS_KEY) ?? {};
-  map[id] = runs;
-  writeJSON(RUNS_KEY, map);
 }
 
 const fmtCost = (usd: number | undefined): string => {
@@ -130,7 +105,7 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   const [defDesc, setDefDesc] = useState('');
   const [input, setInput] = useState(DEFAULT_INPUT);
   const [running, setRunning] = useState(false);
-  const [history, setHistory] = useState<RunRecord[]>([]);
+  const [history, setHistory] = useState<WorkflowRunRecord[]>([]);
   const [runIdx, setRunIdx] = useState(0);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [finalCollapsed, setFinalCollapsed] = useState(false);
@@ -184,6 +159,14 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     if (!activeId) return;
     saveDraft(activeId, { nodes, edges, defName, defDesc, input });
   }, [activeId, nodes, edges, defName, defDesc, input]);
+
+  // Persist the current run history to storage whenever it changes
+  // (initial load, a new run, or switching workflows). This keeps the
+  // state updater pure — no side effects inside a React render.
+  useEffect(() => {
+    if (!activeId) return;
+    saveRunHistory(activeId, history);
+  }, [activeId, history]);
 
   const saveDef = () => {
     const existing = workflowStore.get(activeId);
@@ -295,17 +278,13 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   };
 
   const pushRun = useCallback(
-    (rec: RunRecord) => {
-      setHistory((prev) => {
-        const next = [rec, ...prev].slice(0, MAX_RUNS);
-        saveRunHistory(activeId, next);
-        return next;
-      });
+    (rec: WorkflowRunRecord) => {
+      setHistory((prev) => [rec, ...prev].slice(0, MAX_RUN_HISTORY));
       setRunIdx(0);
       setCollapsed({});
       setFinalCollapsed(false);
     },
-    [activeId],
+    [],
   );
 
   const runWorkflow = async () => {
@@ -314,7 +293,7 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     const pdef = listProviders().find((x) => x.id === p);
     const needsKey = !!(pdef && pdef.needsKey !== false && pdef.kind !== 'local');
     const startedAt = Date.now();
-    const makeRec = (results: WorkflowRunResult[], final: string): RunRecord => ({
+    const makeRec = (results: WorkflowRunResult[], final: string): WorkflowRunRecord => ({
       at: Date.now(),
       results,
       final,

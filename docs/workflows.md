@@ -115,6 +115,13 @@ workflows to `localStorage` under `acode.workflows.v1`.
 API: `all()`, `get(id)`, `save(def)`, `remove(id)`, `resetBuiltin(id)`,
 `library()`.
 
+Run history lives in `packages/core/src/workflows/runHistory.ts` and is
+exposed from the package as `loadRunHistory` / `saveRunHistory` /
+`MAX_RUN_HISTORY`. It persists a per-workflow run array (newest first, capped
+at 30, key `acode.workflows.runs.v1`; legacy `acode.workflows.lastRun.v1`
+data migrates on first load) and is covered by unit tests
+(`packages/core/src/workflows/runHistory.test.ts`).
+
 ## Screen features
 
 - **Picker** — choose a preset or a saved workflow; the last active workflow is
@@ -132,16 +139,17 @@ API: `all()`, `get(id)`, `save(def)`, `remove(id)`, `resetBuiltin(id)`,
   The engine records each step's output, duration and `ok`/`error` status, so a
   failed LLM call is attributed to the exact step that broke instead of failing
   the whole run.
-- **Trace past runs** — each node row shows its status (`✓ 1234ms` or
-  `✕ failed`) plus token usage and cost when known, and the pipeline header
-  shows a success/error badge with how long ago the run happened. Selecting a
-  node shows a **Last run** panel with that step's output, duration and status.
-  Runs are persisted as a per-workflow history (newest first, capped at 30,
-  key `acode.workflows.runs.v1`; legacy `acode.workflows.lastRun.v1` data
-  migrates on first load), so after a failed run you can tweak a prompt,
-  reload the workflow (or the page) and still inspect what any previous run
-  produced step-by-step. A run picker in the **Run output** header switches
-  between past runs.
+- **Trace past runs** — each pipeline node row shows its run status
+  (`✓ 1234ms` or `✕ failed`), and the pipeline header shows a success/error
+  badge with how long ago the run happened. Selecting a node shows a **Last
+  run** panel with that step's output, duration and status; the **Run output**
+  cards additionally show each step's token usage and cost when known. Runs are
+  persisted as a per-workflow history (newest first, capped at 30, key
+  `acode.workflows.runs.v1`; legacy `acode.workflows.lastRun.v1` data migrates
+  on first load), so after a failed run you can tweak a prompt, reload the
+  workflow (or the page) and still inspect what any previous run produced
+  step-by-step. A run picker in the **Run output** header switches between
+  past runs.
 - **Cost & token telemetry** — LLM steps record prompt/completion token usage
   (from the provider's `usage` when available, otherwise estimated) and an
   estimated USD cost from the model catalog per-1k pricing. The run header
