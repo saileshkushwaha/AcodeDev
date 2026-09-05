@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Input, Select, Badge, useTheme, Spinner } from '@acode/ui';
 import {
   type WorkflowDefinition,
   type WorkflowNode,
+  type WorkflowEdge,
+  WORKFLOW_CATEGORIES,
   listModels,
   listProviders,
   type ProviderId,
@@ -12,34 +14,118 @@ import {
 
 let nodeSeq = 0;
 
+const ACTIVE_KEY = 'acode.workflows.active';
+const BLANK_ID = 'wf_blank';
+
+function readActiveId(): string {
+  try {
+    return localStorage.getItem(ACTIVE_KEY) ?? BLANK_ID;
+  } catch {
+    return BLANK_ID;
+  }
+}
+
+function persistActiveId(id: string) {
+  try {
+    localStorage.setItem(ACTIVE_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function WorkflowsScreen() {
   const { tokens } = useTheme();
-  const { workflows, hasKey } = useApp();
-  const [nodes, setNodes] = useState<WorkflowNode[]>([
-    { id: 'n_input', type: 'input', name: 'Input', config: { value: 'Summarize the following: {{input}}' }, position: { x: 0, y: 0 } },
-    { id: 'n_llm', type: 'llm', name: 'LLM 1', config: { provider: 'openrouter', model: 'nvidia/nemotron-3.5-lightning:free', systemPrompt: 'You are a helpful summarizer.', temperature: 0.4 }, position: { x: 1, y: 1 } },
-    { id: 'n_out', type: 'output', name: 'Output', config: {}, position: { x: 2, y: 2 } },
-  ]);
-  const [edges, setEdges] = useState([
-    { id: 'e1', source: 'n_input', target: 'n_llm', sourceHandle: 'out', targetHandle: 'in' },
-    { id: 'e2', source: 'n_llm', target: 'n_out', sourceHandle: 'out', targetHandle: 'in' },
-  ]);
+  const { workflows, workflowStore, hasKey } = useApp();
+  const [ver, force] = useState(0);
+  const refresh = useCallback(() => force((x) => x + 1), []);
+
+  const [nodes, setNodes] = useState<WorkflowNode[]>([]);
+  const [edges, setEdges] = useState<WorkflowEdge[]>([]);
+  const [activeId, setActiveId] = useState<string>(readActiveId());
+  const [defName, setDefName] = useState('');
+  const [defDesc, setDefDesc] = useState('');
   const [input, setInput] = useState('The team shipped a new feature for the dashboard. It includes streaming responses and a new provider selector. Users can now switch between multiple LLM providers from one screen.');
   const [result, setResult] = useState<{ results: { nodeId: string; nodeType: string; output: string; durationMs?: number }[]; final: string } | null>(null);
   const [running, setRunning] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
+  const allDefs = useMemo(() => workflowStore.all(), [workflowStore, ver]);
+  const customCount = allDefs.filter((d) => !d.builtin).length;
+  const presetCount = allDefs.length - customCount;
+
+  const activeDef = workflowStore.get(activeId);
+  const activeIsBuiltin = Boolean(activeDef?.builtin);
+
+  const loadDef = useCallback(
+    (id: string) => {
+      const def = workflowStore.get(id) ?? workflowStore.get(BLANK_ID);
+      if (!def) return;
+      nodeSeq = 0;
+      setNodes(def.nodes.map((n) => ({ ...n })));
+      setEdges(def.edges.map((e) => ({ ...e })));
+      setDefName(def.name);
+      setDefDesc(def.description ?? '');
+      setActiveId(def.id);
+      persistActiveId(def.id);
+      setResult(null);
+    },
+    [workflowStore],
+  );
+
+  useEffect(() => {
+    loadDef(readActiveId());
+  }, [loadDef]);
+
+  const saveDef = () => {
+    const existing = workflowStore.get(activeId);
+    const name = defName.trim() || 'Untitled workflow';
+    const isNewCopy = existing?.builtin || !existing;
+    const id = isNewCopy ? `wf_c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}` : existing.id;
+    const def: WorkflowDefinition = {
+      id,
+      name,
+      description: defDesc.trim() || undefined,
+      nodes,
+      edges,
+      variables: {},
+      provider: nodes.find((n) => n.type === 'llm')?.config.provider as ProviderId | undefined,
+      model: nodes.find((n) => n.type === 'llm')?.config.model as string | undefined,
+      updatedAt: Date.now(),
+    };
+    const saved = workflowStore.save(def);
+    setActiveId(saved.id);
+    persistActiveId(saved.id);
+    setDefName(saved.name);
+    setDefDesc(saved.description ?? '');
+    refresh();
+  };
+
+  const deleteDef = () => {
+    if (activeIsBuiltin) return;
+    if (!confirm(`Delete workflow "${activeDef?.name ?? 'Untitled'}"?`)) return;
+    workflowStore.remove(activeId);
+    refresh();
+    loadDef(BLANK_ID);
+  };
+
+  const resetDef = () => {
+    if (!confirm(`Reset "${activeDef?.name ?? 'this preset'}" back to its built-in definition?`)) return;
+    workflowStore.resetBuiltin(activeId);
+    refresh();
+    loadDef(activeId);
+  };
+
   const addNode = (type: WorkflowNode['type']) => {
-    const id = `n_${type}_${++nodeSeq}`;
+    const seq = ++nodeSeq;
+    const id = `n_${type}_${seq}`;
     let config: Record<string, unknown> = {};
     if (type === 'llm') config = { provider: 'openrouter', model: 'nvidia/nemotron-3.5-lightning:free', systemPrompt: '', temperature: 0.7 };
     if (type === 'transform') config = { operation: 'uppercase' };
     if (type === 'condition') config = { expression: 'upstream.length > 100' };
     if (type === 'prompt_template') config = { template: 'Hello, {{input}}' };
-    setNodes((n) => [...n, { id, type, name: `${type} ${++nodeSeq}`, config, position: { x: nodes.length, y: 0 } }]);
-    // wire last node -> new node
+    setNodes((ns) => [...ns, { id, type, name: `${type} ${seq}`, config, position: { x: ns.length, y: 0 } }]);
     const last = nodes[nodes.length - 1];
-    setEdges((e) => [...e, { id: `e_${id}`, source: last.id, target: id, sourceHandle: 'out', targetHandle: 'in' }]);
+    if (last) setEdges((e) => [...e, { id: `e_${id}`, source: last.id, target: id, sourceHandle: 'out', targetHandle: 'in' }]);
   };
 
   const updateNode = (id: string, patch: Partial<WorkflowNode>) => {
@@ -62,8 +148,9 @@ export function WorkflowsScreen() {
     setRunning(true);
     setResult(null);
     const def: WorkflowDefinition = {
-      id: 'wf_run',
-      name: 'My workflow',
+      id: activeId && !activeIsBuiltin ? activeId : 'wf_run',
+      name: defName.trim() || 'Untitled workflow',
+      description: defDesc.trim() || undefined,
       nodes,
       edges,
       variables: {},
@@ -90,11 +177,17 @@ export function WorkflowsScreen() {
     output: '📤 Output',
   };
 
+  const catIcon = (cat?: string) => WORKFLOW_CATEGORIES.find((c) => c.id === cat)?.icon ?? '🔁';
+  const workflowOptions = allDefs.map((d) => ({
+    label: `${d.builtin ? catIcon(d.category) : '🗀'} ${d.name}${d.builtin ? '' : ' · saved'}`,
+    value: d.id,
+  }));
+
   return (
     <Page maxWidth={1200}>
       <PageHeader
         title="Workflows / Pipelines"
-        subtitle="Chain LLM calls, transformations, and conditions visually"
+        subtitle="Load a preset or saved workflow, tweak the graph, and run it"
         actions={
           <>
             <Button variant="secondary" onClick={() => addNode('llm')}>+ LLM</Button>
@@ -104,6 +197,27 @@ export function WorkflowsScreen() {
           </>
         }
       />
+
+      <Card title="Workflow" subtitle="Pick a preset, or save your current graph as a reusable workflow" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'start' }}>
+            <Select label="Workflow" value={activeId} onChange={(v) => loadDef(v)} options={workflowOptions} />
+            <Input label="Name" value={defName} onChange={setDefName} placeholder="My workflow" />
+            <Input label="Description" value={defDesc} onChange={setDefDesc} placeholder="What does this pipeline do?" />
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button size="sm" onClick={saveDef}>💾 Save</Button>
+            <Button size="sm" variant="secondary" onClick={() => loadDef(BLANK_ID)}>＋ Blank</Button>
+            {activeIsBuiltin ? (
+              <Button size="sm" variant="ghost" onClick={resetDef}>↺ Reset preset</Button>
+            ) : (
+              <Button size="sm" variant="danger" onClick={deleteDef}>🗑 Delete</Button>
+            )}
+            <Badge color={activeIsBuiltin ? tokens.primary : undefined}>{activeIsBuiltin ? `${catIcon(activeDef?.category)} preset · ${(activeDef?.tags ?? []).join(' · ')}` : 'custom'}</Badge>
+            <span style={{ fontSize: 12, color: tokens.textMuted }}>{presetCount} presets · {customCount} saved</span>
+          </div>
+        </div>
+      </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
         <Card title="Pipeline" subtitle="Click a node to edit it on the right">
@@ -140,7 +254,7 @@ export function WorkflowsScreen() {
               nodes.find((n) => n.id === selectedNodeId) ??
               nodes.find((n) => n.type === 'llm') ??
               nodes[0];
-            return <NodeConfig node={focus} updateConfig={updateConfig} rename={(id, name) => updateNode(id, { name })} />;
+            return focus ? <NodeConfig node={focus} updateConfig={updateConfig} rename={(id, name) => updateNode(id, { name })} /> : <div style={{ color: tokens.textMuted, fontSize: 13 }}>Add nodes to get started.</div>;
           })()}
         </Card>
       </div>

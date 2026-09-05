@@ -4,6 +4,9 @@ import {
   webCryptoAdapter,
   PromptRegistry,
   RAGMemory,
+  WorkflowRegistry,
+  WORKFLOW_LIBRARY,
+  WORKFLOW_CATEGORIES,
   listModels,
   getFreeModels,
   GitHubClient,
@@ -85,6 +88,98 @@ describe('prompt helpers', () => {
       expect(p.id).toBeTruthy();
       expect(p.content.length).toBeGreaterThan(20);
     });
+  });
+});
+
+describe('workflow library', () => {
+  const validNodeTypes = ['input', 'llm', 'transform', 'condition', 'prompt_template', 'output'];
+
+  it('presets are structurally valid: entry + terminal nodes, wired edges, unique ids', () => {
+    expect(WORKFLOW_LIBRARY.length).toBeGreaterThanOrEqual(8);
+    WORKFLOW_LIBRARY.forEach((w) => {
+      expect(w.id).toBeTruthy();
+      expect(w.name.length).toBeGreaterThan(0);
+      expect(WORKFLOW_CATEGORIES.some((c) => c.id === w.category)).toBe(true);
+      expect(w.nodes.length).toBeGreaterThanOrEqual(2);
+      expect(w.nodes.some((n) => n.type === 'input')).toBe(true);
+      expect(w.nodes.some((n) => n.type === 'output')).toBe(true);
+
+      const ids = w.nodes.map((n) => n.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      w.nodes.forEach((n) => expect(validNodeTypes).toContain(n.type));
+
+      w.edges.forEach((e) => {
+        expect(ids).toContain(e.source);
+        expect(ids).toContain(e.target);
+      });
+      // graph is connected end to end (every node except input has an inbound edge)
+      w.nodes
+        .filter((n) => n.type !== 'input')
+        .forEach((n) => expect(w.edges.some((e) => e.target === n.id)).toBe(true));
+    });
+  });
+
+  it('chain workflow wires three LLM stages with the upstream placeholder', () => {
+    const w = WORKFLOW_LIBRARY.find((x) => x.id === 'wf_chain_of_thought');
+    expect(w).toBeTruthy();
+    const llmNodes = w!.nodes.filter((n) => n.type === 'llm');
+    expect(llmNodes.length).toBe(3);
+    // later stages consume the previous stage's output via {{upstream}}
+    llmNodes.slice(1).forEach((n) => {
+      expect(String(n.config.systemPrompt ?? '')).toContain('{{upstream}}');
+    });
+  });
+});
+
+describe('WorkflowRegistry', () => {
+  it('seeds the full built-in library and marks presets as builtin', () => {
+    const reg = new WorkflowRegistry();
+    const seedCount = reg.ensureSeeded();
+    const builtins = reg.all().filter((d) => d.builtin);
+    expect(builtins.length).toBeGreaterThanOrEqual(WORKFLOW_LIBRARY.length);
+    expect(builtins.every((d) => d.builtin)).toBe(true);
+  });
+
+  it('saves custom workflows, updates in place, and never deletes builtins', () => {
+    const reg = new WorkflowRegistry();
+    const saved = reg.save({
+      id: 'wf_c_test',
+      name: 'My custom',
+      nodes: [{ id: 'n1', type: 'input', name: 'Input', config: { value: '{{input}}' }, position: { x: 0, y: 0 } }],
+      edges: [],
+      variables: {},
+      updatedAt: Date.now(),
+    });
+    expect(saved.builtin).toBe(false);
+    expect(reg.get('wf_c_test')?.name).toBe('My custom');
+
+    reg.save({ ...saved, name: 'Renamed' });
+    expect(reg.get('wf_c_test')?.name).toBe('Renamed');
+
+    expect(reg.remove('wf_blank')).toBe(false);
+    expect(reg.remove('wf_c_test')).toBe(true);
+    expect(reg.get('wf_c_test')).toBeUndefined();
+  });
+
+  it('saving a copy of a builtin preset yields a deletable custom workflow', () => {
+    const reg = new WorkflowRegistry();
+    const blank = reg.get('wf_blank')!;
+    const copy = reg.save({ ...blank, builtin: undefined, id: 'wf_c_copy', name: 'My blank copy' });
+    expect(copy.builtin).toBe(false);
+    expect(reg.remove('wf_c_copy')).toBe(true);
+    expect(reg.remove('wf_blank')).toBe(false);
+  });
+
+  it('resetBuiltin restores the curated definition untouched', () => {
+    const reg = new WorkflowRegistry();
+    const blank = reg.get('wf_blank')!;
+    const tampered = reg.save({ ...blank, nodes: [] });
+    expect(reg.get('wf_blank')!.nodes).toHaveLength(0);
+    const restored = reg.resetBuiltin('wf_blank');
+    const pristine = WORKFLOW_LIBRARY.find((x) => x.id === 'wf_blank')!;
+    expect(restored!.nodes.length).toBeGreaterThan(0);
+    expect(restored!.nodes.length).toBe(pristine.nodes.length);
+    expect(restored!.edges.length).toBe(pristine.edges.length);
   });
 });
 

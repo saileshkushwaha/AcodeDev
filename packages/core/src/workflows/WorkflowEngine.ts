@@ -23,6 +23,11 @@ export interface WorkflowDefinition {
   id: string;
   name: string;
   description?: string;
+  /** Catalog category id, e.g. from WORKFLOW_CATEGORIES. */
+  category?: string;
+  tags?: string[];
+  /** True for curated library presets (seedable, reset-table, not deletable). */
+  builtin?: boolean;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   variables: Record<string, string>;

@@ -10,6 +10,8 @@ export * from './agents/AgentEngine';
 export * from './agents/Toolbox';
 export * from './agents/RAGMemory';
 export * from './workflows/WorkflowEngine';
+export * from './workflows/library';
+export * from './workflows/WorkflowRegistry';
 export * from './evals/EvalEngine';
 export * from './prompts/PromptRegistry';
 export * from './projects/ProjectStore';

@@ -7,6 +7,7 @@ import {
   Toolbox,
   RAGMemory,
   WorkflowEngine,
+  WorkflowRegistry,
   EvalEngine,
   PromptRegistry,
   ProjectStore,
@@ -24,6 +25,7 @@ export interface AppState {
   chat: ChatEngine;
   agents: AgentEngine;
   workflows: WorkflowEngine;
+  workflowStore: WorkflowRegistry;
   evals: EvalEngine;
   prompts: PromptRegistry;
   projects: ProjectStore;
@@ -96,6 +98,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     chat: engineRef.current,
     agents: new AgentEngine(engineRef.current, { name: 'a', systemPrompt: '', tools: Toolbox.all() }),
     workflows: new WorkflowEngine(engineRef.current),
+    workflowStore: new WorkflowRegistry(),
     evals: new EvalEngine(engineRef.current),
     prompts: new PromptRegistry(),
     projects,
