@@ -139,7 +139,7 @@ export function KeysScreen() {
     }
     setInputs((s) => ({ ...s, [c.id]: '' }));
     refresh();
-  }, [vault, refresh]);
+  }, [vault, refresh, refreshCatalog]);
 
   const clearAll = useCallback(() => {
     vault.clear();
@@ -209,11 +209,21 @@ export function KeysScreen() {
   }, []);
 
   const allEntries = vault.allEntries();
-  const countFor = useMemo(() => (cat: ConnectorCategory) => {
-    if (cat === 'custom') return allEntries.filter(([id]) => !findConnector(id) && !cachedGatewayProviders.some((g) => g.id === id)).length;
-    if (cat === 'gateway') return cachedGatewayProviders.filter((g) => vault.hasKey(g.id)).length;
-    return allEntries.filter(([id, e]) => e.category === cat).length;
-  }, [allEntries, cachedGatewayProviders, vault]);
+
+  const countForAi = useMemo(() => allEntries.filter(([id, e]) => e.category === 'ai').length, [allEntries]);
+  const countForGateway = useMemo(() => cachedGatewayProviders.filter((g) => vault.hasKey(g.id)).length, [cachedGatewayProviders, vault]);
+  const countForBusiness = useMemo(() => allEntries.filter(([id, e]) => e.category === 'business').length, [allEntries]);
+  const countForDev = useMemo(() => allEntries.filter(([id, e]) => e.category === 'dev').length, [allEntries]);
+  const countForCustom = useMemo(() => allEntries.filter(([id]) => !findConnector(id) && !cachedGatewayProviders.some((g) => g.id === id)).length, [allEntries, cachedGatewayProviders]);
+
+  const countFor = useCallback((cat: ConnectorCategory) => {
+    if (cat === 'custom') return countForCustom;
+    if (cat === 'gateway') return countForGateway;
+    if (cat === 'ai') return countForAi;
+    if (cat === 'business') return countForBusiness;
+    if (cat === 'dev') return countForDev;
+    return 0;
+  }, [countForAi, countForGateway, countForBusiness, countForDev, countForCustom]);
 
   const customList: KnownConnector[] = useMemo(
     () =>
