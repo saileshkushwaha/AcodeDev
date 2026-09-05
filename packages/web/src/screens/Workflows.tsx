@@ -666,16 +666,16 @@ const CollapsibleCard = React.memo(function CollapsibleCard({ title, subtitle, a
   const { tokens } = useTheme();
   return (
     <Card style={style}>
-      <div
-        onClick={onToggle}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}
-      >
-        <span style={{ transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', color: tokens.textSecondary, fontSize: 11, width: 10, textAlign: 'center', flexShrink: 0 }}>▶</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}>
+        <span
+          onClick={onToggle}
+          style={{ transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', color: tokens.textSecondary, fontSize: 11, width: 10, textAlign: 'center', flexShrink: 0, cursor: 'pointer' }}
+        >▶</span>
+        <div onClick={onToggle} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: tokens.text }}>{title}</div>
           {subtitle != null && <div style={{ fontSize: 12, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>}
         </div>
-        {actions != null && <div style={{ flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>{actions}</div>}
+        {actions != null && <div style={{ flexShrink: 0 }}>{actions}</div>}
       </div>
       {expanded && <div style={{ marginTop: 10 }}>{children}</div>}
     </Card>
