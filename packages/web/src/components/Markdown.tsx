@@ -97,7 +97,6 @@ export function Markdown({ content }: { content: string }) {
 
     if (t.startsWith('- ') || t.startsWith('* ') || /^\d+\.\s/.test(t)) {
       const list: string[] = [];
-      const ordered = /^\d+\.\s/.test(t);
       while (i < lines.length && (/^- /.test(lines[i].trim()) || /^\d+\.\s/.test(lines[i].trim()))) {
         const li = lines[i].trim();
         list.push(li.replace(/^(\d+\.\s|- |\* )/, ''));
@@ -108,7 +107,6 @@ export function Markdown({ content }: { content: string }) {
           {list.map((li, idx) => <li key={idx}>{inline(li, nk, tokens)}</li>)}
         </ul>,
       );
-      void ordered;
       continue;
     }
 

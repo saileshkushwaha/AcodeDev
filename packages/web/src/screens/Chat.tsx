@@ -13,6 +13,7 @@ import {
   readJSON,
   writeJSON,
   Toolbox,
+  ProjectStore,
   type ChatMessage,
   type ProviderId,
   type ChatAttachment,
@@ -21,6 +22,7 @@ import {
   type Skill,
   type ToolDefinition,
   type ToolCall,
+  type ProjectDoc,
 } from '@acode/core';
 import type { Conversation } from '@acode/core';
 import { Markdown } from '../components/Markdown';
@@ -939,6 +941,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
               </span>
               <button
                 title="Close tab"
+                aria-label="Close tab"
                 onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
                 style={{ width: 18, height: 18, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 12, flexShrink: 0 }}
               >×</button>
@@ -1140,6 +1143,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
               <button
                 onClick={() => { setPinnedToBottom(true); setSubtab('session'); requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })); }}
                 title="Scroll to bottom"
+                aria-label="Scroll to bottom"
                 style={{ position: 'sticky', bottom: tokens.space2, left: '50%', transform: 'translateX(-50%)', width: 40, height: 40, borderRadius: '50%', border: `1px solid ${tokens.borderStrong}`, background: tokens.bgElevated, color: tokens.textSecondary, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: tokens.shadowMd, flexShrink: 0, marginLeft: 'auto', marginRight: 'auto' }}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14m0 0l-5-5m5 5l5-5" /></svg>
@@ -1282,7 +1286,7 @@ function Composer(props: {
   onFolderChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onLinkPick: () => void;
   currentProjectId: string | null;
-  projects: any[];
+  projects: ProjectDoc[];
   onProjectChange: (id: string | null) => void;
   onCreateProject: (name: string, gitRepo?: string) => void;
 }) {
@@ -1463,7 +1467,7 @@ function Composer(props: {
               style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, maxWidth: 200, overflow: 'hidden' }}
             >
               {(() => {
-                const active = props.projects.find((p: any) => p.id === props.currentProjectId);
+                const active = props.projects.find((p: ProjectDoc) => p.id === props.currentProjectId);
                 const repoName = active?.gitRepo?.split('/').pop()?.replace(/\.git$/, '') ?? null;
                 return (
                   <>
@@ -1715,7 +1719,7 @@ function MenuItem({ label, onClick, danger, disabled }: { label: string; onClick
   );
 }
 
-function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
+const Bubble = React.memo(function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
   const { tokens } = useTheme();
   const isUser = msg.role === 'user';
   const [copied, setCopied] = useState(false);
@@ -1880,7 +1884,7 @@ function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
       </div>
     </div>
   );
-}
+});
 
 function ShellBlock({ command, output }: { command: string; output: string }) {
   const { tokens } = useTheme();
@@ -1998,7 +2002,7 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
   onUnarchive: (id: string) => void;
   onNewSession: () => void;
   onClose: () => void;
-  projects: any;
+  projects: ProjectStore;
   currentProjectId: string | null;
   activeProjectId: string | null;
   onOpenProject: (id: string | null) => void;
@@ -2018,7 +2022,7 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
   const filteredArchived = archived.filter((s) =>
     !search || s.title.toLowerCase().includes(search.toLowerCase()),
   );
-  const filteredProjects = allProjects.filter((p: any) =>
+  const filteredProjects = allProjects.filter((p: ProjectDoc) =>
     !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase()),
   );
 
@@ -2042,7 +2046,7 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
 
   const getProjectName = (session: Conversation) => {
     if (session.projectId) {
-      const proj = allProjects.find((p: any) => p.id === session.projectId);
+      const proj = allProjects.find((p: ProjectDoc) => p.id === session.projectId);
       return proj?.name ?? '';
     }
     return '';
@@ -2055,7 +2059,7 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
     setProjectModalOpen(false);
   };
 
-  const projectRow = (p: any) => {
+  const projectRow = (p: ProjectDoc) => {
     const rn = p.gitRepo?.split('/').pop()?.replace(/\.git$/, '') ?? null;
     return (
       <div
@@ -2264,7 +2268,7 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
 }
 
 function ProjectDropdown({ projects, activeId, onSelect, onCreate, onClose }: {
-  projects: any[];
+  projects: ProjectDoc[];
   activeId: string | null;
   onSelect: (id: string | null) => void;
   onCreate: (name: string, gitRepo?: string) => void;
@@ -2283,7 +2287,7 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onClose }: {
     setCreating(false);
   };
 
-  const repoName = (p: any) => p.gitRepo?.split('/').pop()?.replace(/\.git$/, '') ?? null;
+  const repoName = (p: ProjectDoc) => p.gitRepo?.split('/').pop()?.replace(/\.git$/, '') ?? null;
 
   return (
     <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 80, minWidth: 260, maxHeight: 360, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
@@ -2301,7 +2305,7 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onClose }: {
       {projects.length === 0 ? (
         <div style={{ padding: `${tokens.space2}px ${tokens.space3}px`, fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center' }}>No projects yet</div>
       ) : (
-        projects.map((p: any) => {
+        projects.map((p: ProjectDoc) => {
           const rn = repoName(p);
           return (
             <div
@@ -2365,7 +2369,7 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onClose }: {
 }
 
 function ProjectPicker({ projects, onSelect, onCreate, onClose }: {
-  projects: any[];
+  projects: ProjectDoc[];
   onSelect: (id: string) => void;
   onCreate: (name: string, gitRepo?: string) => void;
   onClose: () => void;
@@ -2417,7 +2421,7 @@ function ProjectPicker({ projects, onSelect, onCreate, onClose }: {
               {projects.length === 0 ? 'No projects yet — create one below.' : 'No matching projects.'}
             </div>
           ) : (
-            filtered.map((p: any) => {
+            filtered.map((p: ProjectDoc) => {
               const rn = p.gitRepo?.split('/').pop()?.replace(/\.git$/, '');
               return <div key={p.id} onClick={() => onSelect(p.id)} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2 }} onMouseEnter={(e) => (e.currentTarget.style.background = tokens.surfaceHover)} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
                 <span style={{ width: 24, height: 24, borderRadius: tokens.radiusSm, background: p.color ?? tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{p.name?.charAt(0).toUpperCase() || 'P'}</span>

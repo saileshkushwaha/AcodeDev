@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useRef, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   KeyVault,
   webCryptoAdapter,
@@ -144,18 +144,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const ragRef = useRef<RAGMemory | null>(null);
   if (!ragRef.current) ragRef.current = new RAGMemory();
 
-  const state: AppState = {
-    vault: vaultRef.current,
+  const state: AppState = useMemo(() => ({
+    vault: vaultRef.current!,
     vaultTick,
-    chat: engineRef.current,
-    agents: agentsRef.current,
-    agentStore: agentStoreRef.current,
-    workflows: workflowsRef.current,
-    workflowStore: workflowStoreRef.current,
-    evals: evalsRef.current,
-    prompts: promptsRef.current,
+    chat: engineRef.current!,
+    agents: agentsRef.current!,
+    agentStore: agentStoreRef.current!,
+    workflows: workflowsRef.current!,
+    workflowStore: workflowStoreRef.current!,
+    evals: evalsRef.current!,
+    prompts: promptsRef.current!,
     projects,
-    rag: ragRef.current,
+    rag: ragRef.current!,
     githubToken,
     setGithubToken: useCallback((t: string) => {
       setGithubTokenState(t);
@@ -168,11 +168,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (id) writeRaw('acode.currentProject', id);
       else removeKey('acode.currentProject');
     }, []),
-    hasKey: (p) => vaultRef.current?.hasKey(p) ?? false,
+    hasKey: (p: ProviderId) => vaultRef.current?.hasKey(p) ?? false,
     catalogVersion,
     refreshCatalog,
     syncCatalog,
-  };
+  }), [vaultTick, projects, githubToken, currentProjectId, catalogVersion, refreshCatalog, syncCatalog]);
 
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;
 }

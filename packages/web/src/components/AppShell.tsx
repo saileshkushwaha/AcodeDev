@@ -145,7 +145,6 @@ export function AppShell({
               <div style={{ width: 28, height: 28, borderRadius: tokens.radiusMd, background: tokens.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: tokens.fontSizeSm }}>A</div>
               <span style={{ fontWeight: 700, fontSize: tokens.fontSizeMd }}>AcodeDev</span>
               <div style={{ flex: 1 }} />
-              {header ? <MobileHeaderActions /> : null}
             </div>
             <main style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>{children}</main>
           </div>
@@ -160,20 +159,5 @@ export function AppShell({
         </>
       )}
     </div>
-  );
-}
-
-function MobileHeaderActions() {
-  const { tokens } = useTheme();
-  return (
-    <button
-      onClick={() => {
-        /* placeholder for mobile menu extras */
-      }}
-      aria-label="More"
-      style={{ background: 'transparent', border: 'none', color: tokens.text, width: 36, height: 36, borderRadius: tokens.radiusMd, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
-    </button>
   );
 }
