@@ -7,6 +7,7 @@ export * from './llm/ChatEngine';
 export * from './keys/KeyVault';
 export * from './keys/connectors';
 export * from './agents/AgentEngine';
+export * from './agents/AgentRegistry';
 export * from './agents/Toolbox';
 export * from './agents/RAGMemory';
 export * from './workflows/WorkflowEngine';

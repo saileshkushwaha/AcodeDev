@@ -4,6 +4,7 @@ import {
   webCryptoAdapter,
   ChatEngine,
   AgentEngine,
+  AgentRegistry,
   Toolbox,
   RAGMemory,
   WorkflowEngine,
@@ -24,6 +25,7 @@ export interface AppState {
   vault: KeyVault;
   chat: ChatEngine;
   agents: AgentEngine;
+  agentStore: AgentRegistry;
   workflows: WorkflowEngine;
   workflowStore: WorkflowRegistry;
   evals: EvalEngine;
@@ -57,7 +59,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return '';
     }
   });
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [currentProjectId, setCurrentProjectIdState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('acode.currentProject');
+    } catch {
+      return null;
+    }
+  });
   const [catalogVersion, setCatalogVersion] = useState(0);
 
   const vaultRef = useRef<KeyVault | null>(null);
@@ -93,16 +101,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   if (!projectsRef.current) projectsRef.current = new ProjectStore();
   const projects = projectsRef.current;
 
+  // Keep engine/store singletons across renders so their in-memory state
+  // (e.g. the RAG index) is never wiped by a re-render.
+  const agentsRef = useRef<AgentEngine | null>(null);
+  if (!agentsRef.current) agentsRef.current = new AgentEngine(engineRef.current, { name: 'a', systemPrompt: '', tools: Toolbox.all() });
+
+  const agentStoreRef = useRef<AgentRegistry | null>(null);
+  if (!agentStoreRef.current) agentStoreRef.current = new AgentRegistry();
+
+  const workflowsRef = useRef<WorkflowEngine | null>(null);
+  if (!workflowsRef.current) workflowsRef.current = new WorkflowEngine(engineRef.current);
+
+  const workflowStoreRef = useRef<WorkflowRegistry | null>(null);
+  if (!workflowStoreRef.current) workflowStoreRef.current = new WorkflowRegistry();
+
+  const evalsRef = useRef<EvalEngine | null>(null);
+  if (!evalsRef.current) evalsRef.current = new EvalEngine(engineRef.current);
+
+  const promptsRef = useRef<PromptRegistry | null>(null);
+  if (!promptsRef.current) promptsRef.current = new PromptRegistry();
+
+  const ragRef = useRef<RAGMemory | null>(null);
+  if (!ragRef.current) ragRef.current = new RAGMemory();
+
   const state: AppState = {
     vault: vaultRef.current,
     chat: engineRef.current,
-    agents: new AgentEngine(engineRef.current, { name: 'a', systemPrompt: '', tools: Toolbox.all() }),
-    workflows: new WorkflowEngine(engineRef.current),
-    workflowStore: new WorkflowRegistry(),
-    evals: new EvalEngine(engineRef.current),
-    prompts: new PromptRegistry(),
+    agents: agentsRef.current,
+    agentStore: agentStoreRef.current,
+    workflows: workflowsRef.current,
+    workflowStore: workflowStoreRef.current,
+    evals: evalsRef.current,
+    prompts: promptsRef.current,
     projects,
-    rag: new RAGMemory(),
+    rag: ragRef.current,
     githubToken,
     setGithubToken: useCallback((t: string) => {
       setGithubTokenState(t);
@@ -114,7 +146,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, []),
     github: () => new GitHubClient({ token: githubToken }),
     currentProjectId,
-    setCurrentProjectId,
+    setCurrentProjectId: useCallback((id: string | null) => {
+      setCurrentProjectIdState(id);
+      try {
+        if (id) localStorage.setItem('acode.currentProject', id);
+        else localStorage.removeItem('acode.currentProject');
+      } catch {
+        /* ignore */
+      }
+    }, []),
     hasKey: (p) => vaultRef.current?.hasKey(p) ?? false,
     catalogVersion,
     refreshCatalog,

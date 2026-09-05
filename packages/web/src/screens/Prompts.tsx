@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';import { useApp } from '../state/AppProvider';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Input, Badge, Select, Modal, TabBar, useTheme, useIsMobile } from '@acode/ui';
 import {
@@ -692,18 +692,54 @@ function EditorModal({ id, onClose, refresh }: { id: string | null; onClose: () 
 /* ------------------------------------------------------------------- */
 /* Evals (kept functional, moderately polished)                        */
 /* ------------------------------------------------------------------- */
+interface EvalResult {
+  name: string;
+  passRate: number;
+  results: { caseId: string; pass: boolean; score: number; input: string; actual: string; llmJudge?: string }[];
+}
+interface EvalSnapshot {
+  def?: Partial<{ name: string; model: string; provider: string; type: string; criteria?: string }>;
+  sysPrompt?: string;
+  inputText?: string;
+  expected?: string;
+  cases?: { id: string; input: string; expected?: string }[];
+  result?: EvalResult | null;
+}
+const EVAL_KEY = 'acode.evals.v1';
+function readEvalSnapshot(): EvalSnapshot | null {
+  try {
+    const raw = localStorage.getItem(EVAL_KEY);
+    return raw ? (JSON.parse(raw) as EvalSnapshot) : null;
+  } catch {
+    return null;
+  }
+}
+function writeEvalSnapshot(s: EvalSnapshot) {
+  try {
+    localStorage.setItem(EVAL_KEY, JSON.stringify(s));
+  } catch {
+    /* ignore */
+  }
+}
+
 function EvalPanel() {
   const { tokens } = useTheme();
   const app = useApp();
   const { evals } = app;
+  const snap = useMemo(readEvalSnapshot, []);
   const [open, setOpen] = useState(false);
-  const [def, setDef] = useState<Partial<{ name: string; model: string; provider: string; type: string; criteria?: string }>>({ name: '', model: 'nvidia/nemotron-3.5-lightning:free', provider: 'openrouter', type: 'contains' });
-  const [sysPrompt, setSysPrompt] = useState('');
-  const [inputText, setInputText] = useState('');
-  const [expected, setExpected] = useState('');
-  const [cases, setCases] = useState<{ id: string; input: string; expected?: string }[]>([]);
+  const [def, setDef] = useState<Partial<{ name: string; model: string; provider: string; type: string; criteria?: string }>>(snap?.def ?? { name: '', model: 'nvidia/nemotron-3.5-lightning:free', provider: 'openrouter', type: 'contains' });
+  const [sysPrompt, setSysPrompt] = useState(snap?.sysPrompt ?? '');
+  const [inputText, setInputText] = useState(snap?.inputText ?? '');
+  const [expected, setExpected] = useState(snap?.expected ?? '');
+  const [cases, setCases] = useState<{ id: string; input: string; expected?: string }[]>(snap?.cases ?? []);
   const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<{ name: string; passRate: number; results: { caseId: string; pass: boolean; score: number; input: string; actual: string; llmJudge?: string }[] } | null>(null);
+  const [result, setResult] = useState<EvalResult | null>(snap?.result ?? null);
+
+  // Persist the eval definition, cases and last result so work isn't lost.
+  useEffect(() => {
+    writeEvalSnapshot({ def, sysPrompt, inputText, expected, cases, result });
+  }, [def, sysPrompt, inputText, expected, cases, result]);
 
   const allProviders = listProviders();
   const providerOpts = allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id }));

@@ -18,6 +18,39 @@ let nodeSeq = 0;
 const ACTIVE_KEY = 'acode.workflows.active';
 const BLANK_ID = 'wf_blank';
 const LAST_RUN_KEY = 'acode.workflows.lastRun.v1';
+const DRAFT_KEY = 'acode.workflows.draft.v1';
+
+const DEFAULT_INPUT = 'The team shipped a new feature for the dashboard. It includes streaming responses and a new provider selector. Users can now switch between multiple LLM providers from one screen.';
+
+interface WorkflowDraft {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  defName: string;
+  defDesc: string;
+  input: string;
+}
+
+function loadDraft(id: string): WorkflowDraft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, WorkflowDraft>;
+    return map[id] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(id: string, draft: WorkflowDraft) {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    const map = raw ? (JSON.parse(raw) as Record<string, WorkflowDraft>) : {};
+    map[id] = draft;
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore */
+  }
+}
 
 interface RunRecord {
   at: number;
@@ -100,7 +133,7 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   const [activeId, setActiveId] = useState<string>(readActiveId());
   const [defName, setDefName] = useState('');
   const [defDesc, setDefDesc] = useState('');
-  const [input, setInput] = useState('The team shipped a new feature for the dashboard. It includes streaming responses and a new provider selector. Users can now switch between multiple LLM providers from one screen.');
+  const [input, setInput] = useState(DEFAULT_INPUT);
   const [result, setResult] = useState<WorkflowRunResult[] | null>(null);
   const [final, setFinal] = useState('');
   const [runAt, setRunAt] = useState<number | null>(null);
@@ -126,10 +159,17 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
       const def = workflowStore.get(id) ?? workflowStore.get(BLANK_ID);
       if (!def) return;
       nodeSeq = 0;
-      setNodes(def.nodes.map((n) => ({ ...n })));
-      setEdges(def.edges.map((e) => ({ ...e })));
-      setDefName(def.name);
-      setDefDesc(def.description ?? '');
+      // Restore any unsaved draft edits (node graph, name, input) on top of the
+      // saved definition, so accidental reloads never lose work-in-progress.
+      const draft = loadDraft(def.id);
+      const savedNodes = def.nodes.map((n) => ({ ...n }));
+      const savedEdges = def.edges.map((e) => ({ ...e }));
+      setNodes(Array.isArray(draft?.nodes) ? draft.nodes.map((n) => ({ ...n })) : savedNodes);
+      setEdges(Array.isArray(draft?.edges) ? draft.edges.map((e) => ({ ...e })) : savedEdges);
+      setDefName(draft?.defName ?? def.name);
+      setDefDesc(draft?.defDesc ?? def.description ?? '');
+      setInput(draft?.input ?? DEFAULT_INPUT);
+      if (Array.isArray(draft?.nodes)) draft.nodes.forEach((n) => { const seq = /_(\d+)$/.exec(n.id); if (seq) nodeSeq = Math.max(nodeSeq, Number(seq[1])); });
       setActiveId(def.id);
       persistActiveId(def.id);
       setResult(null);
@@ -143,6 +183,12 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   useEffect(() => {
     loadDef(readActiveId());
   }, [loadDef]);
+
+  // Autosave the working draft so unsaved edits survive reloads.
+  useEffect(() => {
+    if (!activeId) return;
+    saveDraft(activeId, { nodes, edges, defName, defDesc, input });
+  }, [activeId, nodes, edges, defName, defDesc, input]);
 
   const saveDef = () => {
     const existing = workflowStore.get(activeId);

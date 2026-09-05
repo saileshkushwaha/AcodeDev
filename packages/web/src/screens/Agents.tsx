@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Input, Select, Toggle, Badge, useTheme, Spinner } from '@acode/ui';
@@ -11,22 +11,42 @@ const TOOL_NAMES: Record<string, string> = {
   fetch_url: 'Fetch URL',
 };
 
+type ConvMsg = { role: 'user' | 'assistant'; content: string };
+
 export function AgentsScreen() {
   const { tokens } = useTheme();
-  const { agents, rag, hasKey } = useApp();
-  const [name, setName] = useState('My Agent');
-  const [systemPrompt, setSystemPrompt] = useState('You are a helpful AI assistant. Answer based on the provided context when available.');
-  const [provider, setProvider] = useState<ProviderId>('openrouter');
-  const [model, setModel] = useState('nvidia/nemotron-3.5-lightning:free');
-  const [tools, setTools] = useState<string[]>(['web_search', 'calculator']);
-  const [enableRAG, setEnableRAG] = useState(false);
+  const { agents, agentStore, rag, hasKey } = useApp();
+  const saved = agentStore.all()[0];
+  const mainId = saved?.id ?? 'main';
+  const [name, setName] = useState(saved?.name ?? 'My Agent');
+  const [systemPrompt, setSystemPrompt] = useState(saved?.systemPrompt ?? 'You are a helpful AI assistant. Answer based on the provided context when available.');
+  const [provider, setProvider] = useState<ProviderId>(saved?.provider ?? 'openrouter');
+  const [model, setModel] = useState(saved?.model ?? 'nvidia/nemotron-3.5-lightning:free');
+  const [tools, setTools] = useState<string[]>(saved?.tools ?? ['web_search', 'calculator']);
+  const [enableRAG, setEnableRAG] = useState(saved?.enableRAG ?? false);
   const [docs, setDocs] = useState('');
-  const [maxIter, setMaxIter] = useState(4);
+  const [maxIter, setMaxIter] = useState(saved?.maxIter ?? 4);
   const [chat, setChat] = useState('');
-  const [conv, setConv] = useState<{ role: string; content: string }[]>([]);
+  const [conv, setConv] = useState<ConvMsg[]>(saved?.conversation ?? []);
   const [running, setRunning] = useState(false);
   const [, force] = useState(0);
   const refresh = () => force((x) => x + 1);
+
+  // Persist the agent configuration + transcript so it survives reloads.
+  useEffect(() => {
+    agentStore.save({
+      id: mainId,
+      name,
+      systemPrompt,
+      provider,
+      model,
+      tools,
+      enableRAG,
+      maxIter,
+      conversation: conv,
+      updatedAt: Date.now(),
+    });
+  }, [mainId, agentStore, name, systemPrompt, provider, model, tools, enableRAG, maxIter, conv]);
 
   const allTools = Toolbox.all();
   const activeTools = allTools.filter((t) => tools.includes(t.name));

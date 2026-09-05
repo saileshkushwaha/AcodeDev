@@ -1,13 +1,44 @@
 import { AgentTool } from './AgentEngine';
 import { Toolbox } from './Toolbox';
 
+const STORAGE_KEY = 'acode.rag.v1';
+
+function storage(): Storage | null {
+  return typeof localStorage !== 'undefined' ? localStorage : null;
+}
+
 /**
- * Lite in-memory RAG: index documents by chunking + keyword scoring,
- * then retrieve relevant context for the model.
+ * Lite local RAG: index documents by chunking + keyword scoring,
+ * then retrieve relevant context for the model. Chunks are persisted
+ * to localStorage so an ingested knowledge base survives reloads.
  */
 export class RAGMemory {
   private chunks: { text: string; id: number }[] = [];
   private nextId = 0;
+
+  constructor() {
+    this.load();
+  }
+
+  private load() {
+    try {
+      const raw = storage()?.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw) as { chunks: { text: string; id: number }[]; nextId: number };
+      this.chunks = Array.isArray(data.chunks) ? data.chunks : [];
+      this.nextId = typeof data.nextId === 'number' ? data.nextId : this.chunks.length;
+    } catch {
+      /* corrupted or unavailable storage — start fresh */
+    }
+  }
+
+  private persist() {
+    try {
+      storage()?.setItem(STORAGE_KEY, JSON.stringify({ chunks: this.chunks, nextId: this.nextId }));
+    } catch {
+      /* ignore quota errors */
+    }
+  }
 
   addDocuments(texts: string[], chunkSize = 800, overlap = 100) {
     for (const text of texts) {
@@ -18,6 +49,7 @@ export class RAGMemory {
         if (i + chunkSize >= cleaned.length) break;
       }
     }
+    this.persist();
   }
 
   retrieve(query: string, topK = 5): string {
@@ -37,6 +69,8 @@ export class RAGMemory {
 
   clear() {
     this.chunks = [];
+    this.nextId = 0;
+    this.persist();
   }
 
   get size() {

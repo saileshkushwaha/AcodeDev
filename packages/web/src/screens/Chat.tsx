@@ -199,21 +199,78 @@ const kindIcon: Record<AttachmentKind, string> = {
 
 type SessionTab = { id: string; title: string; convId: string | null };
 
+/* ----------------------------------------------------------------------------
+ * Chat workspace persistence: open tabs + active session are restored on
+ * reload, and the composer defaults remember your habitual provider/model/
+ * params instead of resetting to hard-coded values.
+ * ------------------------------------------------------------------------- */
+const DEFAULTS_KEY = 'acode.chat.defaults';
+const WORKSPACE_KEY = 'acode.chat.ws';
+
+interface ChatDefaults {
+  provider: ProviderId;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  freeOnly: boolean;
+  minContext: string;
+  skills: string[];
+}
+
+interface WorkspaceState {
+  tabs: SessionTab[];
+  activeTab: string | null;
+}
+
+function readJSON<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeJSON(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const { tokens } = useTheme();
   const { chat, projects, currentProjectId, setCurrentProjectId, hasKey } = useApp();
   const isMobile = useIsMobile();
 
-  const [provider, setProvider] = useState<ProviderId>('openrouter');
-  const [model, setModel] = useState('nvidia/nemotron-3.5-lightning:free');
+  const defaults = useMemo(
+    () =>
+      readJSON<ChatDefaults>(DEFAULTS_KEY) ?? {
+        provider: 'openrouter' as ProviderId,
+        model: 'nvidia/nemotron-3.5-lightning:free',
+        temperature: 0.7,
+        maxTokens: 2048,
+        freeOnly: true,
+        minContext: '0',
+        skills: [] as string[],
+      },
+    [],
+  );
+
+  const [provider, setProvider] = useState<ProviderId>(defaults.provider);
+  const [model, setModel] = useState(defaults.model);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
-  const [temperature, setTemperature] = useState(0.7);
-  const [maxTokens, setMaxTokens] = useState(2048);
-  const [freeOnly, setFreeOnly] = useState(true);
-  const [minContext, setMinContext] = useState('0');
-  const [convId, setConvId] = useState<string | null>(null);
+  const [temperature, setTemperature] = useState(defaults.temperature);
+  const [maxTokens, setMaxTokens] = useState(defaults.maxTokens);
+  const [freeOnly, setFreeOnly] = useState(defaults.freeOnly);
+  const [minContext, setMinContext] = useState(defaults.minContext);
+  const [convId, setConvId] = useState<string | null>(() => {
+    const ws = readJSON<WorkspaceState>(WORKSPACE_KEY);
+    return ws?.tabs?.find((t) => t.id === ws.activeTab)?.convId ?? null;
+  });
   const [sessions, setSessions] = useState<Conversation[]>([]);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -224,12 +281,12 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
   const [changedFiles, setChangedFiles] = useState<{ path: string; status: string; changedAt: number }[]>([]);
-  const [tabs, setTabs] = useState<SessionTab[]>([]);
-  const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [tabs, setTabs] = useState<SessionTab[]>(() => readJSON<WorkspaceState>(WORKSPACE_KEY)?.tabs ?? []);
+  const [activeTab, setActiveTab] = useState<string | null>(() => readJSON<WorkspaceState>(WORKSPACE_KEY)?.activeTab ?? null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [completedTabs, setCompletedTabs] = useState<Set<string>>(new Set());
 
-  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>(defaults.skills);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [linkDraft, setLinkDraft] = useState({ open: false, url: '', title: '' });
@@ -316,6 +373,16 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       skills: selectedSkills,
     });
   }, [convId, temperature, maxTokens, freeOnly, minContext, selectedSkills, projects]);
+
+  // Remember the last-used composer defaults for future sessions.
+  useEffect(() => {
+    writeJSON(DEFAULTS_KEY, { provider, model, temperature, maxTokens, freeOnly, minContext, skills: selectedSkills });
+  }, [provider, model, temperature, maxTokens, freeOnly, minContext, selectedSkills]);
+
+  // Restore the open tabs + active session across reloads.
+  useEffect(() => {
+    writeJSON(WORKSPACE_KEY, { tabs, activeTab });
+  }, [tabs, activeTab]);
 
   useEffect(() => {
     if (pinnedToBottom) bottomRef.current?.scrollIntoView({ behavior: streaming ? 'auto' : 'smooth' });
@@ -708,7 +775,16 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   useEffect(() => {
     if (tabs.length === 0) {
       newSession();
+    } else if (activeTab) {
+      const tab = tabs.find((t) => t.id === activeTab);
+      if (tab) {
+        // Reopen the previously active session (its convId-loading effect
+        // populates messages + session settings).
+        setConvId(tab.convId);
+        setAttachments([]);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

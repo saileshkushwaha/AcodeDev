@@ -491,9 +491,18 @@ export function persistCatalog() {
       const def = registryProviders.get(id);
       return def && !SEED_PROVIDERS.some((s) => s.id === id);
     });
+    // Seeded gateways (OpenRouter / OpenCode Zen / Kilo) have editable base URLs
+    // (Connections → Keys). Persist overrides so those edits survive reloads.
+    const seedBaseUrls = [...registryProviders.entries()]
+      .filter(([id, def]) => {
+        const seed = SEED_PROVIDERS.find((s) => s.id === id);
+        return seed && seed.baseUrl !== def.baseUrl;
+      })
+      .map(([id, def]) => [id, def.baseUrl] as [string, string]);
     const modelKeys = persistedModelKeys();
     const payload = {
       providers: customProviders,
+      seedBaseUrls,
       models: modelKeys.map((k) => [k, registryModels.get(k) as ModelRecord]),
       syncedAt: Date.now(),
     };
@@ -507,9 +516,18 @@ export function loadCatalog() {
   try {
     const raw = localStorage.getItem(CATALOG_STORE);
     if (!raw) return false;
-    const data = JSON.parse(raw) as { providers?: [string, ProviderDef][]; models?: [string, ModelRecord][] };
+    const data = JSON.parse(raw) as { providers?: [string, ProviderDef][]; seedBaseUrls?: [string, string][]; models?: [string, ModelRecord][] };
     if (Array.isArray(data.providers)) {
       data.providers.forEach(([id, def]) => def && registryProviders.set(id, def));
+    }
+    if (Array.isArray(data.seedBaseUrls)) {
+      data.seedBaseUrls.forEach(([id, baseUrl]) => {
+        if (!baseUrl) return;
+        const def = registryProviders.get(id);
+        if (def && SEED_PROVIDERS.some((s) => s.id === id)) {
+          registryProviders.set(id, { ...def, baseUrl });
+        }
+      });
     }
     if (Array.isArray(data.models)) {
       data.models.forEach(([k, rec]) => {
