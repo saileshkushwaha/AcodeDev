@@ -125,7 +125,7 @@ describe('prompt helpers', () => {
 });
 
 describe('workflow library', () => {
-  const validNodeTypes = ['input', 'llm', 'transform', 'condition', 'prompt_template', 'output'];
+  const validNodeTypes = ['input', 'llm', 'transform', 'condition', 'prompt_template', 'output', 'trigger', 'http', 'fetch', 'kv', 'variables', 'secret', 'parallel', 'loop'];
 
   it('presets are structurally valid: entry + terminal nodes, wired edges, unique ids', () => {
     expect(WORKFLOW_LIBRARY.length).toBeGreaterThanOrEqual(8);
@@ -160,6 +160,45 @@ describe('workflow library', () => {
     // later stages consume the previous stage's output via {{upstream}}
     llmNodes.slice(1).forEach((n) => {
       expect(String(n.config.systemPrompt ?? '')).toContain('{{upstream}}');
+    });
+  });
+
+  it('includes new node types in structural validation', () => {
+    WORKFLOW_LIBRARY.forEach((w) => {
+      w.nodes.forEach((n) => expect(validNodeTypes).toContain(n.type));
+    });
+  });
+
+  it('new presets are structurally valid', () => {
+    const newPresets = [
+      'wf_webhook_alert',
+      'wf_kv_cache_demo',
+      'wf_batch_processor',
+      'wf_secret_llm',
+      'wf_variable_chain',
+    ];
+    newPresets.forEach((id) => {
+      const w = WORKFLOW_LIBRARY.find((x) => x.id === id);
+      expect(w).toBeTruthy();
+      expect(w.id).toBeTruthy();
+      expect(w.name.length).toBeGreaterThan(0);
+      expect(WORKFLOW_CATEGORIES.some((c) => c.id === w.category)).toBe(true);
+      expect(w.nodes.length).toBeGreaterThanOrEqual(2);
+      expect(w.nodes.some((n) => n.type === 'input')).toBe(true);
+      expect(w.nodes.some((n) => n.type === 'output')).toBe(true);
+
+      const ids = w.nodes.map((n) => n.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      w.nodes.forEach((n) => expect(validNodeTypes).toContain(n.type));
+
+      w.edges.forEach((e) => {
+        expect(ids).toContain(e.source);
+        expect(ids).toContain(e.target);
+      });
+      // graph is connected end to end (every node except input has an inbound edge)
+      w.nodes
+        .filter((n) => n.type !== 'input')
+        .forEach((n) => expect(w.edges.some((e) => e.target === n.id)).toBe(true));
     });
   });
 });
