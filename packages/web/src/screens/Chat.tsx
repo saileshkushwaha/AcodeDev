@@ -234,6 +234,8 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [linkDraft, setLinkDraft] = useState({ open: false, url: '', title: '' });
   const [archivedSessions, setArchivedSessions] = useState<Conversation[]>([]);
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [pendingSessionAfterProject, setPendingSessionAfterProject] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -319,9 +321,14 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   };
 
   const newSession = () => {
+    if (!currentProjectId) {
+      setProjectPickerOpen(true);
+      setPendingSessionAfterProject(true);
+      return;
+    }
     const conv = projects.createConversation({
       title: 'New session',
-      projectId: currentProjectId ?? undefined,
+      projectId: currentProjectId,
       provider,
       model,
     });
@@ -339,9 +346,15 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setTabs((prev) => {
       const next = prev.filter((t) => t.id !== tabId);
       if (next.length === 0) {
+        if (!currentProjectId) {
+          setActiveTab(null);
+          setConvId(null);
+          setMessages([]);
+          return [];
+        }
         const conv = projects.createConversation({
           title: 'New session',
-          projectId: currentProjectId ?? undefined,
+          projectId: currentProjectId,
           provider,
           model,
         });
@@ -366,9 +379,15 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setTabs((prev) => {
       const next = prev.filter((t) => t.convId !== id);
       if (next.length === 0) {
+        if (!currentProjectId) {
+          setActiveTab(null);
+          setConvId(null);
+          setMessages([]);
+          return [];
+        }
         const conv = projects.createConversation({
           title: 'New session',
-          projectId: currentProjectId ?? undefined,
+          projectId: currentProjectId,
           provider,
           model,
         });
@@ -769,6 +788,30 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           onUnarchive={unarchiveSession}
           onOpenProject={openProject}
           onCreateProject={createProject}
+        />
+      )}
+
+      {/* Project picker (shown when trying to create session without a project) */}
+      {projectPickerOpen && (
+        <ProjectPicker
+          projects={projects.projectsList()}
+          onSelect={(id) => {
+            setCurrentProjectId(id);
+            setProjectPickerOpen(false);
+            if (pendingSessionAfterProject) {
+              setTimeout(() => newSession(), 0);
+              setPendingSessionAfterProject(false);
+            }
+          }}
+          onCreate={(name) => {
+            const proj = createProject(name);
+            setProjectPickerOpen(false);
+            if (pendingSessionAfterProject) {
+              setTimeout(() => newSession(), 0);
+              setPendingSessionAfterProject(false);
+            }
+          }}
+          onClose={() => { setProjectPickerOpen(false); setPendingSessionAfterProject(false); }}
         />
       )}
 
@@ -1963,6 +2006,97 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ProjectPicker({ projects, onSelect, onCreate, onClose }: {
+  projects: any[];
+  onSelect: (id: string) => void;
+  onCreate: (name: string) => void;
+  onClose: () => void;
+}) {
+  const { tokens } = useTheme();
+  const [search, setSearch] = useState('');
+  const [newName, setNewName] = useState('');
+
+  const filtered = projects.filter((p) =>
+    !search || p.name.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const handleCreate = () => {
+    if (!newName.trim()) return;
+    onCreate(newName.trim());
+    setNewName('');
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
+      <div style={{ position: 'relative', width: '90%', maxWidth: 400, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusLg, boxShadow: tokens.shadowLg, overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space3}px ${tokens.space4}px`, borderBottom: `1px solid ${tokens.border}` }}>
+          <span style={{ fontSize: tokens.fontSizeMd, fontWeight: 600, color: tokens.text }}>Select a project</span>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 16 }}>×</button>
+        </div>
+
+        {/* Search */}
+        <div style={{ padding: `${tokens.space3}px ${tokens.space4}px 0` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}` }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search projects"
+              autoFocus
+              style={{ flex: 1, background: 'transparent', border: 'none', color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none' }}
+            />
+          </div>
+        </div>
+
+        {/* Project list */}
+        <div style={{ padding: tokens.space3, maxHeight: 240, overflowY: 'auto' }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: tokens.space3, textAlign: 'center', color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
+              {projects.length === 0 ? 'No projects yet — create one below.' : 'No matching projects.'}
+            </div>
+          ) : (
+            filtered.map((p: any) => (
+              <div
+                key={p.id}
+                onClick={() => onSelect(p.id)}
+                style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2 }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = tokens.surfaceHover)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <span style={{ width: 24, height: 24, borderRadius: tokens.radiusSm, background: p.color ?? tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
+                  {p.name?.charAt(0).toUpperCase() || 'P'}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{p.name}</div>
+                  {p.description && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</div>}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Create */}
+        <div style={{ padding: `${tokens.space2}px ${tokens.space4}px ${tokens.space4}px`, borderTop: `1px solid ${tokens.border}` }}>
+          <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, marginBottom: tokens.space2 }}>Or create a new project</div>
+          <div style={{ display: 'flex', gap: tokens.space2 }}>
+            <div style={{ flex: 1 }}>
+              <Input
+                value={newName}
+                onChange={setNewName}
+                placeholder="Project name"
+                onEnter={handleCreate}
+              />
+            </div>
+            <Button size="sm" onClick={handleCreate} disabled={!newName.trim()}>Create</Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
