@@ -68,7 +68,17 @@ export function KeysScreen() {
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState('');
   const [proxyUrl, setProxyUrlState] = useState(getProxyBase());
-  const setProxyUrl = (v: string) => { setProxyUrlState(v); setProxyBase(v); };
+  const addCustomConnector = useCallback((label: string, connectorType: string) => {
+    const id = 'custom-' + Date.now();
+    const v = inputs['custom-new'] ?? '';
+    vault.setKey(id, v, { category: 'custom', label, connectorType: connectorType || 'Custom' });
+    setInputs((s) => ({ ...s, ['custom-new']: '' }));
+    setShowCustom(false);
+    refresh();
+    setToast(`Added ${label}`);
+  }, [vault, inputs, refresh]);
+
+  const setProxyUrl = useCallback((v: string) => { setProxyUrlState(v); setProxyBase(v); }, []);
 
   // Seed the GitHub dev connector from the existing GitHub token so both stay in sync.
   useEffect(() => {
@@ -399,15 +409,7 @@ export function KeysScreen() {
       </div>
 
       <GatewayModal open={showGateway} onClose={() => setShowGateway(false)} onSave={(name, baseUrl, key) => addGateway(name, baseUrl, key)} inputs={inputs} setInput={setInput} />
-      <CustomModal open={showCustom} onClose={() => setShowCustom(false)} onSave={(label, connectorType) => {
-        const id = 'custom-' + Date.now();
-        const v = inputs['custom-new'] ?? '';
-        vault.setKey(id, v, { category: 'custom', label, connectorType: connectorType || 'Custom' });
-        setInputs((s) => ({ ...s, ['custom-new']: '' }));
-        setShowCustom(false);
-        refresh();
-        setToast(`Added ${label}`);
-      }} inputs={inputs} setInput={setInput} />
+      <CustomModal open={showCustom} onClose={() => setShowCustom(false)} onSave={addCustomConnector} inputs={inputs} setInput={setInput} />
 
       <Modal open={confirmClear} onClose={() => setConfirmClear(false)} title="Clear all connections?">
         <p style={{ color: tokens.textSecondary, fontSize: tokens.fontSizeSm, lineHeight: 1.6, marginTop: 0 }}>
