@@ -956,6 +956,14 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           </svg>
         </button>
 
+        {/* New session button — always next to sidebar toggle */}
+        <button
+          title="New session"
+          onClick={newSession}
+          style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary, flexShrink: 0, fontSize: 18 }}
+        >+</button>
+
+        {/* Session tabs */}
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab;
           const hasBadge = completedTabs.has(tab.id) && !isActive;
@@ -1002,12 +1010,6 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
             </div>
           );
         })}
-
-        <button
-          title="New session"
-          onClick={newSession}
-          style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary, flexShrink: 0, fontSize: 18 }}
-        >+</button>
       </div>
 
       {/* Sidebar panel */}
@@ -2333,9 +2335,24 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
         )}
         {inactive.length > 0 && (
           <div style={{ marginTop: tokens.space3, marginBottom: tokens.space3 }}>
-            <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, padding: `${tokens.space2}px 0` }}>
-              Inactive (project deleted) <span style={{ color: tokens.danger }}>({inactive.length})</span>
-            </div>
+            <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, padding: `${tokens.space2}px 0` }}>Inactive (project deleted)</div>
+            {inactive.map((s) => {
+              const projectName = getProjectName(s);
+              return (
+                <div
+                  key={s.id}
+                  style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, marginBottom: 2, opacity: 0.5, cursor: 'not-allowed' }}
+                  title="Session is inactive — its project was deleted"
+                >
+                  <span style={{ width: 24, height: 24, borderRadius: '50%', background: tokens.surface, color: tokens.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0, border: `1px solid ${tokens.border}` }}>⛔</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.textMuted }}>{s.title || 'New session'}</div>
+                    {projectName && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{projectName}</div>}
+                  </div>
+                  <span style={{ fontSize: tokens.fontSizeXs, color: tokens.danger, fontWeight: 600 }}>Inactive</span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

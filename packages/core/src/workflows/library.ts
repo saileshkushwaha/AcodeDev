@@ -17,6 +17,8 @@ export type WorkflowCategory =
   | 'planning'
   | 'data-ai'
   | 'ops'
+  | 'automation'
+  | 'integration'
   | 'custom';
 
 export interface WorkflowCategoryMeta {
@@ -33,6 +35,8 @@ export const WORKFLOW_CATEGORIES: WorkflowCategoryMeta[] = [
   { id: 'planning', label: 'Planning & Specs', description: 'PRDs, plans and architecture briefs.', icon: '🎯' },
   { id: 'data-ai', label: 'Data & AI', description: 'RAG, summarization, transforms and evals.', icon: '📊' },
   { id: 'ops', label: 'DevOps & Ops', description: 'Postmortems, runbooks and reliability.', icon: '🚀' },
+  { id: 'automation', label: 'Automation', description: 'Trigger-based and scheduled pipelines.', icon: '⚡' },
+  { id: 'integration', label: 'Integration', description: 'HTTP, web hooks and external services.', icon: '🔗' },
   { id: 'custom', label: 'Custom', description: 'Blank canvas workflows', icon: '✏️' },
 ];
 
@@ -424,6 +428,145 @@ export const WORKFLOW_LIBRARY: WorkflowDefinition[] = [
       ));
       const output = node('output', 'Output', {});
       return { nodes: [input, brief, designer, output], edges: wire([input.id, brief.id, designer.id, output.id]) };
+    },
+  }),
+
+  // ============================================================
+  // NEW NODE TYPES — curated presets demonstrating the extensions
+  // ============================================================
+
+  build({
+    id: 'wf_webhook_alert',
+    name: 'Webhook Alert Monitor',
+    description: 'Triggers on a cron schedule, checks an endpoint, and reports status via variables.',
+    category: 'automation',
+    tags: ['webhook', 'monitor', 'cron', 'automation'],
+    graph: () => {
+      const { node, wire } = graph();
+      const input = node('input', 'Input', { value: '{{input}}' });
+      const scheduler = node('trigger', 'Cron Trigger', {
+        type: 'cron',
+        expression: 'true',
+        interval: 30000,
+      });
+      const check = node('http', 'Check Endpoint', {
+        method: 'GET',
+        url: 'https://httpbin.org/status/200',
+      });
+      const log = node('variables', 'Log Result', {
+        action: 'set',
+        key: 'lastCheck',
+        value: '{{upstream}}',
+      });
+      const output = node('output', 'Output', {});
+      return {
+        nodes: [input, scheduler, check, log, output],
+        edges: wire([input.id, scheduler.id, check.id, log.id, output.id]),
+      };
+    },
+  }),
+
+  build({
+    id: 'wf_kv_cache_demo',
+    name: 'KV Cache Demo',
+    description: 'Uses localStorage KV to cache LLM results, avoiding redundant calls.',
+    category: 'integration',
+    tags: ['kv', 'cache', 'llm', 'optimization'],
+    graph: () => {
+      const { node, wire } = graph();
+      const input = node('input', 'Input', { value: '{{input}}' });
+      const cache = node('kv', 'Check Cache', {
+        action: 'get',
+        key: 'cache:{{input}}',
+      });
+      const useCache = node('condition', 'Use Cached?', {
+        expression: 'upstream.length > 0',
+      });
+      const llm = node('llm', 'LLM Call', llmConfig('You are a helpful assistant. Answer the question concisely.', 0.5));
+      const setCache = node('kv', 'Store Result', {
+        action: 'set',
+        key: 'cache:{{input}}',
+        value: '{{upstream}}',
+      });
+      const output = node('output', 'Output', {});
+      return {
+        nodes: [input, cache, useCache, llm, setCache, output],
+        edges: wire([input.id, cache.id, useCache.id, llm.id, setCache.id, output.id]),
+      };
+    },
+  }),
+
+  build({
+    id: 'wf_batch_processor',
+    name: 'Batch Processor',
+    description: 'Iterates over an array in a loop, processes each item in parallel, and collects results.',
+    category: 'automation',
+    tags: ['loop', 'parallel', 'batch', 'automation'],
+    graph: () => {
+      const { node, wire } = graph();
+      const input = node('input', 'Input', { value: '{{input}}' });
+      const loop = node('loop', 'Process Batch', {
+        array: '[{"id":1,"task":"analyze"},{"id":2,"task":"report"},{"id":3,"task":"summarize"}]',
+        body: 'upstream.task',
+      });
+      const parallel = node('parallel', 'Parallel Tasks', {});
+      const output = node('output', 'Output', {});
+      return {
+        nodes: [input, loop, parallel, output],
+        edges: wire([input.id, loop.id, parallel.id, output.id]),
+      };
+    },
+  }),
+
+  build({
+    id: 'wf_secret_llm',
+    name: 'Secret-Aware LLM',
+    description: 'Looks up a secret and passes it to an LLM as system prompt context.',
+    category: 'development',
+    tags: ['secret', 'llm', 'security', 'credentials'],
+    graph: () => {
+      const { node, wire } = graph();
+      const input = node('input', 'Input', { value: '{{input}}' });
+      const secret = node('secret', 'API Key', {
+        name: 'OPENAI_API_KEY',
+      });
+      const llm = node('llm', 'LLM', llmConfig(
+        'You are a helpful assistant. Use the provided API key securely.: {{secret}}',
+        0.5,
+      ));
+      const output = node('output', 'Output', {});
+      return {
+        nodes: [input, secret, llm, output],
+        edges: wire([input.id, secret.id, llm.id, output.id]),
+      };
+    },
+  }),
+
+  build({
+    id: 'wf_variable_chain',
+    name: 'Variable Chain',
+    description: 'Demonstrates setting and passing variables through a chain of nodes.',
+    category: 'integration',
+    tags: ['variables', 'chain', 'data', 'integration'],
+    graph: () => {
+      const { node, wire } = graph();
+      const input = node('input', 'Input', { value: 'Hello AcodeDev' });
+      const setVar = node('variables', 'Set Prefix', {
+        action: 'set',
+        key: 'greeting',
+        value: '{{upstream}}',
+      });
+      const http = node('http', 'Greeting Service', {
+        method: 'POST',
+        url: 'https://httpbin.org/post',
+        body: '{"message": "{{greeting}}"}',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const output = node('output', 'Output', {});
+      return {
+        nodes: [input, setVar, http, output],
+        edges: wire([input.id, setVar.id, http.id, output.id]),
+      };
     },
   }),
 ];
