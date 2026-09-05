@@ -586,8 +586,19 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
 
   const deleteProject = (id: string) => {
     const wasActive = currentProjectId === id;
+    const remaining = projects.projectsList().filter((p) => p.id !== id);
     projects.deleteProject(id);
-    if (wasActive) setCurrentProjectId(null);
+    if (wasActive) {
+      if (remaining.length > 0) {
+        setCurrentProjectId(remaining[0].id);
+      } else {
+        const newProj = projects.createProject('Default Project');
+        setCurrentProjectId(newProj.id);
+        refreshSessions();
+        refreshArchived();
+        refreshInactive();
+      }
+    }
     refreshProjects();
   };
 
@@ -922,6 +933,22 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         setConvId(tab.convId);
         setAttachments([]);
       }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-create a default project on first mount if none exist, and ensure sidebar is open when no project is selected.
+  useEffect(() => {
+    const existingProjects = projects.projectsList();
+    if (existingProjects.length === 0) {
+      const proj = projects.createProject('Default Project');
+      setCurrentProjectId(proj.id);
+      refreshSessions();
+      refreshArchived();
+      refreshInactive();
+      setSidebarOpen(true);
+    } else if (!currentProjectId) {
+      setSidebarOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2221,30 +2248,18 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
           <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.text }}>Projects</span>
           <button
-            title="Open project"
+            title="Create project"
             onClick={() => setProjectModalOpen(true)}
             style={{ width: 24, height: 24, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-              <line x1="12" y1="11" x2="12" y2="17" />
-              <line x1="9" y1="14" x2="15" y2="14" />
+              <path d="M12 5v14M5 12h14" />
             </svg>
           </button>
         </div>
-        <div
-          onClick={() => { onOpenProject(null); setProjectModalOpen(false); }}
-          style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space1}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2, background: activeProjectId === null ? `${tokens.primary}16` : 'transparent', borderLeft: activeProjectId === null ? `2px solid ${tokens.primary}` : '2px solid transparent' }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = activeProjectId === null ? `${tokens.primary}16` : tokens.surfaceHover)}
-          onMouseLeave={(e) => (e.currentTarget.style.background = activeProjectId === null ? `${tokens.primary}16` : 'transparent')}
-        >
-          <span style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, color: tokens.textSecondary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>✦</span>
-          <span style={{ flex: 1, fontSize: tokens.fontSizeSm, color: tokens.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>All projects</span>
-          {activeProjectId === null && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.primary, fontWeight: 600 }}>Active</span>}
-        </div>
         {allProjects.length === 0 ? (
           <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, padding: `${tokens.space1}px ${tokens.space2}px` }}>
-            No projects yet — open the folder icon to create one.
+            No projects yet — click + to create one.
           </div>
         ) : (
           allProjects.slice(0, 5).map(projectRow)
@@ -2383,15 +2398,6 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
 
             {/* Project list */}
             <div style={{ padding: tokens.space3, maxHeight: 280, overflowY: 'auto' }}>
-              <div
-                onClick={() => { onOpenProject(null); setProjectModalOpen(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2, background: activeProjectId === null ? `${tokens.primary}16` : 'transparent' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = activeProjectId === null ? `${tokens.primary}16` : tokens.surfaceHover)}
-                onMouseLeave={(e) => (e.currentTarget.style.background = activeProjectId === null ? `${tokens.primary}16` : 'transparent')}
-              >
-                <span style={{ width: 24, height: 24, borderRadius: tokens.radiusSm, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, color: tokens.textSecondary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>✦</span>
-                <span style={{ fontSize: tokens.fontSizeSm, color: tokens.text }}>All projects</span>
-              </div>
               {filteredProjects.length === 0 ? (
                 <div style={{ padding: tokens.space3, textAlign: 'center', color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>No projects yet</div>
               ) : (
@@ -2463,17 +2469,6 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onEdit, onDel
 
   return (
     <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 80, minWidth: 260, maxHeight: 360, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
-      {/* All projects */}
-      <div
-        onClick={() => { onSelect(null); onClose(); }}
-        style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2, background: activeId === null ? `${tokens.primary}16` : 'transparent', borderLeft: activeId === null ? `2px solid ${tokens.primary}` : '2px solid transparent' }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = activeId === null ? `${tokens.primary}16` : tokens.surfaceHover)}
-        onMouseLeave={(e) => (e.currentTarget.style.background = activeId === null ? `${tokens.primary}16` : 'transparent')}
-      >
-        <span style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, color: tokens.textSecondary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>✦</span>
-        <span style={{ flex: 1, fontSize: tokens.fontSizeSm, color: tokens.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>All projects</span>
-      </div>
-
       {projects.length === 0 ? (
         <div style={{ padding: `${tokens.space2}px ${tokens.space3}px`, fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center' }}>No projects yet</div>
       ) : (
