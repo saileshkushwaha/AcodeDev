@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import React from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Badge, useTheme, Spinner } from '@acode/ui';
@@ -9,28 +10,45 @@ export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: 
   const { projects, prompts, chat, githubToken, hasKey, syncCatalog, catalogVersion } = useApp();
   void catalogVersion;
 
-  const providers = listProviders();
-  const gateways = providers.filter((p) => p.gateway);
   const [syncing, setSyncing] = useState(false);
 
-  const sync = async () => {
+  const sync = useCallback(async () => {
     setSyncing(true);
     await syncCatalog();
     setSyncing(false);
-  };
+  }, [syncCatalog]);
 
-  const models = listModels();
-  const freeCount = getFreeModels().length;
-  const projectsList = projects.projectsList();
+  const providers = useMemo(() => listProviders(), []);
+  const gateways = useMemo(() => providers.filter((p) => p.gateway), [providers]);
+  const allModels = useMemo(() => listModels(), []);
+  const freeModels = useMemo(() => getFreeModels(), []);
+  const freeCount = freeModels.length;
+  const projectsList = useMemo(() => projects.projectsList(), [projects]);
   const promptCount = prompts.all().length;
-  const connectedProviders = providers.filter((p) => hasKey(p.id as ProviderId) || p.id === 'local').length;
+  const connectedProviders = useMemo(() => providers.filter((p) => hasKey(p.id as ProviderId) || p.id === 'local').length, [providers, hasKey]);
 
-  const stats = [
+  const providerModelCounts = useMemo(() => {
+    const counts = new Map<string, { all: number; free: number }>();
+    for (const p of providers) {
+      const models = allModels.filter((m) => m.provider === p.id);
+      counts.set(p.id, { all: models.length, free: models.filter((m) => m.isFree).length });
+    }
+    return counts;
+  }, [providers, allModels]);
+
+  const unconfiguredProviders = useMemo(() =>
+    providers.filter((p) => !hasKey(p.id as ProviderId) && p.id !== 'local')
+      .sort((a, b) => Number(b.gateway) - Number(a.gateway))
+      .slice(0, 6),
+    [providers, hasKey]
+  );
+
+  const stats = useMemo(() => [
     { label: 'Projects', value: projectsList.length, dest: 'dashboard' },
     { label: 'Prompts', value: promptCount, dest: 'prompts' },
     { label: 'Free models', value: freeCount, dest: 'chat' },
     { label: 'Providers connected', value: connectedProviders, dest: 'keys' },
-  ];
+  ], [projectsList.length, promptCount, freeCount, connectedProviders]);
 
   return (
     <Page>
@@ -84,8 +102,7 @@ export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: 
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2, maxHeight: 320, overflowY: 'auto' }}>
               {providers.map((p) => {
-                const all = listModels(p.id).length;
-                const free = listModels(p.id).filter((m) => m.isFree).length;
+                const counts = providerModelCounts.get(p.id) ?? { all: 0, free: 0 };
                 const connected = hasKey(p.id as ProviderId) || (p.id === 'local');
                 return (
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: tokens.space3 }}>
@@ -94,7 +111,7 @@ export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: 
                       {p.gateway && <Badge style={{ marginLeft: 6, fontSize: 10 }} color={tokens.info}>gateway</Badge>}
                     </div>
                     <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, whiteSpace: 'nowrap' }}>
-                      {free} free · {all} models
+                      {counts.free} free · {counts.all} models
                     </span>
                     <DotConnected connected={connected} />
                   </div>
@@ -114,7 +131,7 @@ export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: 
             </div>
           </Card>
           <Card title="Providers to configure" subtitle="Connect keys to unlock free models">
-            {providers.filter((p) => !hasKey(p.id as ProviderId) && p.id !== 'local').sort((a, b) => Number(b.gateway) - Number(a.gateway)).slice(0, 6).map((p) => (
+            {unconfiguredProviders.map((p) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space1}px 0` }}>
                 <span style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary }}>
                   {p.name}
@@ -130,7 +147,7 @@ export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: 
   );
 }
 
-function DotConnected({ connected }: { connected: boolean }) {
+const DotConnected = React.memo(function DotConnected({ connected }: { connected: boolean }) {
   const { tokens } = useTheme();
   return <span style={{ width: 8, height: 8, borderRadius: '50%', background: connected ? tokens.success : tokens.textMuted, display: 'inline-block' }} />;
-}
+});
