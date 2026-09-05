@@ -291,18 +291,18 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const { catalogVersion } = useApp();
   void catalogVersion;
 
-  const allProviders = listProviders();
-  const gatewayProviders = allProviders.filter((p) => p.gateway);
-  const directProviders = allProviders.filter((p) => !p.gateway && p.id !== 'local');
-  const minCtx = Number(minContext) || 0;
-  const providerModels = listModels(provider).filter((m) => (freeOnly ? m.isFree : true)).filter((m) => (minCtx > 0 ? m.contextWindow >= minCtx : true));
+  const allProviders = useMemo(() => listProviders(), []);
+  const gatewayProviders = useMemo(() => allProviders.filter((p) => p.gateway), [allProviders]);
+  const directProviders = useMemo(() => allProviders.filter((p) => !p.gateway && p.id !== 'local'), [allProviders]);
+  const minCtx = useMemo(() => Number(minContext) || 0, [minContext]);
+  const providerModels = useMemo(() => listModels(provider).filter((m) => (freeOnly ? m.isFree : true)).filter((m) => (minCtx > 0 ? m.contextWindow >= minCtx : true)), [provider, freeOnly, minCtx]);
 
-  const provDef = allProviders.find((p) => p.id === provider);
-  const needsKey = !!(provDef && provDef.needsKey !== false && provDef.kind !== 'local');
-  const connected = !needsKey || hasKey(provider);
+  const provDef = useMemo(() => allProviders.find((p) => p.id === provider), [allProviders, provider]);
+  const needsKey = useMemo(() => !!(provDef && provDef.needsKey !== false && provDef.kind !== 'local'), [provDef]);
+  const connected = useMemo(() => !needsKey || hasKey(provider), [needsKey, provider, hasKey]);
 
-  const modelDef = providerModels.find((m) => m.id === model);
-  const capabilities: ModelCapability[] = modelDef?.capabilities ?? inferCapabilities(modelDef?.tags);
+  const modelDef = useMemo(() => providerModels.find((m) => m.id === model), [providerModels, model]);
+  const capabilities: ModelCapability[] = useMemo(() => modelDef?.capabilities ?? inferCapabilities(modelDef?.tags) ?? [], [modelDef]);
 
   const currentSettings = useMemo(() => ({
     temperature,
@@ -1305,7 +1305,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   );
 }
 
-function AttachmentChip({ attachment: a, onRemove }: { attachment: ChatAttachment; onRemove: () => void }) {
+const AttachmentChip = React.memo(function AttachmentChip({ attachment: a, onRemove }: { attachment: ChatAttachment; onRemove: () => void }) {
   const { tokens } = useTheme();
   const meta = a.kind === 'folder' ? `${a.children?.length ?? 0} files` : a.kind === 'image' ? 'image' : a.kind === 'link' ? 'link' : a.size ? `${(a.size / 1024).toFixed(0)}kb` : a.kind;
   return (
@@ -1316,7 +1316,7 @@ function AttachmentChip({ attachment: a, onRemove }: { attachment: ChatAttachmen
       <button onClick={onRemove} title="Remove" style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>
     </div>
   );
-}
+});
 
 function AddMenu({ onFile, onFolder, onLink, onClose }: { onFile: () => void; onFolder: () => void; onLink: () => void; onClose: () => void }) {
   const { tokens } = useTheme();
@@ -2013,7 +2013,7 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
   );
 });
 
-function ShellBlock({ command, output }: { command: string; output: string }) {
+const ShellBlock = React.memo(function ShellBlock({ command, output }: { command: string; output: string }) {
   const { tokens } = useTheme();
   const [open, setOpen] = useState(false);
   return (
@@ -2033,7 +2033,7 @@ function ShellBlock({ command, output }: { command: string; output: string }) {
       )}
     </div>
   );
-}
+});
 
 const STATUS_LABEL: Record<string, string> = { added: 'Added', modified: 'Modified', deleted: 'Deleted', renamed: 'Renamed', untracked: 'Untracked' };
 const STATUS_COLOR: Record<string, string> = { added: '#2f9e44', modified: '#e6a23c', deleted: '#e03131' };
