@@ -2529,6 +2529,87 @@ function ProjectPicker({ projects, onSelect, onCreate, onClose }: {
   );
 }
 
+function EditProjectModal({ project, onClose, onSave }: {
+  project: ProjectDoc;
+  onClose: () => void;
+  onSave: (id: string, updates: { name?: string; description?: string; color?: string; gitRepo?: string }) => void;
+}) {
+  const { tokens } = useTheme();
+  const [name, setName] = useState(project.name);
+  const [description, setDescription] = useState(project.description ?? '');
+  const [color, setColor] = useState(project.color ?? tokens.primary);
+  const [gitRepo, setGitRepo] = useState(project.gitRepo ?? '');
+
+  const handleSave = () => {
+    if (!name.trim()) return;
+    onSave(project.id, {
+      name: name.trim(),
+      description: description.trim() || undefined,
+      color,
+      gitRepo: gitRepo.trim() || undefined,
+    });
+    onClose();
+  };
+
+  const swatches = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6'];
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Edit project" onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: tokens.space4 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 420, maxWidth: '90vw', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusLg, boxShadow: tokens.shadowLg, padding: tokens.space5 }}>
+        <h3 style={{ margin: `0 0 ${tokens.space4}px`, fontSize: tokens.fontSizeLg, fontWeight: 700, color: tokens.text }}>Edit project</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>Name</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose(); }}
+              autoFocus
+              style={{ width: '100%', background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: `6px ${tokens.space2}px`, color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>Description</label>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional"
+              style={{ width: '100%', background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: `6px ${tokens.space2}px`, color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>Git repo</label>
+            <input
+              value={gitRepo}
+              onChange={(e) => setGitRepo(e.target.value)}
+              placeholder="owner/name or full URL"
+              style={{ width: '100%', background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: `6px ${tokens.space2}px`, color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontMono, outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>Color</label>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {swatches.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setColor(c)}
+                  aria-label={`Color ${c}`}
+                  aria-pressed={color === c}
+                  style={{ width: 24, height: 24, borderRadius: '50%', background: c, border: color === c ? `2px solid ${tokens.text}` : `2px solid transparent`, cursor: 'pointer', padding: 0 }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.space2, marginTop: tokens.space5 }}>
+          <button onClick={onClose} style={{ padding: `6px ${tokens.space3}px`, borderRadius: tokens.radiusSm, border: `1px solid ${tokens.border}`, background: 'transparent', color: tokens.text, fontSize: tokens.fontSizeSm, cursor: 'pointer', fontFamily: tokens.fontSans }}>Cancel</button>
+          <button onClick={handleSave} disabled={!name.trim()} style={{ padding: `6px ${tokens.space3}px`, borderRadius: tokens.radiusSm, border: 'none', background: name.trim() ? tokens.primary : tokens.surfaceHover, color: name.trim() ? '#fff' : tokens.textMuted, fontSize: tokens.fontSizeSm, fontWeight: 600, cursor: name.trim() ? 'pointer' : 'not-allowed', fontFamily: tokens.fontSans }}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getProjectName }: {
   label: string;
   sessions: Conversation[];
