@@ -979,10 +979,6 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         <button
           title="Projects & Sessions"
           onClick={() => {
-            if (!currentProjectId) {
-              setSidebarOpen(true);
-              return;
-            }
             if (sidebarOpen) {
               setSidebarOpen(false);
               if (tabs.length > 0) selectTab(tabs[0].id);
