@@ -28,7 +28,7 @@ function createMemoryStorage(): Storage {
 }
 
 describe('feature flags', () => {
-  beforeEach(() => vi.stubGlobal('localStorage', createMemoryStorage()));
+  beforeEach(() => { vi.stubGlobal('localStorage', createMemoryStorage()); });
   afterEach(() => { vi.unstubAllGlobals(); setStorageErrorHandler(null); });
 
   it('defaults resolve from the registry without any override', () => {
