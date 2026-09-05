@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTheme, Card, Button, Input, Badge, TabBar, Spinner, Select, Modal, Chip } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubContent, GitHubCommit, GitHubBranch, GitHubRelease, GitHubPullRequest, GitHubIssue, GitHubWorkflowRun } from '@acode/core';
@@ -40,14 +40,14 @@ export function RepositoriesView({ initialRepo, onInitialRepoConsumed }: { initi
     void load();
   }, [load]);
 
-  const q = query.trim().toLowerCase();
-  const filtered = repos.filter((r) => {
+  const q = useMemo(() => query.trim().toLowerCase(), [query]);
+  const filtered = useMemo(() => repos.filter((r) => {
     if (filter === 'private' && !r.private) return false;
     if (filter === 'public' && r.private) return false;
     if (filter === 'archived' && !r.archived) return false;
     if (q && !(r.name.toLowerCase().includes(q) || (r.description ?? '').toLowerCase().includes(q) || r.fullName.toLowerCase().includes(q))) return false;
     return true;
-  });
+  }), [repos, filter, q]);
 
   const refresh = () => void load();
 

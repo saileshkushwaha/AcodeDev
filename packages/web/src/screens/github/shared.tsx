@@ -50,10 +50,11 @@ export function renderMd(md: string | null | undefined, tokens?: { codeBg?: stri
   if (!md) return null;
   const codeBg = tokens?.codeBg ?? 'var(--code-bg)';
   const primary = tokens?.primary ?? 'var(--primary)';
-  // We intentionally return rendered content with basic transforms
   const lines = md.split('\n');
   const out: React.ReactNode[] = [];
   let list: string[] | null = null;
+  let inCodeBlock = false;
+  let codeLines: string[] = [];
 
   const flushList = () => {
     if (list) {
@@ -68,10 +69,31 @@ export function renderMd(md: string | null | undefined, tokens?: { codeBg?: stri
     }
   };
 
+  const flushCodeBlock = () => {
+    if (codeLines.length > 0) {
+      out.push(<pre key={`pre${out.length}`} style={{ background: codeBg, padding: 12, borderRadius: 8, overflow: 'auto', fontSize: 12, margin: '6px 0' }}>{codeLines.join('\n')}</pre>);
+      codeLines = [];
+    }
+    inCodeBlock = false;
+  };
+
   for (const line of lines) {
+    if (inCodeBlock) {
+      if (line.trim() === '```') {
+        flushCodeBlock();
+      } else {
+        codeLines.push(line);
+      }
+      continue;
+    }
     const t = line.trim();
     if (t === '') {
       flushList();
+      continue;
+    }
+    if (t.startsWith('```')) {
+      flushList();
+      inCodeBlock = true;
       continue;
     }
     const hd = t.match(/^(#{1,4})\s+(.*)/);
@@ -92,15 +114,11 @@ export function renderMd(md: string | null | undefined, tokens?: { codeBg?: stri
       list.push(t.replace(/^\d+\.\s/, ''));
       continue;
     }
-    if (t.startsWith('```')) {
-      flushList();
-      out.push(<pre key={`pre${out.length}`} style={{ background: codeBg, padding: 12, borderRadius: 8, overflow: 'auto', fontSize: 12, margin: '6px 0' }}>{md}</pre>);
-      return out.length ? out : null;
-    }
     flushList();
     out.push(<div key={`p${out.length}`} style={{ margin: '4px 0', lineHeight: 1.6 }}>{inline(t, codeBg, primary)}</div>);
   }
   flushList();
+  flushCodeBlock();
   return out.length ? out : null;
 }
 

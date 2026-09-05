@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import React from 'react';
 import { useTheme, Card, Button, Input, Badge, Spinner, Select } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubPullRequest, GitHubComment } from '@acode/core';
@@ -41,12 +42,12 @@ export function PullRequestsView() {
     void load();
   }, [load]);
 
-  const filtered = prs.filter((pr) => {
+  const filtered = useMemo(() => prs.filter((pr) => {
     if (stateFilter !== 'all' && pr.state !== stateFilter) return false;
     if (repoFilter !== 'all' && pr.repository !== repoFilter) return false;
     if (sourceFilter === 'mine' && pr.user !== myLogin) return false;
     return true;
-  });
+  }), [prs, stateFilter, repoFilter, sourceFilter, myLogin]);
 
   return (
     <div style={{ padding: 'clamp(12px, 2.5vw, 28px)', maxWidth: 1200, margin: '0 auto' }}>
@@ -99,7 +100,7 @@ interface PrWithRepo extends GitHubPullRequest {
   repositoryFullName?: string;
 }
 
-function PrRow({ pr, onClick, last }: { pr: PrWithRepo; onClick: () => void; last: boolean }) {
+const PrRow = React.memo(function PrRow({ pr, onClick, last }: { pr: PrWithRepo; onClick: () => void; last: boolean }) {
   const { tokens } = useTheme();
   const color = pr.merged ? tokens.info : pr.state === 'closed' ? tokens.danger : tokens.success;
   const icon = pr.merged ? '✔' : pr.state === 'closed' ? '✖' : pr.draft ? '○' : '⟳';
@@ -124,7 +125,7 @@ function PrRow({ pr, onClick, last }: { pr: PrWithRepo; onClick: () => void; las
       {pr.draft && <Badge color={tokens.textMuted}>draft</Badge>}
     </button>
   );
-}
+});
 
 function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => void; onChanged: () => void }) {
   const { tokens } = useTheme();

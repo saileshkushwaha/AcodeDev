@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import React from 'react';
 import { useTheme, Card, Button, Input, Badge, Spinner, Select, Modal } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubIssue, GitHubComment } from '@acode/core';
@@ -45,11 +46,11 @@ export function IssuesView() {
     void load();
   }, [load]);
 
-  const filtered = issues.filter((i) => {
+  const filtered = useMemo(() => issues.filter((i) => {
     if (stateFilter !== 'all' && i.state !== stateFilter) return false;
     if (repoFilter !== 'all' && i.repository !== repoFilter) return false;
     return true;
-  });
+  }), [issues, stateFilter, repoFilter]);
 
   return (
     <div style={{ padding: 'clamp(12px, 2.5vw, 28px)', maxWidth: 1200, margin: '0 auto' }}>
@@ -90,7 +91,7 @@ export function IssuesView() {
   );
 }
 
-function IssueRow({ issue, onClick, last }: { issue: IssueWithRepo; onClick: () => void; last: boolean }) {
+const IssueRow = React.memo(function IssueRow({ issue, onClick, last }: { issue: IssueWithRepo; onClick: () => void; last: boolean }) {
   const { tokens } = useTheme();
   const color = issue.state === 'open' ? tokens.success : tokens.danger;
   return (
@@ -111,7 +112,7 @@ function IssueRow({ issue, onClick, last }: { issue: IssueWithRepo; onClick: () 
       </div>
     </button>
   );
-}
+});
 
 function IssueDetail({ issue, onBack, onChanged }: { issue: IssueWithRepo; onBack: () => void; onChanged: () => void }) {
   const { tokens } = useTheme();

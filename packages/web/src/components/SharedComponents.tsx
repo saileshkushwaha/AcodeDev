@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { Button, Input, Spinner, Modal, useTheme } from '@acode/ui';
 
 /** Centered empty state message. */
@@ -45,7 +45,7 @@ export function BackButton({ onClick, label = 'Back' }: { onClick: () => void; l
 }
 
 /** Filter chip pills for selecting a repo. */
-export function FilterChips({ repos, value, onChange }: { repos: { fullName: string; name: string }[]; value: string; onChange: (v: string) => void }) {
+export const FilterChips = memo(function FilterChips({ repos, value, onChange }: { repos: { fullName: string; name: string }[]; value: string; onChange: (v: string) => void }) {
   const { tokens } = useTheme();
   return (
     <div style={{ display: 'flex', gap: tokens.space1, flexWrap: 'wrap', marginBottom: tokens.space3 }}>
@@ -60,7 +60,7 @@ export function FilterChips({ repos, value, onChange }: { repos: { fullName: str
       ))}
     </div>
   );
-}
+});
 
 /** Standardized modal form layout. */
 export function FormModal({ title, onClose, onSubmit, submitting, children }: {
