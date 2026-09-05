@@ -1232,6 +1232,30 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         </div>
       </div>
       )}
+
+      {editProjectId && (() => {
+        const p = projects.getProject(editProjectId);
+        return p ? <EditProjectModal project={p} onClose={() => setEditProjectId(null)} onSave={editProject} /> : null;
+      })()}
+
+      {deleteProjectId && (() => {
+        const p = projects.getProject(deleteProjectId);
+        if (!p) return null;
+        return (
+          <div role="dialog" aria-modal="true" aria-label="Delete project" onClick={() => setDeleteProjectId(null)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: tokens.space4 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: 400, maxWidth: '90vw', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusLg, boxShadow: tokens.shadowLg, padding: tokens.space5 }}>
+              <h3 style={{ margin: `0 0 ${tokens.space2}px`, fontSize: tokens.fontSizeLg, fontWeight: 700, color: tokens.text }}>Delete project?</h3>
+              <p style={{ margin: `0 0 ${tokens.space4}px`, fontSize: tokens.fontSizeSm, color: tokens.textMuted, lineHeight: 1.5 }}>
+                <b style={{ color: tokens.text }}>{p.name}</b> will be removed. Conversations will be kept but unlinked from this project.
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.space2 }}>
+                <button onClick={() => setDeleteProjectId(null)} style={{ padding: `6px ${tokens.space3}px`, borderRadius: tokens.radiusSm, border: `1px solid ${tokens.border}`, background: 'transparent', color: tokens.text, fontSize: tokens.fontSizeSm, cursor: 'pointer', fontFamily: tokens.fontSans }}>Cancel</button>
+                <button onClick={() => { deleteProject(p.id); setDeleteProjectId(null); }} style={{ padding: `6px ${tokens.space3}px`, borderRadius: tokens.radiusSm, border: 'none', background: tokens.danger, color: '#fff', fontSize: tokens.fontSizeSm, fontWeight: 600, cursor: 'pointer', fontFamily: tokens.fontSans }}>Delete</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
