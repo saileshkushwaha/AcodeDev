@@ -18,10 +18,9 @@ import { readJSON, writeJSON } from '../storage';
  */
 
 export const FLAGS_STORAGE_KEY = 'acode.flags.v1';
-export type StorageErrorHandler = (key: string, error: unknown) => void;
-let errorHandler: StorageErrorHandler | null = null;
-export function setStorageErrorHandler(handler: StorageErrorHandler | null): void { errorHandler = handler; }
 
+
+export type FlagKind = 'boolean' | 'string' | 'number' | 'enum';
 
 export interface BaseFlagSpec {
   key: string;

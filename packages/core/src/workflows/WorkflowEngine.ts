@@ -81,7 +81,7 @@ export class WorkflowEngine {
         const incoming = def.edges.filter((e) => e.target === node.id);
         for (const edge of incoming) {
           const src = def.nodes.find((n) => n.id === edge.source);
-          if (src && !visited.has(src.id)) yield* execute(src);
+          if (src && !visited.has(src.id)) await execute(src);
         }
         const upstreamText = incoming.map((e) => outputsOf(e.source)).join('\n\n');
         if (incoming.length === 0) {
@@ -95,7 +95,7 @@ export class WorkflowEngine {
       // Forward to successors so the whole chain executes top → bottom
       for (const edge of def.edges.filter((e) => e.source === node.id)) {
         const next = def.nodes.find((n) => n.id === edge.target);
-        if (next) yield* execute(next);
+        if (next) await execute(next);
       }
     };
 
@@ -174,128 +174,6 @@ export class WorkflowEngine {
     return { results: [...results.values()], final: results.get(finalNode.id)?.output ?? '' };
   }
 
-  /**
-   * Execute a workflow definition and stream results as they complete.
-   * Returns an async generator yielding { results, final } tuples,
-   * allowing the UI to display output live as each step finishes.
-   */
-  async *runStreaming(def: WorkflowDefinition, input: Record<string, unknown>): AsyncGenerator<{ results: WorkflowRunResult[]; final: string }, void, unknown> {
-    const results = new Map<string, WorkflowRunResult>();
-    const visited = new Set<string>();
-
-    const entry = def.nodes.find((n) => n.type === 'input') ?? def.nodes[0];
-    if (!entry) throw new Error('Workflow has no entry node');
-
-    const outputsOf = (nodeId?: string) => (nodeId ? results.get(nodeId)?.output ?? '' : '');
-
-    const execute = async (node: WorkflowNode) => {
-      if (visited.has(node.id)) return;
-      visited.add(node.id);
-      const start = Date.now();
-
-      if (node.type === 'input') {
-        results.set(node.id, { nodeId: node.id, nodeType: node.type, output: this.render(String(node.config.value ?? ''), def.variables, input, outputsOf), durationMs: 0, status: 'ok' });
-      } else {
-        const incoming = def.edges.filter((e) => e.target === node.id);
-        for (const edge of incoming) {
-          const src = def.nodes.find((n) => n.id === edge.source);
-          if (src && !visited.has(src.id)) await execute(src);
-        }
-        const upstreamText = incoming.map((e) => outputsOf(e.source)).join('\n\n');
-        if (incoming.length === 0) {
-          await runNode(node, this.render(String(node.config.prompt ?? ''), def.variables, input, outputsOf));
-        } else {
-          await runNode(node, upstreamText);
-        }
-      }
-
-      // Yield after each node completes so the UI can update live
-      yield { results: [...results.values()], final: '' };
-      // Forward to successors so the whole chain executes top → bottom
-      for (const edge of def.edges.filter((e) => e.source === node.id)) {
-        const next = def.nodes.find((n) => n.id === edge.target);
-        if (next) await execute(next);
-      }
-    }
-
-    const runNode = async (node: WorkflowNode, upstreamText: string) => {
-      const start = Date.now();
-      let output = '';
-      let status: 'ok' | 'error' = 'ok';
-      let tokens: { prompt: number; completion: number } | undefined;
-      let cost = 0;
-      try {
-        switch (node.type) {
-          case 'llm': {
-            const provider = (node.config.provider as ProviderId) ?? def.provider ?? 'openrouter';
-            const model = String(node.config.model ?? def.model ?? 'nvidia/nemotron-3.5-lightning:free');
-            const system = String(node.config.systemPrompt ?? 'You are a helpful AI assistant.');
-            const user = upstreamText || 'Please respond.';
-            const messages: ChatMessage[] = [
-              { role: 'system', content: system },
-              { role: 'user', content: user },
-            ];
-            const req: ChatRequest = {
-              provider,
-              model,
-              messages,
-              params: {
-                temperature: node.config.temperature !== undefined ? Number(node.config.temperature) : undefined,
-                maxTokens: node.config.maxTokens !== undefined ? Number(node.config.maxTokens) : undefined,
-              },
-            };
-            // Use streaming chat to get live output
-            for await (const chunk of this.engine.stream(req)) {
-              if (chunk.delta) output += chunk.delta;
-              if (chunk.content) output = chunk.content;
-              if (chunk.usage) {
-                tokens = { prompt: chunk.usage.promptTokens ?? 0, completion: chunk.usage.completionTokens ?? 0 };
-              }
-            }
-            const modelInfo = listModels(provider).find((m) => m.id === model);
-            const pin = modelInfo?.costPer1kIn ?? 0;
-            const pout = modelInfo?.costPer1kOut ?? 0;
-            if (pin > 0 || pout > 0) cost = (tokens?.prompt ?? 0) / 1000 * pin + (tokens?.completion ?? 0) / 1000 * pout;
-            break;
-          }
-          case 'transform': {
-            const op = String(node.config.operation ?? 'uppercase');
-            const val = upstreamText;
-            if (op === 'uppercase') output = val.toUpperCase();
-            else if (op === 'lowercase') output = val.toLowerCase();
-            else if (op === 'trim') output = val.trim();
-            else if (op === 'truncate') output = val.slice(0, Number(node.config.length ?? 500));
-            else output = val;
-            break;
-          }
-          case 'prompt_template': {
-            output = this.render(String(node.config.template ?? ''), def.variables, input, () => upstreamText);
-            break;
-          }
-          case 'condition': {
-            const expression = String(node.config.expression ?? 'true');
-            output = String(this.evalCondition(expression, { input, upstream: upstreamText }));
-            break;
-          }
-          case 'output':
-          default:
-            output = upstreamText;
-        }
-      } catch (e) {
-        status = 'error';
-        output = `⚠️ Step "${node.name || node.id}" failed: ${e instanceof Error ? e.message : String(e)}`;
-      }
-      results.set(node.id, { nodeId: node.id, nodeType: node.type, output, durationMs: Date.now() - start, status, tokens, cost });
-    };
-
-    for await (const _ of execute(entry)) {}
-    const finalNode = def.nodes.find((n) => n.type === 'output')
-    try {
-      return JSON.parse(s);
-    } catch {
-      return s;
-    }
-  }
 
   private evalCondition(expr: string, ctx: Record<string, unknown>): boolean {
     const body = expr
@@ -321,5 +199,12 @@ export class WorkflowEngine {
       if (name in variables) return variables[name];
       return '';
     });
+  }
+  private tryParse(s: string) {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return s;
+    }
   }
 }
