@@ -8,6 +8,14 @@ export interface ChangedFile {
   changedAt: number;
 }
 
+export interface ConversationSettings {
+  temperature?: number;
+  maxTokens?: number;
+  freeOnly?: boolean;
+  minContext?: string;
+  skills?: string[];
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -16,6 +24,8 @@ export interface Conversation {
   model: string;
   messages: ChatMessage[];
   changedFiles: ChangedFile[];
+  /** Composer/model settings snapshot so history restores the exact session UX. */
+  settings?: ConversationSettings;
   /** Hidden from the active session list (toggle via archive/unarchive). */
   archived?: boolean;
   createdAt: number;
@@ -116,7 +126,7 @@ export class ProjectStore {
     return this.projects.get(id);
   }
 
-  createConversation(input: { title: string; projectId?: string; provider: ProviderId; model: string }): Conversation {
+  createConversation(input: { title: string; projectId?: string; provider: ProviderId; model: string; settings?: ConversationSettings }): Conversation {
     const id = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     const conv: Conversation = {
       id,
@@ -126,6 +136,7 @@ export class ProjectStore {
       model: input.model,
       messages: [],
       changedFiles: [],
+      settings: input.settings,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -143,6 +154,15 @@ export class ProjectStore {
 
   getConversation(id: string): Conversation | undefined {
     return this.conversations.get(id);
+  }
+
+  /** Snapshot composer settings onto a conversation so reopening restores them. */
+  updateSettings(convId: string, settings: ConversationSettings): void {
+    const c = this.conversations.get(convId);
+    if (c && settings) {
+      c.settings = { ...c.settings, ...settings };
+      this.persist();
+    }
   }
 
   appendMessage(convId: string, msg: ChatMessage) {

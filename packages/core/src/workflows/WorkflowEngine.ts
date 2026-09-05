@@ -36,11 +36,15 @@ export interface WorkflowDefinition {
   updatedAt: number;
 }
 
+export type WorkflowRunNodeType = WorkflowNodeType | 'error';
+
 export interface WorkflowRunResult {
   nodeId: string;
-  nodeType: WorkflowNodeType;
+  nodeType: WorkflowRunNodeType;
   output: string;
   durationMs: number;
+  /** 'ok' when the step produced output normally; 'error' when it threw. */
+  status?: 'ok' | 'error';
 }
 
 /**
@@ -65,78 +69,85 @@ export class WorkflowEngine {
       const start = Date.now();
 
       if (node.type === 'input') {
-        results.set(node.id, { nodeId: node.id, nodeType: node.type, output: this.render(String(node.config.value ?? ''), def.variables, input, outputsOf), durationMs: 0 });
-        for (const edge of def.edges.filter((e) => e.source === node.id)) {
-          const next = def.nodes.find((n) => n.id === edge.target);
-          if (next) await execute(next);
+        results.set(node.id, { nodeId: node.id, nodeType: node.type, output: this.render(String(node.config.value ?? ''), def.variables, input, outputsOf), durationMs: 0, status: 'ok' });
+      } else {
+        // Gather upstream inputs first (depth-first)
+        const incoming = def.edges.filter((e) => e.target === node.id);
+        for (const edge of incoming) {
+          const src = def.nodes.find((n) => n.id === edge.source);
+          if (src && !visited.has(src.id)) await execute(src);
         }
-        return;
+        const upstreamText = incoming.map((e) => outputsOf(e.source)).join('\n\n');
+        if (incoming.length === 0) {
+          // Entry-adjacent leaf: execute with raw input
+          await runNode(node, this.render(String(node.config.prompt ?? ''), def.variables, input, outputsOf));
+        } else {
+          await runNode(node, upstreamText);
+        }
       }
 
-      // Gather upstream inputs
-      const incoming = def.edges.filter((e) => e.target === node.id);
-      if (incoming.length === 0) {
-        // Entry-adjacent leaf: execute with raw input
-        await runNode(node, this.render(String(node.config.prompt ?? ''), def.variables, input, outputsOf));
-        return;
+      // Forward to successors so the whole chain executes top → bottom
+      for (const edge of def.edges.filter((e) => e.source === node.id)) {
+        const next = def.nodes.find((n) => n.id === edge.target);
+        if (next) await execute(next);
       }
-      for (const edge of incoming) {
-        const src = def.nodes.find((n) => n.id === edge.source);
-        if (src && !visited.has(src.id)) await execute(src);
-      }
-      const upstreamText = incoming.map((e) => outputsOf(e.source)).join('\n\n');
-      await runNode(node, upstreamText);
     };
 
     const runNode = async (node: WorkflowNode, upstreamText: string) => {
       const start = Date.now();
       let output = '';
-      switch (node.type) {
-        case 'llm': {
-          const provider = (node.config.provider as ProviderId) ?? def.provider ?? 'openrouter';
-          const model = String(node.config.model ?? def.model ?? 'nvidia/nemotron-3.5-lightning:free');
-          const messages: ChatMessage[] = [
-            { role: 'system', content: String(node.config.systemPrompt ?? 'You are a helpful AI assistant.') },
-            { role: 'user', content: upstreamText || 'Please respond.' },
-          ];
-          const req: ChatRequest = {
-            provider,
-            model,
-            messages,
-            params: {
-              temperature: node.config.temperature !== undefined ? Number(node.config.temperature) : undefined,
-              maxTokens: node.config.maxTokens !== undefined ? Number(node.config.maxTokens) : undefined,
-            },
-          };
-          const res = await this.engine.chat(req);
-          output = res.content;
-          break;
+      let status: 'ok' | 'error' = 'ok';
+      try {
+        switch (node.type) {
+          case 'llm': {
+            const provider = (node.config.provider as ProviderId) ?? def.provider ?? 'openrouter';
+            const model = String(node.config.model ?? def.model ?? 'nvidia/nemotron-3.5-lightning:free');
+            const messages: ChatMessage[] = [
+              { role: 'system', content: String(node.config.systemPrompt ?? 'You are a helpful AI assistant.') },
+              { role: 'user', content: upstreamText || 'Please respond.' },
+            ];
+            const req: ChatRequest = {
+              provider,
+              model,
+              messages,
+              params: {
+                temperature: node.config.temperature !== undefined ? Number(node.config.temperature) : undefined,
+                maxTokens: node.config.maxTokens !== undefined ? Number(node.config.maxTokens) : undefined,
+              },
+            };
+            const res = await this.engine.chat(req);
+            output = res.content;
+            break;
+          }
+          case 'transform': {
+            const op = String(node.config.operation ?? 'uppercase');
+            const val = upstreamText;
+            if (op === 'uppercase') output = val.toUpperCase();
+            else if (op === 'lowercase') output = val.toLowerCase();
+            else if (op === 'trim') output = val.trim();
+            else if (op === 'truncate') output = val.slice(0, Number(node.config.length ?? 500));
+            else if (op === 'json') output = JSON.stringify(this.tryParse(val), null, 2);
+            else output = val;
+            break;
+          }
+          case 'prompt_template': {
+            output = this.render(String(node.config.template ?? ''), def.variables, input, () => upstreamText);
+            break;
+          }
+          case 'condition': {
+            const expression = String(node.config.expression ?? 'true');
+            output = String(this.evalCondition(expression, { input, upstream: upstreamText }));
+            break;
+          }
+          case 'output':
+          default:
+            output = upstreamText;
         }
-        case 'transform': {
-          const op = String(node.config.operation ?? 'uppercase');
-          const val = upstreamText;
-          if (op === 'uppercase') output = val.toUpperCase();
-          else if (op === 'lowercase') output = val.toLowerCase();
-          else if (op === 'trim') output = val.trim();
-          else if (op === 'truncate') output = val.slice(0, Number(node.config.length ?? 500));
-          else if (op === 'json') output = JSON.stringify(this.tryParse(val), null, 2);
-          else output = val;
-          break;
-        }
-        case 'prompt_template': {
-          output = this.render(String(node.config.template ?? ''), def.variables, input, () => upstreamText);
-          break;
-        }
-        case 'condition': {
-          const expression = String(node.config.expression ?? 'true');
-          output = String(this.evalCondition(expression, { input, upstream: upstreamText }));
-          break;
-        }
-        case 'output':
-        default:
-          output = upstreamText;
+      } catch (e) {
+        status = 'error';
+        output = `⚠️ Step "${node.name || node.id}" failed: ${e instanceof Error ? e.message : String(e)}`;
       }
-      results.set(node.id, { nodeId: node.id, nodeType: node.type, output, durationMs: Date.now() - start });
+      results.set(node.id, { nodeId: node.id, nodeType: node.type, output, durationMs: Date.now() - start, status });
     };
 
     await execute(entry);

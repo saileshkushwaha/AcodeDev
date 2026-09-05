@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, type ReactNode } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Input, Select, Badge, Modal, useTheme, Spinner } from '@acode/ui';
@@ -6,6 +6,7 @@ import {
   type WorkflowDefinition,
   type WorkflowNode,
   type WorkflowEdge,
+  type WorkflowRunResult,
   WORKFLOW_CATEGORIES,
   listModels,
   listProviders,
@@ -16,6 +17,44 @@ let nodeSeq = 0;
 
 const ACTIVE_KEY = 'acode.workflows.active';
 const BLANK_ID = 'wf_blank';
+const LAST_RUN_KEY = 'acode.workflows.lastRun.v1';
+
+interface RunRecord {
+  at: number;
+  results: WorkflowRunResult[];
+  final: string;
+  input: string;
+}
+
+function loadLastRun(id: string): RunRecord | null {
+  try {
+    const raw = localStorage.getItem(LAST_RUN_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, RunRecord>;
+    return map[id] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLastRun(id: string, rec: RunRecord) {
+  try {
+    const raw = localStorage.getItem(LAST_RUN_KEY);
+    const map = raw ? (JSON.parse(raw) as Record<string, RunRecord>) : {};
+    map[id] = rec;
+    localStorage.setItem(LAST_RUN_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore */
+  }
+}
+
+function timeAgo(ts: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
 
 function readActiveId(): string {
   try {
@@ -39,6 +78,17 @@ function parseOwnerRepo(input: string): { owner: string; repo: string } | null {
   return { owner: m[1], repo: m[2] };
 }
 
+/** Wire nodes into a strict top-to-bottom chain: each output feeds the next input. */
+function rewireNodes(ns: WorkflowNode[]): WorkflowEdge[] {
+  return ns.slice(0, -1).map((n, i) => ({
+    id: `e${i + 1}`,
+    source: n.id,
+    target: ns[i + 1].id,
+    sourceHandle: 'out',
+    targetHandle: 'in',
+  }));
+}
+
 export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const { tokens } = useTheme();
   const { workflows, workflowStore, github, githubToken, hasKey } = useApp();
@@ -51,7 +101,10 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   const [defName, setDefName] = useState('');
   const [defDesc, setDefDesc] = useState('');
   const [input, setInput] = useState('The team shipped a new feature for the dashboard. It includes streaming responses and a new provider selector. Users can now switch between multiple LLM providers from one screen.');
-  const [result, setResult] = useState<{ results: { nodeId: string; nodeType: string; output: string; durationMs?: number }[]; final: string } | null>(null);
+  const [result, setResult] = useState<WorkflowRunResult[] | null>(null);
+  const [final, setFinal] = useState('');
+  const [runAt, setRunAt] = useState<number | null>(null);
+  const [lastRun, setLastRun] = useState<RunRecord | null>(null);
   const [running, setRunning] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [ghModal, setGhModal] = useState(false);
@@ -80,6 +133,9 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
       setActiveId(def.id);
       persistActiveId(def.id);
       setResult(null);
+      setFinal('');
+      setRunAt(null);
+      setLastRun(loadLastRun(def.id));
     },
     [workflowStore],
   );
@@ -135,9 +191,58 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     if (type === 'transform') config = { operation: 'uppercase' };
     if (type === 'condition') config = { expression: 'upstream.length > 100' };
     if (type === 'prompt_template') config = { template: 'Hello, {{input}}' };
-    setNodes((ns) => [...ns, { id, type, name: `${type} ${seq}`, config, position: { x: ns.length, y: 0 } }]);
-    const last = nodes[nodes.length - 1];
-    if (last) setEdges((e) => [...e, { id: `e_${id}`, source: last.id, target: id, sourceHandle: 'out', targetHandle: 'in' }]);
+    const next = [...nodes, { id, type, name: `${type} ${seq}`, config, position: { x: nodes.length, y: 0 } }];
+    setNodes(next);
+    setEdges(rewireNodes(next));
+    setSelectedNodeId(id);
+  };
+
+  const moveNode = (id: string, dir: 'up' | 'down') => {
+    const idx = nodes.findIndex((n) => n.id === id);
+    if (idx < 0) return;
+    const node = nodes[idx];
+    if (node.type === 'input' || node.type === 'output') return;
+    const target = dir === 'up' ? idx - 1 : idx + 1;
+    if (target < 0 || target >= nodes.length) return;
+    const slot = nodes[target];
+    if (slot.type === 'input' || slot.type === 'output') return;
+    const next = nodes.map((n) => ({ ...n, position: { ...n.position } }));
+    [next[idx], next[target]] = [next[target], next[idx]];
+    next.forEach((n, i) => (n.position.x = i));
+    setNodes(next);
+    setEdges(rewireNodes(next));
+    setSelectedNodeId(id);
+  };
+
+  const deleteNode = (id: string) => {
+    const idx = nodes.findIndex((n) => n.id === id);
+    if (idx < 0) return;
+    if (!confirm(`Delete node "${nodes[idx].name}"? Connected links will be rewired.`)) return;
+    const next = nodes.filter((n) => n.id !== id).map((n) => ({ ...n, position: { ...n.position } }));
+    next.forEach((n, i) => (n.position.x = i));
+    setNodes(next);
+    setEdges(rewireNodes(next));
+    if (selectedNodeId === id) setSelectedNodeId(null);
+  };
+
+  const duplicateNode = (id: string) => {
+    const idx = nodes.findIndex((n) => n.id === id);
+    if (idx < 0) return;
+    const src = nodes[idx];
+    if (src.type === 'input' || src.type === 'output') return;
+    const dup: WorkflowNode = {
+      ...src,
+      id: `${src.id}_copy_${++nodeSeq}`,
+      name: `${src.name} (copy)`,
+      config: JSON.parse(JSON.stringify(src.config) ?? '{}'),
+      position: { x: idx + 1, y: 0 },
+    };
+    const next = nodes.map((n) => ({ ...n, position: { ...n.position } }));
+    next.splice(idx + 1, 0, dup);
+    next.forEach((n, i) => (n.position.x = i));
+    setNodes(next);
+    setEdges(rewireNodes(next));
+    setSelectedNodeId(dup.id);
   };
 
   const updateNode = (id: string, patch: Partial<WorkflowNode>) => {
@@ -154,11 +259,14 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     const pdef = listProviders().find((x) => x.id === p);
     const needsKey = !!(pdef && pdef.needsKey !== false && pdef.kind !== 'local');
     if (needsKey && !hasKey(p)) {
-      setResult({ results: [{ nodeId: 'err', nodeType: 'error', output: `⚠️ ${pdef?.name ?? p} isn't connected. Add an API key (Connections → Keys) or pick a key-free provider such as OpenCode Zen or Kilo Gateway.` }], final: '' });
+      setResult([{ nodeId: 'err', nodeType: 'error', output: `⚠️ ${pdef?.name ?? p} isn't connected. Add an API key (Connections → Keys) or pick a key-free provider such as OpenCode Zen or Kilo Gateway.`, durationMs: 0, status: 'error' }]);
+      setFinal('');
+      setRunAt(Date.now());
       return;
     }
     setRunning(true);
     setResult(null);
+    setFinal('');
     const def: WorkflowDefinition = {
       id: activeId && !activeIsBuiltin ? activeId : 'wf_run',
       name: defName.trim() || 'Untitled workflow',
@@ -172,9 +280,20 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     };
     try {
       const r = await workflows.run(def, { input });
-      setResult(r);
+      setResult(r.results);
+      setFinal(r.final);
+      const at = Date.now();
+      setRunAt(at);
+      const rec: RunRecord = { at, results: r.results, final: r.final, input };
+      setLastRun(rec);
+      saveLastRun(activeId, rec);
     } catch (e) {
-      setResult({ results: [{ nodeId: 'err', nodeType: 'error', output: e instanceof Error ? e.message : String(e) }], final: '' });
+      const at = Date.now();
+      const rec: RunRecord = { at, results: [{ nodeId: 'err', nodeType: 'error', output: e instanceof Error ? e.message : String(e), durationMs: 0, status: 'error' }], final: '', input };
+      setResult(rec.results);
+      setRunAt(at);
+      setLastRun(rec);
+      saveLastRun(activeId, rec);
     } finally {
       setRunning(false);
     }
@@ -195,10 +314,19 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     value: d.id,
   }));
 
+  const runResults = result ?? lastRun?.results ?? null;
+  const lastRunAt = runAt ?? lastRun?.at ?? null;
+  const runFinal = result ? (final || lastRun?.final || '') : (lastRun?.final ?? '');
+  const runResultByNode = useMemo(() => {
+    const m = new Map<string, WorkflowRunResult>();
+    runResults?.forEach((r) => m.set(r.nodeId, r));
+    return m;
+  }, [runResults]);
+
   const copyResult = async () => {
-    if (!result) return;
+    if (!runFinal) return;
     try {
-      await navigator.clipboard?.writeText(result.final);
+      await navigator.clipboard?.writeText(runFinal);
     } catch {
       /* ignore */
     }
@@ -218,7 +346,7 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   };
 
   const sendToGitHub = async () => {
-    if (!result) return;
+    if (!runFinal) return;
     if (!githubToken) {
       setGhMsg('No GitHub token set. Add one in Connections → Keys first.');
       return;
@@ -238,7 +366,7 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
         '',
         '---',
         '',
-        result.final,
+        runFinal,
       ].join('\n');
       const labels = ghLabels.split(',').map((l) => l.trim()).filter(Boolean);
       await github().createIssue(parsed.owner, parsed.repo, { title: ghTitle.trim(), body, labels });
@@ -261,6 +389,7 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
             <Button variant="secondary" onClick={() => addNode('llm')}>+ LLM</Button>
             <Button variant="secondary" onClick={() => addNode('transform')}>+ Transform</Button>
             <Button variant="secondary" onClick={() => addNode('condition')}>+ Condition</Button>
+            <Button variant="secondary" onClick={() => addNode('prompt_template')}>+ Template</Button>
             <Button onClick={runWorkflow} disabled={running}>{running ? <Spinner size={16} /> : '▶ Run'}</Button>
           </>
         }
@@ -288,41 +417,93 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
-        <Card title="Pipeline" subtitle="Click a node to edit it on the right">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {nodes.map((n, i) => (
-              <div key={n.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {i > 0 && <div style={{ width: 20, textAlign: 'center', color: tokens.textMuted }}>↓</div>}
-                <div
-                  onClick={() => setSelectedNodeId(n.id)}
-                  style={{
-                    flex: 1,
-                    padding: 12,
-                    border: `1px solid ${selectedNodeId === n.id ? tokens.primary : n.type === 'llm' ? tokens.primary : tokens.borderStrong}`,
-                    borderRadius: 12,
-                    background: selectedNodeId === n.id ? `${tokens.primary}0d` : tokens.surfaceHover,
-                    cursor: 'pointer',
-                    boxShadow: selectedNodeId === n.id ? `0 0 0 2px ${tokens.primary}33` : tokens.shadowSm,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Badge color={n.type === 'llm' ? tokens.primary : undefined}>{nodeLabel[n.type]}</Badge>
-                    <span style={{ fontSize: 12, color: tokens.textMuted }}>#{i + 1}</span>
+        <Card
+          title="Pipeline"
+          subtitle="Runs top → bottom · ▲▼ reorders, ⧉ duplicates, ✕ deletes · click to edit"
+          actions={
+            <span style={{ fontSize: 12, color: tokens.textMuted, display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+              <span>{nodes.length} nodes · {edges.length} links</span>
+              {lastRunAt && (
+                <Badge color={[...(runResults ?? [])].some((r) => r.status === 'error') ? tokens.danger : tokens.success}>
+                  last run {timeAgo(lastRunAt)}
+                </Badge>
+              )}
+            </span>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {nodes.map((n, i) => {
+              const isTerminal = n.type === 'input' || n.type === 'output';
+              const canUp = !isTerminal && i > 0 && nodes[i - 1].type !== 'input';
+              const canDown = !isTerminal && i < nodes.length - 1 && nodes[i + 1].type !== 'output';
+              const stepResult = runResultByNode.get(n.id);
+              return (
+                <div key={n.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <RowBtn onClick={() => moveNode(n.id, 'up')} disabled={!canUp} title="Move up">▲</RowBtn>
+                    <RowBtn onClick={() => moveNode(n.id, 'down')} disabled={!canDown} title="Move down">▼</RowBtn>
                   </div>
-                  <div style={{ marginTop: 6, fontSize: 13, fontWeight: 600 }}>{n.name}</div>
+                  {i > 0 && <div style={{ width: 14, textAlign: 'center', color: tokens.textMuted }}>↓</div>}
+                  <div
+                    onClick={() => setSelectedNodeId(n.id)}
+                    style={{
+                      flex: 1,
+                      padding: 12,
+                      border: `1px solid ${selectedNodeId === n.id ? tokens.primary : n.type === 'llm' ? tokens.primary : tokens.borderStrong}`,
+                      borderRadius: 12,
+                      background: selectedNodeId === n.id ? `${tokens.primary}0d` : tokens.surfaceHover,
+                      cursor: 'pointer',
+                      boxShadow: selectedNodeId === n.id ? `0 0 0 2px ${tokens.primary}33` : tokens.shadowSm,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Badge color={n.type === 'llm' ? tokens.primary : undefined}>{nodeLabel[n.type]}</Badge>
+                      {stepResult ? (
+                        <Badge color={stepResult.status === 'error' ? tokens.danger : tokens.success}>
+                          {stepResult.status === 'error' ? '✕ failed' : `✓ ${stepResult.durationMs}ms`}
+                        </Badge>
+                      ) : (
+                        <span style={{ fontSize: 12, color: tokens.textMuted }}>#{i + 1} · step {i + 1}</span>
+                      )}
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 13, fontWeight: 600 }}>{n.name}</div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <RowBtn onClick={() => duplicateNode(n.id)} disabled={isTerminal} title={isTerminal ? 'Entry/exit nodes can’t be duplicated' : 'Duplicate'}>⧉</RowBtn>
+                    <RowBtn onClick={() => deleteNode(n.id)} danger title="Delete">✕</RowBtn>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
 
-        <Card title="Selected node" subtitle="Configure the selected node">
+        <Card
+          title="Selected node"
+          subtitle={
+            (() => {
+              const f = nodes.find((n) => n.id === selectedNodeId) ?? nodes.find((n) => n.type === 'llm') ?? nodes[0];
+              return f ? `Step ${nodes.findIndex((x) => x.id === f.id) + 1} · ${f.type} · “${f.name}”` : 'Configure the selected node';
+            })()
+          }
+        >
           {(() => {
             const focus =
               nodes.find((n) => n.id === selectedNodeId) ??
               nodes.find((n) => n.type === 'llm') ??
               nodes[0];
-            return focus ? <NodeConfig node={focus} updateConfig={updateConfig} rename={(id, name) => updateNode(id, { name })} /> : <div style={{ color: tokens.textMuted, fontSize: 13 }}>Add nodes to get started.</div>;
+            return focus ? (
+              <NodeConfig
+                node={focus}
+                step={nodes.findIndex((x) => x.id === focus.id) + 1}
+                updateConfig={updateConfig}
+                rename={(id, name) => updateNode(id, { name })}
+                runResult={runResultByNode.get(focus.id) ?? null}
+                runAt={lastRunAt}
+              />
+            ) : (
+              <div style={{ color: tokens.textMuted, fontSize: 13 }}>Add nodes to get started.</div>
+            );
           })()}
         </Card>
       </div>
@@ -333,11 +514,23 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
         </Card>
       </div>
 
-      {result && (
+      {runResults && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-          {result.results.map((r) => (
-            <Card key={r.nodeId} title={`${r.nodeId} · ${r.nodeType} (${r.durationMs}ms)`}>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, fontFamily: tokens.fontMono, color: tokens.text }}>{r.output}</pre>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: tokens.text }}>Run output</span>
+            {lastRunAt && (
+              <span style={{ fontSize: 12, color: tokens.textMuted }}>
+                {runAt ? `ran ${timeAgo(lastRunAt)}` : `previous run · ${timeAgo(lastRunAt)}`}
+              </span>
+            )}
+          </div>
+          {runResults.map((r) => (
+            <Card
+              key={r.nodeId}
+              title={`${r.nodeId} · ${r.nodeType} (${r.durationMs}ms)`}
+              actions={r.status ? <Badge color={r.status === 'error' ? tokens.danger : tokens.success}>{r.status === 'error' ? '✕ failed' : '✓ ok'}</Badge> : undefined}
+            >
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, fontFamily: tokens.fontMono, color: r.status === 'error' ? tokens.danger : tokens.text }}>{r.output}</pre>
             </Card>
           ))}
           <Card
@@ -345,13 +538,13 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
             style={{ border: `1px solid ${tokens.success}` }}
             actions={
               <>
-                <Button size="sm" variant="ghost" onClick={() => void copyResult()} disabled={!result.final}>⧉ Copy</Button>
-                <Button size="sm" variant="ghost" onClick={() => void sendToChat()} disabled={!result.final}>Send to chat</Button>
-                <Button size="sm" variant="secondary" onClick={openSendGitHub} disabled={!result.final}>Create GitHub issue</Button>
+                <Button size="sm" variant="ghost" onClick={() => void copyResult()} disabled={!runFinal}>⧉ Copy</Button>
+                <Button size="sm" variant="ghost" onClick={() => void sendToChat()} disabled={!runFinal}>Send to chat</Button>
+                <Button size="sm" variant="secondary" onClick={openSendGitHub} disabled={!runFinal}>Create GitHub issue</Button>
               </>
             }
           >
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, fontFamily: tokens.fontMono, color: tokens.success }}>{result.final}</pre>
+            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, fontFamily: tokens.fontMono, color: tokens.success }}>{runFinal || '(no output)'}</pre>
           </Card>
         </div>
       )}
@@ -379,17 +572,74 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   );
 }
 
-function NodeConfig({ node, updateConfig, rename }: { node: WorkflowNode; updateConfig: (id: string, key: string, value: unknown) => void; rename: (id: string, name: string) => void }) {
+function RowBtn({ onClick, disabled, title, danger, children }: { onClick: () => void; disabled?: boolean; title?: string; danger?: boolean; children: ReactNode }) {
+  const { tokens } = useTheme();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      style={{
+        width: 26,
+        height: 22,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: `1px solid ${disabled ? tokens.border : tokens.borderStrong}`,
+        borderRadius: tokens.radiusSm,
+        background: tokens.surface,
+        color: danger ? tokens.danger : disabled ? tokens.textMuted : tokens.textSecondary,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+        fontFamily: tokens.fontSans,
+        fontSize: 12,
+        lineHeight: 1,
+        padding: 0,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function NodeConfig({ node, step, updateConfig, rename, runResult, runAt }: {
+  node: WorkflowNode;
+  step: number;
+  updateConfig: (id: string, key: string, value: unknown) => void;
+  rename: (id: string, name: string) => void;
+  runResult: WorkflowRunResult | null;
+  runAt: number | null;
+}) {
   const { tokens } = useTheme();
   const nodeProvider = (node.config.provider as ProviderId) || 'openrouter';
   const allProviders = listProviders();
   const providerOptions = allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id }));
   const models = listModels(nodeProvider).map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id }));
+  const st = runResult?.status ?? 'ok';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Badge color={tokens.primary}>{node.type}</Badge>
+        <Badge color={tokens.primary}>Step {step} · {node.type}</Badge>
         <Input label="Name" value={node.name} onChange={(v) => rename(node.id, v)} />
+      </div>
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: tokens.textMuted, marginBottom: 4 }}>
+          Last run{runAt ? ` · ${new Date(runAt).toLocaleTimeString()} (${timeAgo(runAt)})` : ''}
+        </div>
+        {runResult ? (
+          <div style={{ border: `1px solid ${st === 'error' ? tokens.danger : tokens.success}`, borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: tokens.surfaceHover, borderBottom: `1px solid ${tokens.border}` }}>
+              <span style={{ color: st === 'error' ? tokens.danger : tokens.success, fontWeight: 700, fontSize: 12 }}>{st === 'error' ? '✕ Failed' : '✓ OK'}</span>
+              <span style={{ color: tokens.textMuted, fontSize: 12 }}>{runResult.durationMs}ms</span>
+            </div>
+            <pre style={{ margin: 0, padding: 10, whiteSpace: 'pre-wrap', fontSize: 13, fontFamily: tokens.fontMono, color: st === 'error' ? tokens.danger : tokens.text, maxHeight: 180, overflow: 'auto' }}>
+              {runResult.output || '(empty)'}
+            </pre>
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: tokens.textMuted, padding: '8px 0' }}>No run yet — press ▶ Run to see this step's output here.</div>
+        )}
       </div>
       {node.type === 'llm' && (
         <>

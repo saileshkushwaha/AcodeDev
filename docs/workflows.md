@@ -120,10 +120,25 @@ API: `all()`, `get(id)`, `save(def)`, `remove(id)`, `resetBuiltin(id)`,
 - **Picker** — choose a preset or a saved workflow; the last active workflow is
   remembered (`acode.workflows.active`).
 - **Edit** — rename/describe the workflow, click a node to configure it, add
-  LLM / Transform / Condition nodes.
+  LLM / Transform / Condition / Template nodes.
+- **Node CRUD** — each node row has controls:
+  - `▲▼` move the node up/down — the pipeline always runs top → bottom, so the
+    node order *is* the execution order (edges are rewired automatically)
+  - `⧉` duplicate a node (config copied; entry/exit nodes excluded)
+  - `✕` delete a node (connected links are rewired)
 - **Save / Reset / Delete** — save edits (custom copies for presets), reset a
   preset, or delete a custom workflow.
 - **Run** — executes the DAG; per-node results and `final` output are shown.
+  The engine records each step's output, duration and `ok`/`error` status, so a
+  failed LLM call is attributed to the exact step that broke instead of failing
+  the whole run.
+- **Trace the last run** — each node row shows its status (`✓ 1234ms` or
+  `✕ failed`) and the pipeline header shows a success/error badge with how long
+  ago the run happened. Selecting a node shows a **Last run** panel with that
+  step's output, duration and status. The last run is persisted per workflow
+  (`acode.workflows.lastRun.v1`), so after a failed run you can tweak a prompt,
+  reload the workflow (or the page) and still inspect what the previous run
+  produced step-by-step.
 - **Result actions** — copy the final output, send it to Chat, or create a
   GitHub issue with the output as the body (requires a token in
   Connections → Keys).

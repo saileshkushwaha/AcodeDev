@@ -256,6 +256,14 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const modelDef = providerModels.find((m) => m.id === model);
   const capabilities: ModelCapability[] = modelDef?.capabilities ?? inferCapabilities(modelDef?.tags);
 
+  const currentSettings = useMemo(() => ({
+    temperature,
+    maxTokens,
+    freeOnly,
+    minContext: minContext && minContext !== '0' ? minContext : undefined,
+    skills: selectedSkills,
+  }), [temperature, maxTokens, freeOnly, minContext, selectedSkills]);
+
   const refreshSessions = useCallback(() => {
     setSessions(projects.conversationsFor(currentProjectId ?? undefined));
   }, [projects, currentProjectId]);
@@ -289,7 +297,25 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setMessages(conv ? conv.messages.filter((m) => m.role !== 'system') : []);
     setProvider(conv?.provider ?? 'openrouter');
     setModel(conv?.model ?? providerModels[0]?.id ?? '');
+    setTemperature(conv?.settings?.temperature ?? 0.7);
+    setMaxTokens(conv?.settings?.maxTokens ?? 2048);
+    setFreeOnly(conv?.settings?.freeOnly ?? true);
+    setMinContext(conv?.settings?.minContext ?? '0');
+    setSelectedSkills(conv?.settings?.skills ?? []);
   }, [convId]);
+
+  // Persist composer settings to the active conversation so history restores
+  // exactly how the session was configured (offline-first, no LLM round-trip).
+  useEffect(() => {
+    if (!convId) return;
+    projects.updateSettings(convId, {
+      temperature,
+      maxTokens,
+      freeOnly,
+      minContext: minContext && minContext !== '0' ? minContext : undefined,
+      skills: selectedSkills,
+    });
+  }, [convId, temperature, maxTokens, freeOnly, minContext, selectedSkills, projects]);
 
   useEffect(() => {
     if (pinnedToBottom) bottomRef.current?.scrollIntoView({ behavior: streaming ? 'auto' : 'smooth' });
@@ -331,6 +357,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       projectId: currentProjectId,
       provider,
       model,
+      settings: currentSettings,
     });
     refreshSessions();
     const tabId = `tab-${Date.now()}`;
@@ -428,6 +455,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           projectId: currentProjectId ?? undefined,
           provider,
           model,
+          settings: currentSettings,
         });
         refreshSessions();
         const newTab: SessionTab = { id: `tab-${Date.now()}`, title: conv.title, convId: conv.id };
@@ -569,6 +597,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         projectId: currentProjectId ?? undefined,
         provider,
         model,
+        settings: currentSettings,
       });
       cid = conv.id;
       setConvId(cid);
@@ -1264,13 +1293,24 @@ function Composer(props: {
             <button
               onClick={() => setProjectOpen((o) => !o)}
               title="Project"
-              style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, maxWidth: 160, overflow: 'hidden' }}
+              style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, maxWidth: 200, overflow: 'hidden' }}
             >
-              <span style={{ width: 18, height: 18, borderRadius: tokens.radiusSm, background: props.projects.find((p: any) => p.id === props.currentProjectId)?.color ?? tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 9, flexShrink: 0 }}>
-                {(props.projects.find((p: any) => p.id === props.currentProjectId)?.name?.charAt(0) || 'A').toUpperCase()}
-              </span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{props.projects.find((p: any) => p.id === props.currentProjectId)?.name ?? 'All'}</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6" /></svg>
+              {(() => {
+                const active = props.projects.find((p: any) => p.id === props.currentProjectId);
+                const repoName = active?.gitRepo?.split('/').pop()?.replace(/\.git$/, '') ?? null;
+                return (
+                  <>
+                    <span style={{ width: 18, height: 18, borderRadius: tokens.radiusSm, background: active?.color ?? tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 9, flexShrink: 0 }}>
+                      {(active?.name?.charAt(0) || 'A').toUpperCase()}
+                    </span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                      <span style={{ fontWeight: 500 }}>{active?.name ?? 'All'}</span>
+                      {repoName && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>/ {repoName}</span>}
+                    </span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6" /></svg>
+                  </>
+                );
+              })()}
             </button>
             {projectOpen && (
               <ProjectDropdown
@@ -2022,22 +2062,26 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onClose }: {
   projects: any[];
   activeId: string | null;
   onSelect: (id: string | null) => void;
-  onCreate: (name: string) => void;
+  onCreate: (name: string, gitRepo?: string) => void;
   onClose: () => void;
 }) {
   const { tokens } = useTheme();
   const [newName, setNewName] = useState('');
+  const [newGitRepo, setNewGitRepo] = useState('');
   const [creating, setCreating] = useState(false);
 
   const handleCreate = () => {
     if (!newName.trim()) return;
-    onCreate(newName.trim());
+    onCreate(newName.trim(), newGitRepo.trim() || undefined);
     setNewName('');
+    setNewGitRepo('');
     setCreating(false);
   };
 
+  const repoName = (p: any) => p.gitRepo?.split('/').pop()?.replace(/\.git$/, '') ?? null;
+
   return (
-    <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 80, minWidth: 220, maxHeight: 320, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
+    <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 80, minWidth: 260, maxHeight: 360, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
       {/* All projects */}
       <div
         onClick={() => { onSelect(null); onClose(); }}
@@ -2052,39 +2096,52 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onClose }: {
       {projects.length === 0 ? (
         <div style={{ padding: `${tokens.space2}px ${tokens.space3}px`, fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center' }}>No projects yet</div>
       ) : (
-        projects.map((p: any) => (
-          <div
-            key={p.id}
-            onClick={() => { onSelect(p.id); onClose(); }}
-            style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2, background: activeId === p.id ? `${tokens.primary}16` : 'transparent', borderLeft: activeId === p.id ? `2px solid ${tokens.primary}` : '2px solid transparent' }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = activeId === p.id ? `${tokens.primary}16` : tokens.surfaceHover)}
-            onMouseLeave={(e) => (e.currentTarget.style.background = activeId === p.id ? `${tokens.primary}16` : 'transparent')}
-          >
-            <span style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, background: p.color ?? tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>
-              {p.name?.charAt(0).toUpperCase() || 'P'}
-            </span>
-            <span style={{ flex: 1, fontSize: tokens.fontSizeSm, color: tokens.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-          </div>
-        ))
+        projects.map((p: any) => {
+          const rn = repoName(p);
+          return (
+            <div
+              key={p.id}
+              onClick={() => { onSelect(p.id); onClose(); }}
+              style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2, background: activeId === p.id ? `${tokens.primary}16` : 'transparent', borderLeft: activeId === p.id ? `2px solid ${tokens.primary}` : '2px solid transparent' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = activeId === p.id ? `${tokens.primary}16` : tokens.surfaceHover)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = activeId === p.id ? `${tokens.primary}16` : 'transparent')}
+            >
+              <span style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, background: p.color ?? tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>
+                {p.name?.charAt(0).toUpperCase() || 'P'}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: tokens.fontSizeSm, fontWeight: activeId === p.id ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{p.name}</div>
+                {rn && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rn}</div>}
+              </div>
+            </div>
+          );
+        })
       )}
 
       {/* Create new */}
       <div style={{ borderTop: `1px solid ${tokens.border}`, marginTop: tokens.space1, paddingTop: tokens.space1 }}>
         {creating ? (
-          <div style={{ display: 'flex', gap: tokens.space1, padding: `0 ${tokens.space1}px` }}>
+          <div style={{ padding: `0 ${tokens.space1}px`, display: 'flex', flexDirection: 'column', gap: tokens.space1 }}>
             <input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setCreating(false); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && newName.trim()) handleCreate(); if (e.key === 'Escape') setCreating(false); }}
               placeholder="Project name"
               autoFocus
-              style={{ flex: 1, background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: `4px ${tokens.space2}px`, color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none' }}
+              style={{ width: '100%', background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: `4px ${tokens.space2}px`, color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none', boxSizing: 'border-box' }}
+            />
+            <input
+              value={newGitRepo}
+              onChange={(e) => setNewGitRepo(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && newName.trim()) handleCreate(); if (e.key === 'Escape') setCreating(false); }}
+              placeholder="Git repo (optional)"
+              style={{ width: '100%', background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: `4px ${tokens.space2}px`, color: tokens.text, fontSize: tokens.fontSizeXs, fontFamily: tokens.fontSans, outline: 'none', boxSizing: 'border-box' }}
             />
             <button
               onClick={handleCreate}
               disabled={!newName.trim()}
-              style={{ padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusSm, border: 'none', background: newName.trim() ? tokens.primary : tokens.surfaceHover, color: newName.trim() ? '#fff' : tokens.textMuted, fontSize: tokens.fontSizeXs, cursor: newName.trim() ? 'pointer' : 'not-allowed', fontFamily: tokens.fontSans, fontWeight: 600 }}
-            >Create</button>
+              style={{ width: '100%', padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusSm, border: 'none', background: newName.trim() ? tokens.primary : tokens.surfaceHover, color: newName.trim() ? '#fff' : tokens.textMuted, fontSize: tokens.fontSizeXs, cursor: newName.trim() ? 'pointer' : 'not-allowed', fontFamily: tokens.fontSans, fontWeight: 600 }}
+            >Create project</button>
           </div>
         ) : (
           <div

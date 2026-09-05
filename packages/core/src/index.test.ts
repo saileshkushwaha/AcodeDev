@@ -5,6 +5,7 @@ import {
   PromptRegistry,
   RAGMemory,
   WorkflowRegistry,
+  WorkflowEngine,
   WORKFLOW_LIBRARY,
   WORKFLOW_CATEGORIES,
   listModels,
@@ -128,6 +129,48 @@ describe('workflow library', () => {
     llmNodes.slice(1).forEach((n) => {
       expect(String(n.config.systemPrompt ?? '')).toContain('{{upstream}}');
     });
+  });
+});
+
+describe('WorkflowEngine', () => {
+  const fakeEngine = ({ chat: async () => ({ content: 'ok' }) }) as any;
+
+  it('records outputs for every step in chain order', async () => {
+    const engine = new WorkflowEngine(fakeEngine);
+    const nodes = [
+      { id: 'in', type: 'input', name: 'Input', config: { value: '{{input}}' }, position: { x: 0, y: 0 } },
+      { id: 'a', type: 'llm', name: 'LLM A', config: {}, position: { x: 1, y: 0 } },
+      { id: 'b', type: 'transform', name: 'Trim', config: { operation: 'trim' }, position: { x: 2, y: 0 } },
+      { id: 'out', type: 'output', name: 'Output', config: {}, position: { x: 3, y: 0 } },
+    ];
+    const edges = [
+      { id: 'e1', source: 'in', target: 'a', sourceHandle: 'out', targetHandle: 'in' },
+      { id: 'e2', source: 'a', target: 'b', sourceHandle: 'out', targetHandle: 'in' },
+      { id: 'e3', source: 'b', target: 'out', sourceHandle: 'out', targetHandle: 'in' },
+    ];
+    const r = await engine.run({ id: 't', name: 't', nodes: nodes as any, edges: edges as any, variables: {}, updatedAt: 0 }, { input: '  Hi  ' });
+    expect(r.final).toBe('ok');
+    expect(r.results).toHaveLength(4);
+    expect(r.results.every((x) => x.status === 'ok')).toBe(true);
+    expect(r.results.map((x) => x.nodeId)).toEqual(['in', 'a', 'b', 'out']);
+  });
+
+  it('attributes a failing step to its node instead of aborting the run', async () => {
+    const engine = new WorkflowEngine({ chat: async () => { throw new Error('rate limited'); } } as any);
+    const nodes = [
+      { id: 'in', type: 'input', name: 'Input', config: { value: '{{input}}' }, position: { x: 0, y: 0 } },
+      { id: 'a', type: 'llm', name: 'LLM A', config: {}, position: { x: 1, y: 0 } },
+      { id: 'out', type: 'output', name: 'Output', config: {}, position: { x: 2, y: 0 } },
+    ];
+    const edges = [
+      { id: 'e1', source: 'in', target: 'a', sourceHandle: 'out', targetHandle: 'in' },
+      { id: 'e2', source: 'a', target: 'out', sourceHandle: 'out', targetHandle: 'in' },
+    ];
+    const r = await engine.run({ id: 't', name: 't', nodes: nodes as any, edges: edges as any, variables: {}, updatedAt: 0 }, { input: 'x' });
+    const failed = r.results.find((x) => x.nodeId === 'a')!;
+    expect(failed?.status).toBe('error');
+    expect(failed?.output).toContain('rate limited');
+    expect(r.results.find((x) => x.nodeId === 'in')!.status).toBe('ok');
   });
 });
 
