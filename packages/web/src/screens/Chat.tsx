@@ -436,23 +436,10 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setTabs((prev) => {
       const next = prev.filter((t) => t.id !== tabId);
       if (next.length === 0) {
-        if (!currentProjectId) {
-          setActiveTab(null);
-          setConvId(null);
-          setMessages([]);
-          return [];
-        }
-        const conv = projects.createConversation({
-          title: 'New session',
-          projectId: currentProjectId,
-          provider,
-          model,
-        });
-        refreshSessions();
-        const newTab: SessionTab = { id: `tab-${Date.now()}`, title: conv.title, convId: conv.id };
-        setActiveTab(newTab.id);
-        setConvId(conv.id);
-        return [newTab];
+        setActiveTab(null);
+        setConvId(null);
+        setMessages([]);
+        return [];
       }
       if (activeTab === tabId) {
         const last = next[next.length - 1];
@@ -469,23 +456,10 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setTabs((prev) => {
       const next = prev.filter((t) => t.convId !== id);
       if (next.length === 0) {
-        if (!currentProjectId) {
-          setActiveTab(null);
-          setConvId(null);
-          setMessages([]);
-          return [];
-        }
-        const conv = projects.createConversation({
-          title: 'New session',
-          projectId: currentProjectId,
-          provider,
-          model,
-        });
-        refreshSessions();
-        const newTab: SessionTab = { id: `tab-${Date.now()}`, title: conv.title, convId: conv.id };
-        setActiveTab(newTab.id);
-        setConvId(conv.id);
-        return [newTab];
+        setActiveTab(null);
+        setConvId(null);
+        setMessages([]);
+        return [];
       }
       if (convId === id) {
         const last = next[next.length - 1];
@@ -514,18 +488,10 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setTabs((prev) => {
       const next = prev.filter((t) => t.convId !== id);
       if (next.length === 0) {
-        const conv = projects.createConversation({
-          title: 'New session',
-          projectId: currentProjectId ?? undefined,
-          provider,
-          model,
-          settings: currentSettings,
-        });
-        refreshSessions();
-        const newTab: SessionTab = { id: `tab-${Date.now()}`, title: conv.title, convId: conv.id };
-        setActiveTab(newTab.id);
-        setConvId(conv.id);
-        return [newTab];
+        setActiveTab(null);
+        setConvId(null);
+        setMessages([]);
+        return [];
       }
       if (convId === id) {
         const last = next[next.length - 1];
@@ -592,11 +558,12 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       if (remaining.length > 0) {
         setCurrentProjectId(remaining[0].id);
       } else {
-        const newProj = projects.createProject('Default Project');
-        setCurrentProjectId(newProj.id);
-        refreshSessions();
-        refreshArchived();
-        refreshInactive();
+        setCurrentProjectId(null);
+        setTabs([]);
+        setActiveTab(null);
+        setConvId(null);
+        setMessages([]);
+        setAttachments([]);
       }
     }
     refreshProjects();
@@ -924,9 +891,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
 
   useEffect(() => {
     if (!currentProjectId) return;
-    if (tabs.length === 0) {
-      newSession();
-    } else if (activeTab) {
+    if (activeTab) {
       const tab = tabs.find((t) => t.id === activeTab);
       if (tab) {
         setConvId(tab.convId);
@@ -936,23 +901,18 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-create a default project on first mount if none exist.
-  // When a project exists but none is selected, force sidebar open.
+  // On first mount: if projects exist but none is selected, pick the most
+  // recent one. If no projects exist, do nothing — the user must create one.
   useEffect(() => {
     const existingProjects = projects.projectsList();
-    if (existingProjects.length === 0) {
-      const proj = projects.createProject('Default Project');
-      setCurrentProjectId(proj.id);
-      refreshSessions();
-      refreshArchived();
-      refreshInactive();
-    } else if (!currentProjectId) {
+    if (existingProjects.length > 0 && !currentProjectId) {
       setCurrentProjectId(existingProjects[0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // If currentProjectId becomes invalid (project deleted), create a replacement.
+  // If currentProjectId becomes invalid (project deleted), fall back to first
+  // existing project or clear selection. Do NOT auto-create a replacement.
   useEffect(() => {
     if (!currentProjectId) return;
     const exists = projects.projectsList().some((p) => p.id === currentProjectId);
@@ -961,8 +921,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       if (all.length > 0) {
         setCurrentProjectId(all[0].id);
       } else {
-        const proj = projects.createProject('Default Project');
-        setCurrentProjectId(proj.id);
+        setCurrentProjectId(null);
         setTabs([]);
         setActiveTab(null);
         setConvId(null);
@@ -2277,8 +2236,17 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
           </button>
         </div>
         {allProjects.length === 0 ? (
-          <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, padding: `${tokens.space1}px ${tokens.space2}px` }}>
-            No projects yet — click + to create one.
+          <div style={{ padding: `${tokens.space2}px ${tokens.space2}px`, display: 'flex', flexDirection: 'column', gap: tokens.space2 }}>
+            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, lineHeight: 1.4 }}>
+              No projects yet. Create one to start chatting.
+            </div>
+            <button
+              onClick={() => setProjectModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd, background: tokens.primary, color: '#fff', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, fontSize: tokens.fontSizeSm, fontWeight: 600 }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              Create your first project
+            </button>
           </div>
         ) : (
           allProjects.slice(0, 5).map(projectRow)
