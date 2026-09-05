@@ -1,3 +1,4 @@
+import { readJSON, writeJSON } from '../storage';
 import type { ChatMessage, ProviderId } from '../types';
 
 export type FileChangeStatus = 'added' | 'modified' | 'deleted';
@@ -54,10 +55,6 @@ interface PersistShape {
 
 const STORAGE_KEY = 'acode.projects.v1';
 
-function storage(): Storage | null {
-  return typeof localStorage !== 'undefined' ? localStorage : null;
-}
-
 /**
  * All-in-one project workspace: ties together conversations, prompts,
  * workflows, agents and evals under a project, plus a GitHub link.
@@ -74,27 +71,18 @@ export class ProjectStore {
   }
 
   private load() {
-    try {
-      const raw = storage()?.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const data = JSON.parse(raw) as PersistShape;
-      this.projects = new Map(data.projects.map((p) => [p.id, p] as const));
-      this.conversations = new Map(data.conversations.map((c) => [c.id, c] as const));
-    } catch {
-      /* corrupted or unavailable storage — start fresh */
-    }
+    const data = readJSON<PersistShape>(STORAGE_KEY);
+    if (!data) return;
+    if (Array.isArray(data.projects)) this.projects = new Map(data.projects.map((p) => [p.id, p] as const));
+    if (Array.isArray(data.conversations)) this.conversations = new Map(data.conversations.map((c) => [c.id, c] as const));
   }
 
   private persist() {
-    try {
-      const data: PersistShape = {
-        projects: [...this.projects.values()],
-        conversations: [...this.conversations.values()],
-      };
-      storage()?.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      /* ignore quota / availability errors */
-    }
+    const data: PersistShape = {
+      projects: [...this.projects.values()],
+      conversations: [...this.conversations.values()],
+    };
+    writeJSON(STORAGE_KEY, data);
   }
 
   createProject(name: string, opts?: { description?: string; color?: string; gitRepo?: string }): ProjectDoc {

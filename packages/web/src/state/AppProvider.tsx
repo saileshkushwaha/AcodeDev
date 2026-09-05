@@ -17,6 +17,12 @@ import {
   persistCatalog,
   onCatalogChange,
   syncAllGateways,
+  setStorageErrorHandler,
+  readGithubToken,
+  writeGithubToken,
+  readRaw,
+  writeRaw,
+  removeKey,
   type ChatMessage,
   type ProviderId,
 } from '@acode/core';
@@ -52,21 +58,18 @@ export function useApp(): AppState {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [githubToken, setGithubTokenState] = useState<string>(() => {
-    try {
-      return localStorage.getItem('acode.github.token') ?? '';
-    } catch {
-      return '';
-    }
-  });
-  const [currentProjectId, setCurrentProjectIdState] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem('acode.currentProject');
-    } catch {
-      return null;
-    }
-  });
+  const [githubToken, setGithubTokenState] = useState<string>(() => readGithubToken());
+  const [currentProjectId, setCurrentProjectIdState] = useState<string | null>(() => readRaw('acode.currentProject'));
   const [catalogVersion, setCatalogVersion] = useState(0);
+
+  // Surface storage failures (e.g. quota exceeded) so silent data loss can't
+  // happen without the user at least seeing a console warning.
+  useEffect(() => {
+    setStorageErrorHandler((key, error) => {
+      console.warn(`[storage] failed to write "${key}":`, error);
+    });
+    return () => setStorageErrorHandler(null);
+  }, []);
 
   const vaultRef = useRef<KeyVault | null>(null);
   if (!vaultRef.current) vaultRef.current = new KeyVault(webCryptoAdapter());
@@ -138,22 +141,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     githubToken,
     setGithubToken: useCallback((t: string) => {
       setGithubTokenState(t);
-      try {
-        localStorage.setItem('acode.github.token', t);
-      } catch {
-        /* ignore */
-      }
+      writeGithubToken(t);
     }, []),
     github: () => new GitHubClient({ token: githubToken }),
     currentProjectId,
     setCurrentProjectId: useCallback((id: string | null) => {
       setCurrentProjectIdState(id);
-      try {
-        if (id) localStorage.setItem('acode.currentProject', id);
-        else localStorage.removeItem('acode.currentProject');
-      } catch {
-        /* ignore */
-      }
+      if (id) writeRaw('acode.currentProject', id);
+      else removeKey('acode.currentProject');
     }, []),
     hasKey: (p) => vaultRef.current?.hasKey(p) ?? false,
     catalogVersion,

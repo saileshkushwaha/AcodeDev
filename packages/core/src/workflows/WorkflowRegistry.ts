@@ -1,11 +1,8 @@
+import { readJSON, writeJSON } from '../storage';
 import { WORKFLOW_LIBRARY } from './library';
 import type { WorkflowDefinition } from './WorkflowEngine';
 
 const STORAGE_KEY = 'acode.workflows.v1';
-
-function storage(): Storage | null {
-  return typeof localStorage !== 'undefined' ? localStorage : null;
-}
 
 function clone(def: WorkflowDefinition): WorkflowDefinition {
   return JSON.parse(JSON.stringify(def)) as WorkflowDefinition;
@@ -26,25 +23,16 @@ export class WorkflowRegistry {
   }
 
   private load() {
-    try {
-      const raw = storage()?.getItem(STORAGE_KEY);
-      if (raw) {
-        const data = JSON.parse(raw) as WorkflowDefinition[];
-        data.forEach((d) => this.store.set(d.id, d));
-        this.seeded = true;
-      }
-    } catch {
-      /* ignore corrupted storage */
+    const data = readJSON<WorkflowDefinition[]>(STORAGE_KEY);
+    if (Array.isArray(data)) {
+      data.forEach((d) => this.store.set(d.id, d));
+      this.seeded = true;
     }
     this.ensureSeeded();
   }
 
   private persist() {
-    try {
-      storage()?.setItem(STORAGE_KEY, JSON.stringify([...this.store.values()]));
-    } catch {
-      /* ignore quota errors */
-    }
+    writeJSON(STORAGE_KEY, [...this.store.values()]);
   }
 
   /** Seed any built-in library presets not already present (backfills new presets on upgrade). */

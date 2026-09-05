@@ -9,7 +9,9 @@ import {
   estimatePromptTokens,
   listModels,
   listProviders,
-  PROVIDER_LIST,
+  readEvalSnapshot,
+  writeEvalSnapshot,
+  type StoredEvalResult as EvalResult,
   type PromptRecord,
   type PromptVersion,
   type PromptCategory,
@@ -692,36 +694,6 @@ function EditorModal({ id, onClose, refresh }: { id: string | null; onClose: () 
 /* ------------------------------------------------------------------- */
 /* Evals (kept functional, moderately polished)                        */
 /* ------------------------------------------------------------------- */
-interface EvalResult {
-  name: string;
-  passRate: number;
-  results: { caseId: string; pass: boolean; score: number; input: string; actual: string; llmJudge?: string }[];
-}
-interface EvalSnapshot {
-  def?: Partial<{ name: string; model: string; provider: string; type: string; criteria?: string }>;
-  sysPrompt?: string;
-  inputText?: string;
-  expected?: string;
-  cases?: { id: string; input: string; expected?: string }[];
-  result?: EvalResult | null;
-}
-const EVAL_KEY = 'acode.evals.v1';
-function readEvalSnapshot(): EvalSnapshot | null {
-  try {
-    const raw = localStorage.getItem(EVAL_KEY);
-    return raw ? (JSON.parse(raw) as EvalSnapshot) : null;
-  } catch {
-    return null;
-  }
-}
-function writeEvalSnapshot(s: EvalSnapshot) {
-  try {
-    localStorage.setItem(EVAL_KEY, JSON.stringify(s));
-  } catch {
-    /* ignore */
-  }
-}
-
 function EvalPanel() {
   const { tokens } = useTheme();
   const app = useApp();

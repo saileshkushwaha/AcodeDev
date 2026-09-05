@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useTheme } from '@acode/ui';
+import { readRaw, writeRaw } from '@acode/core';
 import { AppShell } from './components/AppShell';
 import { Dashboard } from './screens/Dashboard';
 import { ChatScreen } from './screens/Chat';
@@ -14,12 +15,8 @@ const TAB_KEY = 'acode.ui.tab';
 
 export function App() {
   const [tab, setTab] = useState(() => {
-    try {
-      const t = localStorage.getItem(TAB_KEY);
-      return t && VALID_TABS.includes(t) ? t : 'dashboard';
-    } catch {
-      return 'dashboard';
-    }
+    const t = readRaw(TAB_KEY);
+    return t && VALID_TABS.includes(t) ? t : 'dashboard';
   });
   const [promptIntent, setPromptIntent] = useState<{ tab: 'prompts' | 'evals'; key: number }>({ tab: 'prompts', key: 0 });
   const { tokens } = useTheme();
@@ -27,11 +24,7 @@ export function App() {
   // Persist the active screen so a reload returns to where the user left off.
   const changeTab = useCallback((t: string) => {
     setTab(t);
-    try {
-      localStorage.setItem(TAB_KEY, t);
-    } catch {
-      /* ignore */
-    }
+    writeRaw(TAB_KEY, t);
   }, []);
 
   // Open the Prompts screen on a specific sub-tab (Dashboard "Run eval" opens Evals).

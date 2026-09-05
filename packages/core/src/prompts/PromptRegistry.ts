@@ -1,3 +1,4 @@
+import { readJSON, writeJSON } from '../storage';
 import { PROMPT_LIBRARY, type PromptCategory } from './library';
 
 export interface PromptVersion {
@@ -38,10 +39,6 @@ export interface CreatePromptOpts {
 }
 
 const STORAGE_KEY = 'acode.prompts.v2';
-
-function storage(): Storage | null {
-  return typeof localStorage !== 'undefined' ? localStorage : null;
-}
 
 /** Pull `{{name}}` variables out of a prompt template (deduped, in order). */
 export function extractVariables(content: string): string[] {
@@ -90,25 +87,16 @@ export class PromptRegistry {
   }
 
   private load() {
-    try {
-      const raw = storage()?.getItem(STORAGE_KEY);
-      if (raw) {
-        const data = JSON.parse(raw) as PromptRecord[];
-        data.forEach((p) => this.prompts.set(p.id, p));
-        this.seeded = true; // assume previous version seeded; reseed fills gaps anyway
-      }
-    } catch {
-      /* ignore */
+    const data = readJSON<PromptRecord[]>(STORAGE_KEY);
+    if (Array.isArray(data)) {
+      data.forEach((p) => this.prompts.set(p.id, p));
+      this.seeded = true; // assume previous version seeded; reseed fills gaps anyway
     }
     this.ensureSeeded();
   }
 
   private persist() {
-    try {
-      storage()?.setItem(STORAGE_KEY, JSON.stringify([...this.prompts.values()]));
-    } catch {
-      /* ignore quota errors */
-    }
+    writeJSON(STORAGE_KEY, [...this.prompts.values()]);
   }
 
   /** Seed any built-in library prompts not already present. */

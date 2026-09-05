@@ -1,5 +1,6 @@
 export * from './types';
 export * from './skills';
+export * from './storage';
 export * from './proxy';
 export * from './models/catalog';
 export * from './llm/provider';
@@ -14,6 +15,7 @@ export * from './workflows/WorkflowEngine';
 export * from './workflows/library';
 export * from './workflows/WorkflowRegistry';
 export * from './evals/EvalEngine';
+export * from './evals/EvalStore';
 export * from './prompts/PromptRegistry';
 export * from './projects/ProjectStore';
 export * from './github/GitHubClient';

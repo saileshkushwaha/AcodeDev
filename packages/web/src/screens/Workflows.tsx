@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, type ReactNode } from 'react';
+import { useState, useMemo, useCallback, useEffect, type ReactNode, type CSSProperties } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Input, Select, Badge, Modal, useTheme, Spinner } from '@acode/ui';
@@ -10,6 +10,10 @@ import {
   WORKFLOW_CATEGORIES,
   listModels,
   listProviders,
+  readRaw,
+  writeRaw,
+  readJSON,
+  writeJSON,
   type ProviderId,
 } from '@acode/core';
 
@@ -31,25 +35,14 @@ interface WorkflowDraft {
 }
 
 function loadDraft(id: string): WorkflowDraft | null {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (!raw) return null;
-    const map = JSON.parse(raw) as Record<string, WorkflowDraft>;
-    return map[id] ?? null;
-  } catch {
-    return null;
-  }
+  const map = readJSON<Record<string, WorkflowDraft>>(DRAFT_KEY);
+  return map?.[id] ?? null;
 }
 
 function saveDraft(id: string, draft: WorkflowDraft) {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    const map = raw ? (JSON.parse(raw) as Record<string, WorkflowDraft>) : {};
-    map[id] = draft;
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(map));
-  } catch {
-    /* ignore */
-  }
+  const map = readJSON<Record<string, WorkflowDraft>>(DRAFT_KEY) ?? {};
+  map[id] = draft;
+  writeJSON(DRAFT_KEY, map);
 }
 
 interface RunRecord {
@@ -60,25 +53,14 @@ interface RunRecord {
 }
 
 function loadLastRun(id: string): RunRecord | null {
-  try {
-    const raw = localStorage.getItem(LAST_RUN_KEY);
-    if (!raw) return null;
-    const map = JSON.parse(raw) as Record<string, RunRecord>;
-    return map[id] ?? null;
-  } catch {
-    return null;
-  }
+  const map = readJSON<Record<string, RunRecord>>(LAST_RUN_KEY);
+  return map?.[id] ?? null;
 }
 
 function saveLastRun(id: string, rec: RunRecord) {
-  try {
-    const raw = localStorage.getItem(LAST_RUN_KEY);
-    const map = raw ? (JSON.parse(raw) as Record<string, RunRecord>) : {};
-    map[id] = rec;
-    localStorage.setItem(LAST_RUN_KEY, JSON.stringify(map));
-  } catch {
-    /* ignore */
-  }
+  const map = readJSON<Record<string, RunRecord>>(LAST_RUN_KEY) ?? {};
+  map[id] = rec;
+  writeJSON(LAST_RUN_KEY, map);
 }
 
 function timeAgo(ts: number): string {
@@ -90,19 +72,11 @@ function timeAgo(ts: number): string {
 }
 
 function readActiveId(): string {
-  try {
-    return localStorage.getItem(ACTIVE_KEY) ?? BLANK_ID;
-  } catch {
-    return BLANK_ID;
-  }
+  return readRaw(ACTIVE_KEY) ?? BLANK_ID;
 }
 
 function persistActiveId(id: string) {
-  try {
-    localStorage.setItem(ACTIVE_KEY, id);
-  } catch {
-    /* ignore */
-  }
+  writeRaw(ACTIVE_KEY, id);
 }
 
 function parseOwnerRepo(input: string): { owner: string; repo: string } | null {
@@ -139,6 +113,8 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   const [runAt, setRunAt] = useState<number | null>(null);
   const [lastRun, setLastRun] = useState<RunRecord | null>(null);
   const [running, setRunning] = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [finalCollapsed, setFinalCollapsed] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [ghModal, setGhModal] = useState(false);
   const [ghRepo, setGhRepo] = useState('');
@@ -176,6 +152,8 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
       setFinal('');
       setRunAt(null);
       setLastRun(loadLastRun(def.id));
+      setCollapsed({});
+      setFinalCollapsed(false);
     },
     [workflowStore],
   );
@@ -313,6 +291,8 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     setRunning(true);
     setResult(null);
     setFinal('');
+    setCollapsed({});
+    setFinalCollapsed(false);
     const def: WorkflowDefinition = {
       id: activeId && !activeIsBuiltin ? activeId : 'wf_run',
       name: defName.trim() || 'Untitled workflow',
@@ -368,6 +348,10 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     runResults?.forEach((r) => m.set(r.nodeId, r));
     return m;
   }, [runResults]);
+
+  const toggleCollapse = useCallback((id: string) => setCollapsed((c) => (c[id] ? { ...c, [id]: false } : { ...c, [id]: true })), []);
+  const collapseAllResults = () => setCollapsed(Object.fromEntries((runResults ?? []).map((r) => [r.nodeId, true])));
+  const preview = (s: string, n = 96) => (s.length > n ? `${s.slice(0, n).trimEnd()}…` : s);
 
   const copyResult = async () => {
     if (!runFinal) return;
@@ -562,25 +546,40 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
 
       {runResults && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: tokens.text }}>Run output</span>
             {lastRunAt && (
               <span style={{ fontSize: 12, color: tokens.textMuted }}>
                 {runAt ? `ran ${timeAgo(lastRunAt)}` : `previous run · ${timeAgo(lastRunAt)}`}
               </span>
             )}
+            <div style={{ flex: 1 }} />
+            <Button size="sm" variant="ghost" onClick={() => setCollapsed({})}>Expand all</Button>
+            <Button size="sm" variant="ghost" onClick={collapseAllResults}>Collapse all</Button>
           </div>
           {runResults.map((r) => (
-            <Card
+            <CollapsibleCard
               key={r.nodeId}
-              title={`${r.nodeId} · ${r.nodeType} (${r.durationMs}ms)`}
-              actions={r.status ? <Badge color={r.status === 'error' ? tokens.danger : tokens.success}>{r.status === 'error' ? '✕ failed' : '✓ ok'}</Badge> : undefined}
+              title={`${r.nodeId} · ${r.nodeType}`}
+              subtitle={collapsed[r.nodeId] ? preview(r.output) : undefined}
+              expanded={!collapsed[r.nodeId]}
+              onToggle={() => toggleCollapse(r.nodeId)}
+              actions={
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  {r.status ? <Badge color={r.status === 'error' ? tokens.danger : tokens.success}>{r.status === 'error' ? '✕ failed' : '✓ ok'}</Badge> : undefined}
+                  <span style={{ fontSize: 12, color: tokens.textMuted, whiteSpace: 'nowrap' }}>{r.durationMs}ms</span>
+                </span>
+              }
             >
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, fontFamily: tokens.fontMono, color: r.status === 'error' ? tokens.danger : tokens.text }}>{r.output}</pre>
-            </Card>
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, fontFamily: tokens.fontMono, color: r.status === 'error' ? tokens.danger : tokens.text, maxHeight: 320, overflow: 'auto' }}>
+                {r.output}
+              </pre>
+            </CollapsibleCard>
           ))}
-          <Card
+          <CollapsibleCard
             title="Final output"
+            expanded={!finalCollapsed}
+            onToggle={() => setFinalCollapsed((v) => !v)}
             style={{ border: `1px solid ${tokens.success}` }}
             actions={
               <>
@@ -591,7 +590,7 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
             }
           >
             <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, fontFamily: tokens.fontMono, color: tokens.success }}>{runFinal || '(no output)'}</pre>
-          </Card>
+          </CollapsibleCard>
         </div>
       )}
 
@@ -615,6 +614,34 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
         </Modal>
       )}
     </Page>
+  );
+}
+
+function CollapsibleCard({ title, subtitle, actions, expanded, onToggle, children, style }: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  actions?: ReactNode;
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+  style?: CSSProperties;
+}) {
+  const { tokens } = useTheme();
+  return (
+    <Card style={style}>
+      <div
+        onClick={onToggle}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}
+      >
+        <span style={{ transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', color: tokens.textSecondary, fontSize: 11, width: 10, textAlign: 'center', flexShrink: 0 }}>▶</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: tokens.text }}>{title}</div>
+          {subtitle != null && <div style={{ fontSize: 12, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>}
+        </div>
+        {actions != null && <div style={{ flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>{actions}</div>}
+      </div>
+      {expanded && <div style={{ marginTop: 10 }}>{children}</div>}
+    </Card>
   );
 }
 

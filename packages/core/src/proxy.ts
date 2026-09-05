@@ -13,13 +13,15 @@
  * `x-proxy-upstream` request header so the relay knows where to forward.
  */
 
+import { readRaw, removeKey, writeRaw } from './storage';
+
 const PROXY_KEY = 'acode.gatewayProxy';
 
 /** Normalize a configured proxy base URL, or '' when none is set. */
 export function getProxyBase(): string {
+  const raw = readRaw(PROXY_KEY);
+  if (!raw) return '';
   try {
-    const raw = localStorage.getItem(PROXY_KEY);
-    if (!raw) return '';
     const t = raw.trim().replace(/\/+$/, '');
     if (!t) return '';
     const u = new URL(t, 'http://localhost');
@@ -31,12 +33,9 @@ export function getProxyBase(): string {
 
 /** Persist the proxy base URL ('' clears it). */
 export function setProxyBase(url: string): void {
-  try {
-    if (url && url.trim()) localStorage.setItem(PROXY_KEY, url.trim().replace(/\/+$/, ''));
-    else localStorage.removeItem(PROXY_KEY);
-  } catch {
-    /* ignore */
-  }
+  const t = url.trim().replace(/\/+$/, '');
+  if (t) writeRaw(PROXY_KEY, t);
+  else removeKey(PROXY_KEY);
 }
 
 /** Derive the upstream base (the real gateway base URL) for a given models URL. */

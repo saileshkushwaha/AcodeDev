@@ -4,6 +4,8 @@ import { ChatEngine } from '../llm/ChatEngine';
 export interface AgentTool {
   name: string;
   description: string;
+  /** JSON Schema for the tool's parameters. If omitted, an empty schema is used. */
+  parameters?: Record<string, unknown>;
   execute: (args: Record<string, unknown>) => Promise<string>;
 }
 
@@ -40,7 +42,7 @@ export class AgentEngine {
     return tools.map((t) => ({
       name: t.name,
       description: t.description,
-      parameters: { type: 'object', properties: {} },
+      parameters: t.parameters ?? { type: 'object', properties: {} },
     }));
   }
 

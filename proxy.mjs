@@ -23,7 +23,7 @@
 
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, stat, readFile, writeFile, mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -197,6 +197,59 @@ async function serveLocalApi(req, res) {
     } catch (err) {
       json(res, 200, { path: target, entries: [], error: err?.message ?? 'unreadable' });
     }
+    return true;
+  }
+
+  if (p === '/fs/read') {
+    const target = resolveFsPath(q.get('path'));
+    try {
+      const content = await readFile(target, 'utf-8');
+      json(res, 200, { path: target, content });
+    } catch (err) {
+      json(res, 200, { path: target, content: '', error: err?.message ?? 'unreadable' });
+    }
+    return true;
+  }
+
+  if (p === '/fs/write' && req.method === 'POST') {
+    const body = JSON.parse(String(await readBody(req)));
+    const target = resolveFsPath(body.path);
+    try {
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, body.content ?? '', 'utf-8');
+      json(res, 200, { path: target, ok: true });
+    } catch (err) {
+      json(res, 200, { path: target, ok: false, error: err?.message ?? 'write failed' });
+    }
+    return true;
+  }
+
+  if (p === '/exec' && req.method === 'POST') {
+    const body = JSON.parse(String(await readBody(req)));
+    const cmd = String(body.command ?? '').trim();
+    if (!cmd) { json(res, 400, { error: 'missing command' }); return true; }
+    // Safety: only allow known safe commands
+    const allowed = ['git', 'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'find', 'node', 'npm', 'npx', 'python', 'python3', 'pip', 'echo', 'pwd', 'whoami', 'date'];
+    const bin = cmd.split(/\s+/)[0];
+    if (!allowed.includes(bin)) { json(res, 200, { stdout: '', stderr: `Command not allowed: ${bin}. Allowed: ${allowed.join(', ')}`, exitCode: 1 }); return true; }
+    const r = await new Promise((resolve) => {
+      execFile(bin, cmd.split(/\s+/).slice(1), { cwd: WORKSPACE, maxBuffer: 10 * 1024 * 1024, timeout: 30_000 }, (err, stdout, stderr) => {
+        resolve({ stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), exitCode: err ? 1 : 0 });
+      });
+    });
+    json(res, 200, r);
+    return true;
+  }
+
+  if (p === '/git/log') {
+    const r = await runGit(['log', '--oneline', '-20']);
+    json(res, 200, { log: r.ok ? r.stdout.trim().split('\n') : [], error: r.ok ? undefined : r.stderr });
+    return true;
+  }
+
+  if (p === '/git/branch') {
+    const r = await runGit(['branch', '--show-current']);
+    json(res, 200, { branch: r.ok ? r.stdout.trim() : 'unknown' });
     return true;
   }
 

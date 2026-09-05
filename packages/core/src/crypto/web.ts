@@ -1,3 +1,4 @@
+import { readRaw, removeKey, writeRaw } from '../storage';
 import type { CryptoAdapter, ProviderId } from '../types';
 
 /**
@@ -5,17 +6,11 @@ import type { CryptoAdapter, ProviderId } from '../types';
  * For production, swap in a real crypto (e.g. WebCrypto) adapter.
  */
 export function webCryptoAdapter(): CryptoAdapter {
-  const storage = (typeof localStorage !== 'undefined' ? localStorage : null) as unknown as {
-    setItem: (k: string, v: string) => void;
-    getItem: (k: string) => string | null;
-    removeItem: (k: string) => void;
-  } | null;
-
   const key = 'acode.local.vault.salt.v1';
-  let salt = storage?.getItem(key) ?? '';
+  let salt = readRaw(key) ?? '';
   if (!salt) {
     salt = Math.random().toString(36).slice(2);
-    storage?.setItem(key, salt);
+    writeRaw(key, salt);
   }
 
   const xor = (input: string): string => {
@@ -39,12 +34,12 @@ export function webCryptoAdapter(): CryptoAdapter {
     decrypt: unxor,
     secureStore: {
       set: (k: string, v: string) => {
-        storage?.setItem(k, v);
+        writeRaw(k, v);
         return Promise.resolve();
       },
-      get: (k: string) => Promise.resolve(storage?.getItem(k) ?? undefined),
+      get: (k: string) => Promise.resolve(readRaw(k) ?? undefined),
       remove: (k: string) => {
-        storage?.removeItem(k);
+        removeKey(k);
         return Promise.resolve();
       },
     },

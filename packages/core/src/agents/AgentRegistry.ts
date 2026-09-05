@@ -1,3 +1,4 @@
+import { readJSON, writeJSON } from '../storage';
 import type { ProviderId } from '../types';
 
 export interface AgentConvMessage {
@@ -21,10 +22,6 @@ export interface AgentDefinition {
 
 const STORAGE_KEY = 'acode.agents.v1';
 
-function storage(): Storage | null {
-  return typeof localStorage !== 'undefined' ? localStorage : null;
-}
-
 function clone(def: AgentDefinition): AgentDefinition {
   return JSON.parse(JSON.stringify(def)) as AgentDefinition;
 }
@@ -42,22 +39,12 @@ export class AgentRegistry {
   }
 
   private load() {
-    try {
-      const raw = storage()?.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const data = JSON.parse(raw) as AgentDefinition[];
-      (Array.isArray(data) ? data : []).forEach((d) => this.store.set(d.id, d));
-    } catch {
-      /* corrupted or unavailable storage — start fresh */
-    }
+    const data = readJSON<AgentDefinition[]>(STORAGE_KEY);
+    if (Array.isArray(data)) data.forEach((d) => this.store.set(d.id, d));
   }
 
   private persist() {
-    try {
-      storage()?.setItem(STORAGE_KEY, JSON.stringify([...this.store.values()]));
-    } catch {
-      /* ignore quota errors */
-    }
+    writeJSON(STORAGE_KEY, [...this.store.values()]);
   }
 
   all(): AgentDefinition[] {

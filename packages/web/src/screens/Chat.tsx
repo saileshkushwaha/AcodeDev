@@ -10,12 +10,17 @@ import {
   getProxyBase,
   inferCapabilities,
   CAPABILITY_LABELS,
+  readJSON,
+  writeJSON,
+  Toolbox,
   type ChatMessage,
   type ProviderId,
   type ChatAttachment,
   type AttachmentKind,
   type ModelCapability,
   type Skill,
+  type ToolDefinition,
+  type ToolCall,
 } from '@acode/core';
 import type { Conversation } from '@acode/core';
 import { Markdown } from '../components/Markdown';
@@ -220,23 +225,6 @@ interface ChatDefaults {
 interface WorkspaceState {
   tabs: SessionTab[];
   activeTab: string | null;
-}
-
-function readJSON<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeJSON(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* ignore */
-  }
 }
 
 export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void }) {

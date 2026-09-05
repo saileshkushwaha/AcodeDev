@@ -19,6 +19,8 @@ import {
   setProxyBase,
   upstreamFromModelsUrl,
   routeThroughProxy,
+  readGithubToken,
+  writeGithubToken,
   type ConnectorCategory,
   type KnownConnector,
   type ProviderDef,
@@ -70,14 +72,10 @@ export function KeysScreen() {
 
   // Seed the GitHub dev connector from the existing GitHub token so both stay in sync.
   useEffect(() => {
-    try {
-      const gh = localStorage.getItem('acode.github.token');
-      if (gh && !vault.hasKey('github')) {
-        vault.setKey('github', gh, { category: 'dev', label: 'GitHub', connectorType: 'Git host' });
-        refresh();
-      }
-    } catch {
-      /* ignore */
+    const gh = readGithubToken();
+    if (gh && !vault.hasKey('github')) {
+      vault.setKey('github', gh, { category: 'dev', label: 'GitHub', connectorType: 'Git host' });
+      refresh();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -117,11 +115,7 @@ export function KeysScreen() {
     if (!v) return;
     vault.setKey(c.id, v, { category: c.category, label: c.label, connectorType: c.connectorType });
     if (c.id === 'github') {
-      try {
-        localStorage.setItem('acode.github.token', v);
-      } catch {
-        /* ignore */
-      }
+      writeGithubToken(v);
     }
     setInputs((s) => ({ ...s, [c.id]: '' }));
     refresh();
@@ -131,11 +125,7 @@ export function KeysScreen() {
   const removeKey = (c: KnownConnector) => {
     vault.removeKey(c.id);
     if (c.id === 'github') {
-      try {
-        localStorage.removeItem('acode.github.token');
-      } catch {
-        /* ignore */
-      }
+      writeGithubToken('');
     }
     // Runtime-added gateway: unregister its provider + models too.
     if (c.gateway && c.removable) {
@@ -149,11 +139,7 @@ export function KeysScreen() {
 
   const clearAll = () => {
     vault.clear();
-    try {
-      localStorage.removeItem('acode.github.token');
-    } catch {
-      /* ignore */
-    }
+    writeGithubToken('');
     refresh();
     setConfirmClear(false);
     setToast('Cleared all connections');
