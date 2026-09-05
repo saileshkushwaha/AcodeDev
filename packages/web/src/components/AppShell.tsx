@@ -49,7 +49,7 @@ export function AppShell({
 }) {
   const { tokens } = useTheme();
   const isMobile = useIsMobile();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Honest chat badge: number of open conversations (sessions) across projects.
