@@ -1839,7 +1839,7 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
         {todaySessions.length > 0 && (
           <SessionGroup
             label="Today"
-            sessions={todaySessions}
+            sessions={todaySessions.slice(0, 5)}
             activeId={activeId}
             onSelect={onSelect}
             onNewSession={onNewSession}
@@ -1849,7 +1849,7 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
         {yesterdaySessions.length > 0 && (
           <SessionGroup
             label="Yesterday"
-            sessions={yesterdaySessions}
+            sessions={yesterdaySessions.slice(0, 5)}
             activeId={activeId}
             onSelect={onSelect}
             getProjectName={getProjectName}
@@ -1858,7 +1858,7 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
         {olderSessions.length > 0 && (
           <SessionGroup
             label="Older"
-            sessions={olderSessions}
+            sessions={olderSessions.slice(0, 5)}
             activeId={activeId}
             onSelect={onSelect}
             getProjectName={getProjectName}
