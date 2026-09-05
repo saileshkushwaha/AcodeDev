@@ -684,7 +684,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                 `}</style>
                 <div style={{ animation: 'opencode-fadein 0.8s ease-out', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space3 }}>
                   <div style={{ fontSize: 72, fontWeight: 800, letterSpacing: '-0.03em', userSelect: 'none', lineHeight: 1, fontFamily: tokens.fontSans, background: `linear-gradient(135deg, ${tokens.textMuted}40, ${tokens.primary}80, ${tokens.textMuted}40)`, backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', animation: 'opencode-shimmer 4s linear infinite, opencode-glow 3s ease-in-out infinite' }}>
-                    opencode
+                    AcodeDev
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: tokens.space1 }}>
                     {[0, 1, 2].map((i) => (
