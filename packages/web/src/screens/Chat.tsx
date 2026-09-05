@@ -668,6 +668,21 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   };
   const removeAttachment = (id: string) => setAttachments((prev) => prev.filter((a) => a.id !== id));
 
+  const handleRetry = () => {
+    const lastUserIdx = [...messages].reverse().findIndex((m) => m.role === 'user');
+    if (lastUserIdx === -1) return;
+    const userMsg = messages[messages.length - 1 - lastUserIdx];
+    const truncated = messages.slice(0, messages.length - 1 - lastUserIdx);
+    setMessages(truncated);
+    setInput(userMsg.content);
+    setStreaming(false);
+    requestAnimationFrame(() => void handleSend());
+  };
+
+  const handleInsertToComposer = (text: string) => {
+    setInput((prev) => prev ? `${prev}\n\n${text}` : text);
+  };
+
   const toggleSkill = (id: string) => {
     setSelectedSkills((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
   };
@@ -1112,6 +1127,9 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                   @keyframes opencode-shimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
                   @keyframes opencode-dot-pulse { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
                   @keyframes acode-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+                  .bubble-action-btn { transition: all 0.15s; }
+                  .bubble-action-btn:hover { background: ${tokens.surfaceHover} !important; color: ${tokens.text} !important; border-color: ${tokens.borderStrong} !important; }
+                  .bubble-action-btn:focus { outline: 2px solid ${tokens.primary}; outline-offset: 1px; }
                 `}</style>
                 <div style={{ animation: 'opencode-fadein 0.8s ease-out', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space3 }}>
                   <div style={{ fontSize: 72, fontWeight: 800, letterSpacing: '-0.03em', userSelect: 'none', lineHeight: 1, fontFamily: tokens.fontSans, background: `linear-gradient(135deg, ${tokens.textMuted}40, ${tokens.primary}80, ${tokens.textMuted}40)`, backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', animation: 'opencode-shimmer 4s linear infinite, opencode-glow 3s ease-in-out infinite' }}>
@@ -1166,9 +1184,18 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                 </div>
               </div>
             ) : (
-              messages.map((m, i) => (
-                <Bubble key={i} msg={m} streaming={streaming && m.name === messages[messages.length - 1].name} />
-              ))
+              messages.map((m, i) => {
+                const isLastAssistant = !streaming && m.role === 'assistant' && i === messages.length - 1;
+                return (
+                  <Bubble
+                    key={i}
+                    msg={m}
+                    streaming={streaming && m.name === messages[messages.length - 1].name}
+                    onRetry={isLastAssistant ? handleRetry : undefined}
+                    onInsert={handleInsertToComposer}
+                  />
+                );
+              })
             )}
 
             {attachments.length > 0 && (
@@ -1788,7 +1815,7 @@ function MenuItem({ label, onClick, danger, disabled }: { label: string; onClick
   );
 }
 
-const Bubble = React.memo(function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
+const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }: { msg: ChatMessage; streaming: boolean; onRetry?: () => void; onInsert?: (text: string) => void }) {
   const { tokens } = useTheme();
   const isUser = msg.role === 'user';
   const [copied, setCopied] = useState(false);
@@ -1946,9 +1973,40 @@ const Bubble = React.memo(function Bubble({ msg, streaming }: { msg: ChatMessage
           {streaming && <span style={{ display: 'inline-block', width: 8, height: 16, background: tokens.primary, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'acode-pulse 0.9s infinite' }} />}
         </div>
         {!isUser && (
-          <button onClick={copy} style={{ alignSelf: 'flex-start', background: 'transparent', border: 'none', color: copied ? tokens.success : tokens.textMuted, cursor: 'pointer', fontSize: tokens.fontSizeXs, fontWeight: 600 }}>
-            {copied ? '✓ Copied' : '⧉ Copy'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, alignSelf: 'flex-start' }}>
+            <button
+              className="bubble-action-btn"
+              onClick={copy}
+              title="Copy"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, color: copied ? tokens.success : tokens.textMuted, cursor: 'pointer', transition: 'all 0.15s' }}
+            >
+              {copied ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
+              )}
+            </button>
+            {onRetry && !streaming && (
+              <button
+                className="bubble-action-btn"
+                onClick={onRetry}
+                title="Retry"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, color: tokens.textMuted, cursor: 'pointer', transition: 'all 0.15s' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 102.13-9.36L1 10" /></svg>
+              </button>
+            )}
+            {onInsert && (
+              <button
+                className="bubble-action-btn"
+                onClick={() => onInsert(msg.content)}
+                title="Edit & resend"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, color: tokens.textMuted, cursor: 'pointer', transition: 'all 0.15s' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
