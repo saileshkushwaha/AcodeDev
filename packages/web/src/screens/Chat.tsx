@@ -1720,7 +1720,8 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
 
   const allProjects = projects.projectsList?.() ?? [];
   const filteredSessions = sessions.filter((s) =>
-    !search || s.title.toLowerCase().includes(search.toLowerCase()),
+    !(s.title === 'New session' || s.title === 'New chat') && s.messages.length === 0 &&
+    (!search || s.title.toLowerCase().includes(search.toLowerCase())),
   );
   const filteredArchived = archived.filter((s) =>
     !search || s.title.toLowerCase().includes(search.toLowerCase()),
