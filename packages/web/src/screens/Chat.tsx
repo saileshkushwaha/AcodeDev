@@ -923,13 +923,12 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const activeTabObj = tabs.find((t) => t.id === activeTab);
 
   useEffect(() => {
+    if (!currentProjectId) return;
     if (tabs.length === 0) {
       newSession();
     } else if (activeTab) {
       const tab = tabs.find((t) => t.id === activeTab);
       if (tab) {
-        // Reopen the previously active session (its convId-loading effect
-        // populates messages + session settings).
         setConvId(tab.convId);
         setAttachments([]);
       }
@@ -937,7 +936,8 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-create a default project on first mount if none exist, and ensure sidebar is open when no project is selected.
+  // Auto-create a default project on first mount if none exist.
+  // When a project exists but none is selected, force sidebar open.
   useEffect(() => {
     const existingProjects = projects.projectsList();
     if (existingProjects.length === 0) {
@@ -946,12 +946,31 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       refreshSessions();
       refreshArchived();
       refreshInactive();
-      setSidebarOpen(true);
     } else if (!currentProjectId) {
-      setSidebarOpen(true);
+      setCurrentProjectId(existingProjects[0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // If currentProjectId becomes invalid (project deleted), create a replacement.
+  useEffect(() => {
+    if (!currentProjectId) return;
+    const exists = projects.projectsList().some((p) => p.id === currentProjectId);
+    if (!exists) {
+      const all = projects.projectsList();
+      if (all.length > 0) {
+        setCurrentProjectId(all[0].id);
+      } else {
+        const proj = projects.createProject('Default Project');
+        setCurrentProjectId(proj.id);
+        setTabs([]);
+        setActiveTab(null);
+        setConvId(null);
+        setMessages([]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectId]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: tokens.bg, overflow: 'hidden', position: 'relative' }}>
@@ -960,6 +979,10 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         <button
           title="Projects & Sessions"
           onClick={() => {
+            if (!currentProjectId) {
+              setSidebarOpen(true);
+              return;
+            }
             if (sidebarOpen) {
               setSidebarOpen(false);
               if (tabs.length > 0) selectTab(tabs[0].id);
