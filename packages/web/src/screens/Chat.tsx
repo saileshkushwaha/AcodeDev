@@ -687,44 +687,144 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       system = `${SYSTEM_PROMPT}\n\nEnable these skills for this conversation:\n${skillBlock}`;
     }
 
+    // Tell the LLM about available tools when proxy is configured
+    const proxyForTools = getProxyBase();
+    if (proxyForTools) {
+      system += '\n\nYou have access to filesystem and shell tools via a local relay proxy. Use them when the user asks to read/write files, list directories, run commands, or check git status. Always use the tools rather than guessing file contents.';
+    }
+
     const history: ChatMessage[] = [{ role: 'system', content: system }, ...prior.map((m) => m.role === 'system' ? { ...m, content: system } : m)];
 
     setStreaming(true);
     const assistantId = `assist_${Date.now()}`;
     setMessages((prev) => [...prev, { role: 'assistant', content: '', name: assistantId }]);
 
-    const body = { provider, model, messages: history, params: { temperature, maxTokens } };
+    // Build tool definitions for the agent loop
+    const proxyBase = getProxyBase();
+    const tools: ToolDefinition[] = Toolbox.allWithProxy(proxyBase).map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters ?? { type: 'object', properties: {} },
+    }));
+    const allTools = Toolbox.allWithProxy(proxyBase);
+
     let full = '';
     let reasoning = '';
     let contentStreamed = false;
-    try {
-      const ws = await chat.stream(body);
-      for await (const chunk of ws) {
-        if (chunk.delta) {
-          contentStreamed = true;
-          full += chunk.delta;
+    const MAX_ITERATIONS = 6;
+    let conversationHistory: ChatMessage[] = [...history];
+    const toolExecLog: { name: string; args: Record<string, unknown>; result: string }[] = [];
+
+    for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+      const body = { provider, model, messages: conversationHistory, params: { temperature, maxTokens }, tools: tools.length ? tools : undefined };
+      full = '';
+      reasoning = '';
+      contentStreamed = false;
+
+      // Accumulate tool calls by index (OpenAI streams them incrementally)
+      const toolCallAccum: Record<number, { id: string; name: string; arguments: string }> = {};
+
+      try {
+        const ws = await chat.stream(body);
+        for await (const chunk of ws) {
+          if (chunk.delta) {
+            contentStreamed = true;
+            full += chunk.delta;
+          }
+          if (chunk.reasoning) reasoning += chunk.reasoning;
+
+          // Accumulate tool calls
+          if (chunk.toolCalls) {
+            for (const tc of chunk.toolCalls) {
+              const idx = (tc as unknown as { index?: number }).index ?? 0;
+              if (!toolCallAccum[idx]) toolCallAccum[idx] = { id: tc.id || `tc_${idx}`, name: tc.name || '', arguments: '' };
+              if (tc.id) toolCallAccum[idx].id = tc.id;
+              if (tc.name) toolCallAccum[idx].name = tc.name;
+              if (tc.arguments) toolCallAccum[idx].arguments += tc.arguments;
+            }
+          }
+
+          const shown = full || (contentStreamed ? '' : reasoning);
+          setMessages((prev) => {
+            const next = [...prev];
+            const idx = next.findIndex((m) => m.name === assistantId);
+            if (idx >= 0) next[idx] = { role: 'assistant', content: shown, name: assistantId };
+            return next;
+          });
         }
-        if (chunk.reasoning) reasoning += chunk.reasoning;
-        const shown = full || (contentStreamed ? '' : reasoning);
-        setMessages((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((m) => m.name === assistantId);
-          if (idx >= 0) next[idx] = { role: 'assistant', content: shown, name: assistantId };
-          return next;
-        });
+
+        if (!full && reasoning) full = `🧠 ${reasoning}`;
+
+        // Check if there are tool calls to execute
+        const toolCalls: ToolCall[] = Object.values(toolCallAccum)
+          .filter((tc) => tc.name)
+          .map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments }));
+
+        if (toolCalls.length > 0) {
+          // Add assistant message with tool calls to conversation
+          conversationHistory.push({ role: 'assistant', content: full, toolCalls });
+
+          // Show tool calls in the bubble
+          const toolSummary = toolCalls.map((tc) => {
+            let argsStr = '';
+            try { argsStr = JSON.stringify(JSON.parse(tc.arguments)); } catch { argsStr = tc.arguments; }
+            return `🔧 ${tc.name}(${argsStr})`;
+          }).join('\n');
+          const shownWithTools = full ? `${full}\n\n${toolSummary}` : toolSummary;
+          setMessages((prev) => {
+            const next = [...prev];
+            const idx = next.findIndex((m) => m.name === assistantId);
+            if (idx >= 0) next[idx] = { role: 'assistant', content: shownWithTools, name: assistantId };
+            return next;
+          });
+
+          // Execute each tool call
+          for (const tc of toolCalls) {
+            const tool = allTools.find((t) => t.name === tc.name);
+            let result: string;
+            if (!tool) {
+              result = `Error: unknown tool "${tc.name}"`;
+            } else {
+              try {
+                const args = tc.arguments ? JSON.parse(tc.arguments) : {};
+                result = await tool.execute(args);
+              } catch (e) {
+                result = `Error executing ${tc.name}: ${e instanceof Error ? e.message : String(e)}`;
+              }
+            }
+            toolExecLog.push({ name: tc.name, args: tc.arguments ? JSON.parse(tc.arguments) : {}, result });
+            conversationHistory.push({ role: 'tool', content: result, toolCallId: tc.id });
+
+            // Update bubble with execution result
+            const execLine = `✅ ${tc.name} → ${result.slice(0, 200)}${result.length > 200 ? '...' : ''}`;
+            setMessages((prev) => {
+              const next = [...prev];
+              const idx = next.findIndex((m) => m.name === assistantId);
+              if (idx >= 0) next[idx] = { role: 'assistant', content: `${shownWithTools}\n${execLine}`, name: assistantId };
+              return next;
+            });
+          }
+
+          // Continue the loop — the LLM will see tool results and respond
+          continue;
+        }
+
+        // No tool calls — we're done
+        setMessages((prev) => prev.map((m) => (m.name === assistantId ? { role: 'assistant', content: full } : m)));
+        projects.appendMessage(cid, { role: 'assistant', content: full });
+        extractChangedFiles(full).forEach((p) => projects.addChangedFile(cid, p, 'modified'));
+        break;
+      } catch (e) {
+        const errMsg = `⚠️ ${e instanceof Error ? e.message : String(e)}\n\nTip: check your API key or connectivity.`;
+        setMessages((prev) => prev.map((m) => (m.name === assistantId ? { role: 'assistant', content: errMsg } : m)));
+        break;
       }
-      if (!full && reasoning) {
-        full = `🧠 ${reasoning}`;
-      }
-      setMessages((prev) => prev.map((m) => (m.name === assistantId ? { role: 'assistant', content: full } : m)));
-      projects.appendMessage(cid, { role: 'assistant', content: full });
-      extractChangedFiles(full).forEach((p) => projects.addChangedFile(cid, p, 'modified'));
-    } catch (e) {
-      const errMsg = `⚠️ ${e instanceof Error ? e.message : String(e)}\n\nTip: check your API key or connectivity.`;
-      setMessages((prev) => prev.map((m) => (m.name === assistantId ? { role: 'assistant', content: errMsg } : m)));
     }
+
+    // Fallback if no content was streamed at all
     if (!full && contentStreamed === false) {
       try {
+        const body = { provider, model, messages: history, params: { temperature, maxTokens } };
         const res = await chat.chat(body);
         const text = res.content ?? '';
         if (text) {
@@ -1631,6 +1731,40 @@ function Bubble({ msg, streaming }: { msg: ChatMessage; streaming: boolean }) {
 
     while (i < lines.length) {
       const line = lines[i];
+
+      // Match 🔧 tool_name(args) — tool call invocation
+      const toolCallMatch = line.match(/^🔧\s+(\w+)\((.+)\)$/);
+      if (toolCallMatch) {
+        const [, toolName, argsRaw] = toolCallMatch;
+        let argsDisplay = argsRaw;
+        try { argsDisplay = JSON.stringify(JSON.parse(argsRaw), null, 2); } catch { /* keep raw */ }
+        elements.push(
+          <div key={`tool-${i}`} style={{ display: 'flex', flexDirection: 'column', gap: tokens.space1, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, marginBottom: tokens.space1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2 }}>
+              <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.accent, textTransform: 'uppercase' }}>🔧 {toolName}</span>
+            </div>
+            <pre style={{ margin: 0, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, color: tokens.textMuted, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 120, overflow: 'auto' }}>{argsDisplay}</pre>
+          </div>
+        );
+        i++;
+        continue;
+      }
+
+      // Match ✅ tool_name → result — tool execution result
+      const toolResultMatch = line.match(/^✅\s+(\w+)\s+→\s+(.+)$/);
+      if (toolResultMatch) {
+        const [, toolName, result] = toolResultMatch;
+        elements.push(
+          <div key={`tool-result-${i}`} style={{ display: 'flex', flexDirection: 'column', gap: tokens.space1, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, marginBottom: tokens.space1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2 }}>
+              <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.success, textTransform: 'uppercase' }}>✅ {toolName}</span>
+            </div>
+            <pre style={{ margin: 0, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, color: tokens.textMuted, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 120, overflow: 'auto' }}>{result}</pre>
+          </div>
+        );
+        i++;
+        continue;
+      }
 
       const writeMatch = line.match(/^Write\s+([^\s]+)\s+(.+)$/i);
       if (writeMatch) {
