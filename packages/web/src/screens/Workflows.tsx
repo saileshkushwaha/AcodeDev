@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, type ReactNode, type CSSProperties } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, type ReactNode, type CSSProperties } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Input, Select, Badge, Modal, useTheme, Spinner } from '@acode/ui';
@@ -122,11 +122,17 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   const [ghMsg, setGhMsg] = useState('');
 
   const allDefs = useMemo(() => workflowStore.all(), [workflowStore, ver]);
-  const customCount = allDefs.filter((d) => !d.builtin).length;
-  const presetCount = allDefs.length - customCount;
+  const customCount = useMemo(() => allDefs.filter((d) => !d.builtin).length, [allDefs]);
+  const presetCount = useMemo(() => allDefs.length - customCount, [allDefs, customCount]);
 
-  const activeDef = workflowStore.get(activeId);
-  const activeIsBuiltin = Boolean(activeDef?.builtin);
+  const activeDef = useMemo(() => workflowStore.get(activeId), [workflowStore, activeId]);
+  const activeIsBuiltin = useMemo(() => Boolean(activeDef?.builtin), [activeDef]);
+
+  const catIcon = useCallback((cat?: string) => WORKFLOW_CATEGORIES.find((c) => c.id === cat)?.icon ?? '🔁', []);
+  const workflowOptions = useMemo(() => allDefs.map((d) => ({
+    label: `${d.builtin ? catIcon(d.category) : '🗀'} ${d.name}${d.builtin ? '' : ' · saved'}`,
+    value: d.id,
+  })), [allDefs, catIcon]);
 
   const loadDef = useCallback(
     (id: string) => {
@@ -340,28 +346,22 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     output: '📤 Output',
   };
 
-  const catIcon = (cat?: string) => WORKFLOW_CATEGORIES.find((c) => c.id === cat)?.icon ?? '🔁';
-  const workflowOptions = allDefs.map((d) => ({
-    label: `${d.builtin ? catIcon(d.category) : '🗀'} ${d.name}${d.builtin ? '' : ' · saved'}`,
-    value: d.id,
-  }));
-
   const currentRun = history[runIdx] ?? null;
   const runResults = currentRun?.results ?? null;
   const lastRunAt = currentRun?.at ?? null;
   const runFinal = currentRun?.final ?? '';
   const runCost = currentRun?.cost ?? 0;
-  const runTokens = runResults?.reduce((s, r) => s + (r.tokens?.prompt ?? 0) + (r.tokens?.completion ?? 0), 0) ?? 0;
+  const runTokens = useMemo(() => runResults?.reduce((s, r) => s + (r.tokens?.prompt ?? 0) + (r.tokens?.completion ?? 0), 0) ?? 0, [runResults]);
   const runResultByNode = useMemo(() => {
     const m = new Map<string, WorkflowRunResult>();
     runResults?.forEach((r) => m.set(r.nodeId, r));
     return m;
   }, [runResults]);
 
-  const runOptions = history.map((r, i) => ({
+  const runOptions = useMemo(() => history.map((r, i) => ({
     label: `#${history.length - i} · ${new Date(r.at).toLocaleTimeString()} · ${r.elapsedMs >= 1000 ? `${(r.elapsedMs / 1000).toFixed(1)}s` : `${r.elapsedMs}ms`}${r.cost > 0 ? ` · ${fmtCost(r.cost)}` : ''}`,
     value: String(i),
-  }));
+  })), [history]);
   const selectRun = useCallback((idx: number) => {
     setRunIdx(idx);
     setCollapsed({});
@@ -369,8 +369,8 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   }, []);
 
   const toggleCollapse = useCallback((id: string) => setCollapsed((c) => (c[id] ? { ...c, [id]: false } : { ...c, [id]: true })), []);
-  const collapseAllResults = () => setCollapsed(Object.fromEntries((runResults ?? []).map((r) => [r.nodeId, true])));
-  const preview = (s: string, n = 96) => (s.length > n ? `${s.slice(0, n).trimEnd()}…` : s);
+  const collapseAllResults = useCallback(() => setCollapsed(Object.fromEntries((runResults ?? []).map((r) => [r.nodeId, true]))), [runResults]);
+  const preview = useCallback((s: string, n = 96) => (s.length > n ? `${s.slice(0, n).trimEnd()}…` : s), []);
 
   const copyResult = async () => {
     if (!runFinal) return;
@@ -647,7 +647,7 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   );
 }
 
-function CollapsibleCard({ title, subtitle, actions, expanded, onToggle, children, style }: {
+const CollapsibleCard = React.memo(function CollapsibleCard({ title, subtitle, actions, expanded, onToggle, children, style }: {
   title: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
@@ -673,9 +673,9 @@ function CollapsibleCard({ title, subtitle, actions, expanded, onToggle, childre
       {expanded && <div style={{ marginTop: 10 }}>{children}</div>}
     </Card>
   );
-}
+});
 
-function RowBtn({ onClick, disabled, title, danger, children }: { onClick: () => void; disabled?: boolean; title?: string; danger?: boolean; children: ReactNode }) {
+const RowBtn = React.memo(function RowBtn({ onClick, disabled, title, danger, children }: { onClick: () => void; disabled?: boolean; title?: string; danger?: boolean; children: ReactNode }) {
   const { tokens } = useTheme();
   return (
     <button
@@ -704,9 +704,9 @@ function RowBtn({ onClick, disabled, title, danger, children }: { onClick: () =>
       {children}
     </button>
   );
-}
+});
 
-function NodeConfig({ node, step, updateConfig, rename, runResult, runAt }: {
+const NodeConfig = React.memo(function ({ node, step, updateConfig, rename, runResult, runAt }: {
   node: WorkflowNode;
   step: number;
   updateConfig: (id: string, key: string, value: unknown) => void;
@@ -716,9 +716,9 @@ function NodeConfig({ node, step, updateConfig, rename, runResult, runAt }: {
 }) {
   const { tokens } = useTheme();
   const nodeProvider = (node.config.provider as ProviderId) || 'openrouter';
-  const allProviders = listProviders();
-  const providerOptions = allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id }));
-  const models = listModels(nodeProvider).map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id }));
+  const allProviders = useMemo(() => listProviders(), []);
+  const providerOptions = useMemo(() => allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id })), [allProviders]);
+  const models = useMemo(() => listModels(nodeProvider).map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id })), [nodeProvider]);
   const st = runResult?.status ?? 'ok';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -772,4 +772,4 @@ function NodeConfig({ node, step, updateConfig, rename, runResult, runAt }: {
       )}
     </div>
   );
-}
+});
