@@ -802,46 +802,54 @@ const NodeConfig = React.memo(function ({ node, step, updateConfig, rename, runR
         <Input label="Default input template" textarea rows={2} value={String(node.config.value)} onChange={(v) => updateConfig(node.id, 'value', v)} />
       )}
       {node.type === 'trigger' && (
-        <Select label="Trigger type" value={String(node.config.type)} onChange={(v) => updateConfig(node.id, 'type', v)} options={[
-          { label: 'Cron', value: 'cron' },
-          { label: 'Once', value: 'once' },
-        ]} />
-        <Input label="Expression" monospace value={String(node.config.expression)} onChange={(v) => updateConfig(node.id, 'expression', v)} hint="e.g. upstream.length > 100" />
-        <Input label="Interval (ms)" type="number" value={String(node.config.interval ?? 60000)} onChange={(v) => updateConfig(node.id, 'interval', Number(v))} />
+        <>
+          <Select label="Trigger type" value={String(node.config.type)} onChange={(v) => updateConfig(node.id, 'type', v)} options={[
+            { label: 'Cron', value: 'cron' },
+            { label: 'Once', value: 'once' },
+          ]} />
+          <Input label="Expression" monospace value={String(node.config.expression)} onChange={(v) => updateConfig(node.id, 'expression', v)} hint="e.g. upstream.length > 100" />
+          <Input label="Interval (ms)" type="number" value={String(node.config.interval ?? 60000)} onChange={(v) => updateConfig(node.id, 'interval', Number(v))} />
+        </>
       )}
       {node.type === 'http' && (
-        <Select label="Method" value={String(node.config.method)} onChange={(v) => updateConfig(node.id, 'method', v)} options={[
-          { label: 'GET', value: 'GET' },
-          { label: 'POST', value: 'POST' },
-          { label: 'PUT', value: 'PUT' },
-          { label: 'DELETE', value: 'DELETE' },
-        ]} />
-        <Input label="URL" value={String(node.config.url)} onChange={(v) => updateConfig(node.id, 'url', v)} />
-        <Input label="Body" rows={2} value={String(node.config.body ?? '')} onChange={(v) => updateConfig(node.id, 'body', v)} />
-        <Input label="Headers (JSON)" rows={2} value={String(JSON.stringify(node.config.headers ?? {}))} onChange={(v) => {
-          try { updateConfig(node.id, 'headers', JSON.parse(v)); } catch { /* ignore */ }
-        }} hint="e.g. { 'Authorization': 'Bearer token' }" />
+        <>
+          <Select label="Method" value={String(node.config.method)} onChange={(v) => updateConfig(node.id, 'method', v)} options={[
+            { label: 'GET', value: 'GET' },
+            { label: 'POST', value: 'POST' },
+            { label: 'PUT', value: 'PUT' },
+            { label: 'DELETE', value: 'DELETE' },
+          ]} />
+          <Input label="URL" value={String(node.config.url)} onChange={(v) => updateConfig(node.id, 'url', v)} />
+          <Input label="Body" rows={2} value={String(node.config.body ?? '')} onChange={(v) => updateConfig(node.id, 'body', v)} />
+          <Input label="Headers (JSON)" rows={2} value={String(JSON.stringify(node.config.headers ?? {}))} onChange={(v) => {
+            try { updateConfig(node.id, 'headers', JSON.parse(v)); } catch { /* ignore */ }
+          }} hint="e.g. { 'Authorization': 'Bearer token' }" />
+        </>
       )}
       {node.type === 'fetch' && (
         <Input label="URL" value={String(node.config.url)} onChange={(v) => updateConfig(node.id, 'url', v)} />
       )}
       {node.type === 'kv' && (
-        <Select label="Action" value={String(node.config.action)} onChange={(v) => updateConfig(node.id, 'action', v)} options={[
-          { label: 'Get', value: 'get' },
-          { label: 'Set', value: 'set' },
-          { label: 'Delete', value: 'delete' },
-        ]} />
-        <Input label="Key" value={String(node.config.key)} onChange={(v) => updateConfig(node.id, 'key', v)} />
-        {node.config.action === 'set' && <Input label="Value" rows={2} value={String(node.config.value ?? '')} onChange={(v) => updateConfig(node.id, 'value', v)} />}
+        <>
+          <Select label="Action" value={String(node.config.action)} onChange={(v) => updateConfig(node.id, 'action', v)} options={[
+            { label: 'Get', value: 'get' },
+            { label: 'Set', value: 'set' },
+            { label: 'Delete', value: 'delete' },
+          ]} />
+          <Input label="Key" value={String(node.config.key)} onChange={(v) => updateConfig(node.id, 'key', v)} />
+          {node.config.action === 'set' && <Input label="Value" rows={2} value={String(node.config.value ?? '')} onChange={(v) => updateConfig(node.id, 'value', v)} />}
+        </>
       )}
       {node.type === 'variables' && (
-        <Select label="Action" value={String(node.config.action)} onChange={(v) => updateConfig(node.id, 'action', v)} options={[
-          { label: 'Set', value: 'set' },
-          { label: 'Get', value: 'get' },
-          { label: 'Unset', value: 'unset' },
-        ]} />
-        <Input label="Key" value={String(node.config.key)} onChange={(v) => updateConfig(node.id, 'key', v)} />
-        {node.config.action === 'set' && <Input label="Value" rows={2} value={String(node.config.value ?? '')} onChange={(v) => updateConfig(node.id, 'value', v)} />
+        <>
+          <Select label="Action" value={String(node.config.action)} onChange={(v) => updateConfig(node.id, 'action', v)} options={[
+            { label: 'Set', value: 'set' },
+            { label: 'Get', value: 'get' },
+            { label: 'Unset', value: 'unset' },
+          ]} />
+          <Input label="Key" value={String(node.config.key)} onChange={(v) => updateConfig(node.id, 'key', v)} />
+          {node.config.action === 'set' && <Input label="Value" rows={2} value={String(node.config.value ?? '')} onChange={(v) => updateConfig(node.id, 'value', v)} />}
+        </>
       )}
       {node.type === 'secret' && (
         <Input label="Secret name" value={String(node.config.name)} onChange={(v) => updateConfig(node.id, 'name', v)} hint="e.g. OPENAI_API_KEY" />
@@ -850,9 +858,11 @@ const NodeConfig = React.memo(function ({ node, step, updateConfig, rename, runR
         <span style={{ fontSize: 12, color: tokens.textMuted }}>Combines outputs from all downstream edges</span>
       )}
       {node.type === 'loop' && (
-        <Input label="Array" rows={2} value={String(node.config.array ?? '[]')} onChange={(v) => updateConfig(node.id, 'array', v)} />
-        <Input label="Body expression" monospace value={String(node.config.body ?? 'upstream')} onChange={(v) => updateConfig(node.id, 'body', v)} hint="e.g. upstream.task" />
-        <Input label="Separator" value={String(node.config.separator ?? '\n')} onChange={(v) => updateConfig(node.id, 'separator', v)} />
+        <>
+          <Input label="Array" rows={2} value={String(node.config.array ?? '[]')} onChange={(v) => updateConfig(node.id, 'array', v)} />
+          <Input label="Body expression" monospace value={String(node.config.body ?? 'upstream')} onChange={(v) => updateConfig(node.id, 'body', v)} hint="e.g. upstream.task" />
+          <Input label="Separator" value={String(node.config.separator ?? '\n')} onChange={(v) => updateConfig(node.id, 'separator', v)} />
+        </>
       )}
     </div>
   );

@@ -180,7 +180,7 @@ describe('workflow library', () => {
     newPresets.forEach((id) => {
       const w = WORKFLOW_LIBRARY.find((x) => x.id === id);
       expect(w).toBeTruthy();
-      expect(w.id).toBeTruthy();
+      if (!w) return;
       expect(w.name.length).toBeGreaterThan(0);
       expect(WORKFLOW_CATEGORIES.some((c) => c.id === w.category)).toBe(true);
       expect(w.nodes.length).toBeGreaterThanOrEqual(2);

@@ -174,14 +174,14 @@ export class WorkflowEngine {
               // Simple cron-like: schedule once per run, evaluate condition
               // For in-DAG execution, we just evaluate the condition once
               // and set output; the engine runs synchronously so "cron" fires once
-              if (evalCondition(expr, { input, upstream: upstreamText })) {
+              if (this.evalCondition(expr, { input, upstream: upstreamText })) {
                 output = 'triggered';
               } else {
                 output = '';
               }
             } else if (type === 'once') {
               once = true;
-              if (evalCondition(expr, { input, upstream: upstreamText })) {
+              if (this.evalCondition(expr, { input, upstream: upstreamText })) {
                 output = 'triggered';
               } else {
                 output = '';
@@ -207,7 +207,9 @@ export class WorkflowEngine {
               if (headers && Object.keys(headers).length > 0) fetchOptions.headers = headers;
               const resp = await fetch(url, fetchOptions);
               const text = await resp.text();
-              output = `Status: ${resp.status}\nHeaders: ${JSON.stringify(Object.fromEntries(resp.headers.entries()))}\nBody: ${text}`;
+              const headersOut: Record<string, string> = {};
+              resp.headers.forEach((v, k) => { headersOut[k] = v; });
+              output = `Status: ${resp.status}\nHeaders: ${JSON.stringify(headersOut)}\nBody: ${text}`;
             } catch (e: any) {
               output = `⚠️ HTTP Request failed: ${e.message ?? String(e)}`;
             }
@@ -349,7 +351,6 @@ export class WorkflowEngine {
             output = items.join(separator);
             break;
           }
-        }
         case 'output':
           default:
             output = upstreamText;
