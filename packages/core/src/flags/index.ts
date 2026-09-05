@@ -18,8 +18,10 @@ import { readJSON, writeJSON } from '../storage';
  */
 
 export const FLAGS_STORAGE_KEY = 'acode.flags.v1';
+export type StorageErrorHandler = (key: string, error: unknown) => void;
+let errorHandler: StorageErrorHandler | null = null;
+export function setStorageErrorHandler(handler: StorageErrorHandler | null): void { errorHandler = handler; }
 
-export type FlagKind = 'boolean' | 'enum' | 'string' | 'number';
 
 export interface BaseFlagSpec {
   key: string;
@@ -75,6 +77,23 @@ export const FLAG_SPECS: FlagSpec[] = [
     label: 'Native file system (experimental)',
     description: 'Enable direct read/write to the local file system through the relay proxy (/fs/read, /fs/write).',
     group: 'Experimental',
+  },
+  {
+    key: 'projects.inactiveConversations',
+    kind: 'boolean',
+    default: true,
+    label: 'Inactive conversations',
+    description: 'Allow conversations to be marked inactive (viewable but not usable) when a project is deleted, preserving chat history.',
+    group: 'Projects',
+  },
+  {
+    key: 'workflows.finalOutputMode',
+    kind: 'enum',
+    default: 'md',
+    options: ['md', 'raw'],
+    label: 'Final output mode',
+    description: 'Control how workflow run results are copied: Markdown fenced code block or plain text.',
+    group: 'Workflows',
   },
   {
     key: 'experimental.agentsRAG',
@@ -264,3 +283,4 @@ export function hiddenFlagsVisible(): boolean {
   const data = readJSON<Record<string, unknown>>(FLAGS_STORAGE_KEY);
   return data?.__hidden === true;
 }
+

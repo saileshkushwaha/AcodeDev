@@ -11,6 +11,7 @@ import {
   WORKFLOW_CATEGORIES,
   listModels,
   listProviders,
+  isOn,
   readRaw,
   writeRaw,
   readJSON,
@@ -109,6 +110,9 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   const [runIdx, setRunIdx] = useState(0);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [finalCollapsed, setFinalCollapsed] = useState(false);
+  const [finalOutputMode, setFinalOutputMode] = useState<'md' | 'raw'>(
+    isOn('workflows.finalOutputMode') ? 'md' : 'md'
+  );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [ghModal, setGhModal] = useState(false);
   const [ghRepo, setGhRepo] = useState('');
@@ -370,8 +374,9 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
 
   const copyResult = async () => {
     if (!runFinal) return;
+    const text = finalOutputMode === 'md' ? '```md\n' + runFinal + '\n```' : runFinal;
     try {
-      await navigator.clipboard?.writeText(runFinal);
+      await navigator.clipboard?.writeText(text);
     } catch {
       /* ignore */
     }
@@ -605,7 +610,10 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
             style={{ border: `1px solid ${tokens.success}` }}
             actions={
               <>
-                <Button size="sm" variant="ghost" onClick={() => void copyResult()} disabled={!runFinal}>⧉ Copy</Button>
+{isOn('workflows.finalOutputMode') && (
+  <Button size="sm" variant="ghost" onClick={() => setFinalOutputMode(m => m === 'md' ? 'raw' : 'md')}>{finalOutputMode === 'md' ? 'Raw' : 'MD'}</Button>
+)}
+                 <Button size="sm" variant="ghost" onClick={() => void copyResult()} disabled={!runFinal}>⧉ Copy</Button>
                 <Button size="sm" variant="ghost" onClick={() => void sendToChat()} disabled={!runFinal}>Send to chat</Button>
                 <Button size="sm" variant="secondary" onClick={openSendGitHub} disabled={!runFinal}>Create GitHub issue</Button>
               </>

@@ -281,6 +281,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [linkDraft, setLinkDraft] = useState({ open: false, url: '', title: '' });
   const [archivedSessions, setArchivedSessions] = useState<Conversation[]>([]);
+  const [inactiveSessions, setInactiveSessions] = useState<Conversation[]>([]);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [pendingSessionAfterProject, setPendingSessionAfterProject] = useState(false);
 
@@ -319,6 +320,10 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setArchivedSessions(projects.archivedConversationsFor(currentProjectId ?? undefined));
   }, [projects, currentProjectId]);
 
+  const refreshInactive = useCallback(() => {
+    setInactiveSessions(projects.inactiveConversationsFor(currentProjectId ?? undefined));
+  }, [projects, currentProjectId]);
+
   const refreshChangedFiles = useCallback(() => {
     setChangedFiles((projects.changedFilesFor(convId) ?? []) as { path: string; status: string; changedAt: number }[]);
   }, [projects, convId]);
@@ -326,8 +331,9 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   useEffect(() => {
     refreshSessions();
     refreshArchived();
+    refreshInactive();
     refreshChangedFiles();
-  }, [refreshSessions, refreshArchived, refreshChangedFiles]);
+  }, [refreshSessions, refreshArchived, refreshInactive, refreshChangedFiles]);
 
   useEffect(() => {
     if (!providerModels.some((m) => m.id === model)) {
@@ -504,6 +510,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     projects.setArchived(id, true);
     refreshSessions();
     refreshArchived();
+    refreshInactive();
     setTabs((prev) => {
       const next = prev.filter((t) => t.convId !== id);
       if (next.length === 0) {
@@ -534,6 +541,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     projects.setArchived(id, false);
     refreshSessions();
     refreshArchived();
+    refreshInactive();
     const tab = tabs.find((t) => t.convId === id);
     if (!tab) {
       const conv = projects.getConversation(id);
@@ -551,6 +559,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setCurrentProjectId(id);
     refreshSessions();
     refreshArchived();
+    refreshInactive();
   };
 
   const createProject = (name: string, opts?: { description?: string; color?: string; gitRepo?: string }) => {
@@ -558,6 +567,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     setCurrentProjectId(proj.id);
     refreshSessions();
     refreshArchived();
+    refreshInactive();
     return proj;
   };
 
@@ -566,7 +576,8 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const refreshProjects = useCallback(() => {
     refreshSessions();
     refreshArchived();
-  }, [refreshSessions, refreshArchived]);
+    refreshInactive();
+  }, [refreshSessions, refreshArchived, refreshInactive]);
 
   const editProject = (id: string, updates: { name?: string; description?: string; color?: string; gitRepo?: string }) => {
     projects.updateProject(id, updates);
@@ -688,6 +699,10 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     }
 
     const conv = projects.getConversation(cid)!;
+    if (conv.inactive) {
+      alert('This session is inactive because its project was deleted. You can view it but cannot send new messages.');
+      return;
+    }
     if ((conv.title === 'New session' || conv.title === 'New chat') && raw) {
       projects.renameConversation(cid, raw.slice(0, 40));
       refreshSessions();
@@ -1000,6 +1015,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           currentProjectId={currentProjectId}
           activeProjectId={currentProjectId}
           archived={archivedSessions}
+          inactive={inactiveSessions}
           onUnarchive={unarchiveSession}
           onOpenProject={openProject}
           onCreateProject={createProject}
@@ -2045,10 +2061,11 @@ function generateMockDiff(path: string, status: string): DiffHunk[] {
   ];
 }
 
-function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onNewSession, onClose, projects, currentProjectId, activeProjectId, onOpenProject, onCreateProject }: {
+function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnarchive, onNewSession, onClose, projects, currentProjectId, activeProjectId, onOpenProject, onCreateProject }: {
   sessions: Conversation[];
   activeId: string | null;
   archived: Conversation[];
+  inactive: Conversation[];
   onSelect: (id: string) => void;
   onUnarchive: (id: string) => void;
   onNewSession: () => void;
@@ -2216,7 +2233,7 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
             getProjectName={getProjectName}
           />
         )}
-        {filteredSessions.length === 0 && filteredArchived.length === 0 && (
+        {filteredSessions.length === 0 && filteredArchived.length === 0 && inactive.length === 0 && (
           <div style={{ padding: tokens.space4, textAlign: 'center', color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
             No sessions found
           </div>
@@ -2243,6 +2260,28 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
                     onClick={() => onUnarchive(s.id)}
                     style={{ flexShrink: 0, background: 'transparent', border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusSm, color: tokens.textSecondary, fontSize: tokens.fontSizeXs, cursor: 'pointer', padding: `2px ${tokens.space2}px`, fontFamily: tokens.fontSans }}
                   >Restore</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {inactive.length > 0 && (
+          <div style={{ marginTop: tokens.space3, marginBottom: tokens.space3 }}>
+            <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, padding: `${tokens.space2}px 0` }}>Inactive (project deleted)</div>
+            {inactive.map((s) => {
+              const projectName = getProjectName(s);
+              return (
+                <div
+                  key={s.id}
+                  style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, marginBottom: 2, opacity: 0.5, cursor: 'not-allowed' }}
+                  title="Session is inactive — its project was deleted"
+                >
+                  <span style={{ width: 24, height: 24, borderRadius: '50%', background: tokens.surface, color: tokens.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0, border: `1px solid ${tokens.border}` }}>⛔</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.textMuted }}>{s.title || 'New session'}</div>
+                    {projectName && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{projectName}</div>}
+                  </div>
+                  <span style={{ fontSize: tokens.fontSizeXs, color: tokens.danger, fontWeight: 600 }}>Inactive</span>
                 </div>
               );
             })}

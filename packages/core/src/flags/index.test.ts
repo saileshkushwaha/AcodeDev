@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { setStorageErrorHandler } from "./index";
 import {
   loadFlags,
   isOn,
@@ -28,7 +29,7 @@ function createMemoryStorage(): Storage {
 
 describe('feature flags', () => {
   beforeEach(() => vi.stubGlobal('localStorage', createMemoryStorage()));
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); setStorageErrorHandler(null); });
 
   it('defaults resolve from the registry without any override', () => {
     loadFlags();

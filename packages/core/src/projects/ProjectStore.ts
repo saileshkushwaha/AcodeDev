@@ -1,6 +1,7 @@
-import { readJSON, writeJSON } from '../storage';
-import type { ChatMessage, ProviderId } from '../types';
 
+import { readJSON, writeJSON } from "../storage";
+import type { ChatMessage, ProviderId } from "../types";
+import { isOn } from "@acode/core";
 export type FileChangeStatus = 'added' | 'modified' | 'deleted';
 
 export interface ChangedFile {
@@ -29,6 +30,8 @@ export interface Conversation {
   settings?: ConversationSettings;
   /** Hidden from the active session list (toggle via archive/unarchive). */
   archived?: boolean;
+  /** Conversation belongs to a deleted project; viewable but not usable for new messages. */
+  inactive?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -128,24 +131,29 @@ export class ProjectStore {
   }
 
   /**
-   * Delete a project. Associated conversations have their `projectId` cleared
-   * (the conversations themselves are preserved) so users don't lose chat history.
-   * Returns the number of conversations that were unlinked.
+   * Delete a project. Associated conversations are marked `inactive` (viewable
+   * but not usable for new messages) and keep their `projectId` for traceability.
+   * Returns the number of conversations that were deactivated.
    */
   deleteProject(id: string): number {
     const p = this.projects.get(id);
     if (!p) return 0;
-    let unlinked = 0;
+    let deactivated = 0;
     for (const cid of p.conversations) {
       const c = this.conversations.get(cid);
       if (c && c.projectId === id) {
-        c.projectId = undefined;
-        unlinked++;
+        if (isOn('projects.inactiveConversations')) {
+          c.inactive = true;
+        } else {
+          c.projectId = undefined;
+        }
+        c.updatedAt = Date.now();
+        deactivated++;
       }
     }
     this.projects.delete(id);
     this.persist();
-    return unlinked;
+    return deactivated;
   }
 
   createConversation(input: { title: string; projectId?: string; provider: ProviderId; model: string; settings?: ConversationSettings }): Conversation {
@@ -265,8 +273,18 @@ export class ProjectStore {
     }
   }
 
+  /** Toggle the inactive flag on a conversation. Inactive conversations are viewable but not usable. */
+  setInactive(id: string, inactive: boolean): void {
+    const c = this.conversations.get(id);
+    if (c) {
+      c.inactive = inactive;
+      c.updatedAt = Date.now();
+      this.persist();
+    }
+  }
+
   conversationsFor(projectId?: string): Conversation[] {
-    const all = [...this.conversations.values()].filter((c) => !c.archived);
+    const all = [...this.conversations.values()].filter((c) => !c.archived && !c.inactive);
     return (projectId ? all.filter((c) => c.projectId === projectId) : all).sort(
       (a, b) => b.updatedAt - a.updatedAt,
     );
@@ -275,6 +293,14 @@ export class ProjectStore {
   /** Archived conversations for the restore view (most recently archived first). */
   archivedConversationsFor(projectId?: string): Conversation[] {
     const all = [...this.conversations.values()].filter((c) => c.archived);
+    return (projectId ? all.filter((c) => c.projectId === projectId) : all).sort(
+      (a, b) => b.updatedAt - a.updatedAt,
+    );
+  }
+
+  /** Inactive conversations (belonged to a deleted project). Viewable but not usable. */
+  inactiveConversationsFor(projectId?: string): Conversation[] {
+    const all = [...this.conversations.values()].filter((c) => c.inactive);
     return (projectId ? all.filter((c) => c.projectId === projectId) : all).sort(
       (a, b) => b.updatedAt - a.updatedAt,
     );
