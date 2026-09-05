@@ -16,6 +16,8 @@ export interface Conversation {
   model: string;
   messages: ChatMessage[];
   changedFiles: ChangedFile[];
+  /** Hidden from the active session list (toggle via archive/unarchive). */
+  archived?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -211,8 +213,26 @@ export class ProjectStore {
     this.persist();
   }
 
+  /** Toggle the archived flag on a conversation (archived sessions are hidden). */
+  setArchived(id: string, archived: boolean): void {
+    const c = this.conversations.get(id);
+    if (c) {
+      c.archived = archived;
+      c.updatedAt = Date.now();
+      this.persist();
+    }
+  }
+
   conversationsFor(projectId?: string): Conversation[] {
-    const all = [...this.conversations.values()];
+    const all = [...this.conversations.values()].filter((c) => !c.archived);
+    return (projectId ? all.filter((c) => c.projectId === projectId) : all).sort(
+      (a, b) => b.updatedAt - a.updatedAt,
+    );
+  }
+
+  /** Archived conversations for the restore view (most recently archived first). */
+  archivedConversationsFor(projectId?: string): Conversation[] {
+    const all = [...this.conversations.values()].filter((c) => c.archived);
     return (projectId ? all.filter((c) => c.projectId === projectId) : all).sort(
       (a, b) => b.updatedAt - a.updatedAt,
     );
