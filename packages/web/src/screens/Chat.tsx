@@ -1019,6 +1019,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           onUnarchive={unarchiveSession}
           onOpenProject={openProject}
           onCreateProject={createProject}
+          streaming={streaming}
         />
       )}
 
@@ -1110,6 +1111,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                   @keyframes opencode-glow { 0%, 100% { text-shadow: 0 0 20px ${tokens.primary}40, 0 0 40px ${tokens.primary}20; } 50% { text-shadow: 0 0 30px ${tokens.primary}60, 0 0 60px ${tokens.primary}30; } }
                   @keyframes opencode-shimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
                   @keyframes opencode-dot-pulse { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+                  @keyframes acode-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
                 `}</style>
                 <div style={{ animation: 'opencode-fadein 0.8s ease-out', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space3 }}>
                   <div style={{ fontSize: 72, fontWeight: 800, letterSpacing: '-0.03em', userSelect: 'none', lineHeight: 1, fontFamily: tokens.fontSans, background: `linear-gradient(135deg, ${tokens.textMuted}40, ${tokens.primary}80, ${tokens.textMuted}40)`, backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', animation: 'opencode-shimmer 4s linear infinite, opencode-glow 3s ease-in-out infinite' }}>
@@ -2061,7 +2063,7 @@ function generateMockDiff(path: string, status: string): DiffHunk[] {
   ];
 }
 
-function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnarchive, onNewSession, onClose, projects, currentProjectId, activeProjectId, onOpenProject, onCreateProject }: {
+function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnarchive, onNewSession, onClose, projects, currentProjectId, activeProjectId, onOpenProject, onCreateProject, streaming }: {
   sessions: Conversation[];
   activeId: string | null;
   archived: Conversation[];
@@ -2075,6 +2077,7 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
   activeProjectId: string | null;
   onOpenProject: (id: string | null) => void;
   onCreateProject: (name: string) => void;
+  streaming?: boolean;
 }) {
   const { tokens } = useTheme();
   const [search, setSearch] = useState('');
@@ -2213,6 +2216,7 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
             onSelect={onSelect}
             onNewSession={onNewSession}
             getProjectName={getProjectName}
+            streaming={streaming}
           />
         )}
         {yesterdaySessions.length > 0 && (
@@ -2222,6 +2226,7 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
             activeId={activeId}
             onSelect={onSelect}
             getProjectName={getProjectName}
+            streaming={streaming}
           />
         )}
         {olderSessions.length > 0 && (
@@ -2231,6 +2236,7 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
             activeId={activeId}
             onSelect={onSelect}
             getProjectName={getProjectName}
+            streaming={streaming}
           />
         )}
         {filteredSessions.length === 0 && filteredArchived.length === 0 && inactive.length === 0 && (
@@ -2673,13 +2679,14 @@ function EditProjectModal({ project, onClose, onSave }: {
   );
 }
 
-function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getProjectName }: {
+function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getProjectName, streaming }: {
   label: string;
   sessions: Conversation[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onNewSession?: () => void;
   getProjectName: (s: Conversation) => string;
+  streaming?: boolean;
 }) {
   const { tokens } = useTheme();
   return (
@@ -2708,7 +2715,11 @@ function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getPr
             onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
           >
             <span style={{ width: 24, height: 24, borderRadius: '50%', background: isActive ? tokens.primary : tokens.surface, color: isActive ? '#fff' : tokens.text, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
-              {s.title?.replace(/\s+/g, ' ').trim().charAt(0).toUpperCase() || 'P'}
+              {isActive && streaming ? (
+                <span style={{ width: 14, height: 14, border: '2px solid transparent', borderTopColor: '#fff', borderRadius: '50%', animation: 'acode-spin 0.8s linear infinite', display: 'inline-block' }} />
+              ) : (
+                s.title?.replace(/\s+/g, ' ').trim().charAt(0).toUpperCase() || 'P'
+              )}
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: tokens.fontSizeSm, fontWeight: isActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{s.title || 'New session'}</div>
