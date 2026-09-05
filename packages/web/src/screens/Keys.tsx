@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Input, Badge, useTheme, useIsMobile, Modal, Spinner } from '@acode/ui';
@@ -86,11 +86,13 @@ export function KeysScreen() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const setInput = (id: string, v: string) => setInputs((s) => ({ ...s, [id]: v }));
+  const setInput = useCallback((id: string, v: string) => setInputs((s) => ({ ...s, [id]: v })), []);
+
+  const cachedGatewayProviders = useMemo(() => listGatewayProviders(), [catalogVersion]);
 
   const gatewayCards: KnownConnector[] = useMemo(
     () =>
-      listGatewayProviders().map((d) => ({
+      cachedGatewayProviders.map((d) => ({
         id: d.id,
         label: d.name,
         category: 'gateway' as ConnectorCategory,
@@ -107,11 +109,14 @@ export function KeysScreen() {
         isProvider: true,
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [catalogVersion],
+    [catalogVersion, cachedGatewayProviders],
   );
 
-  const saveKey = (c: KnownConnector, value?: string) => {
-    const v = (value ?? inputs[c.id] ?? '').trim();
+  const inputsRef = useRef(inputs);
+  inputsRef.current = inputs;
+
+  const saveKey = useCallback((c: KnownConnector, value?: string) => {
+    const v = (value ?? inputsRef.current[c.id] ?? '').trim();
     if (!v) return;
     vault.setKey(c.id, v, { category: c.category, label: c.label, connectorType: c.connectorType });
     if (c.id === 'github') {
@@ -120,14 +125,13 @@ export function KeysScreen() {
     setInputs((s) => ({ ...s, [c.id]: '' }));
     refresh();
     setToast(`Saved ${c.label}`);
-  };
+  }, [vault, refresh]);
 
-  const removeKey = (c: KnownConnector) => {
+  const removeKey = useCallback((c: KnownConnector) => {
     vault.removeKey(c.id);
     if (c.id === 'github') {
       writeGithubToken('');
     }
-    // Runtime-added gateway: unregister its provider + models too.
     if (c.gateway && c.removable) {
       unregisterProvider(c.id);
       persistCatalog();
@@ -135,17 +139,17 @@ export function KeysScreen() {
     }
     setInputs((s) => ({ ...s, [c.id]: '' }));
     refresh();
-  };
+  }, [vault, refresh]);
 
-  const clearAll = () => {
+  const clearAll = useCallback(() => {
     vault.clear();
     writeGithubToken('');
     refresh();
     setConfirmClear(false);
     setToast('Cleared all connections');
-  };
+  }, [vault, refresh]);
 
-  const test = async (c: KnownConnector) => {
+  const test = useCallback(async (c: KnownConnector) => {
     const key = vault.getKey(c.id);
     if (!key) return;
     setTesting((s) => ({ ...s, [c.id]: 'testing' }));
@@ -168,25 +172,24 @@ export function KeysScreen() {
     } catch {
       setTesting((s) => ({ ...s, [c.id]: 'fail' }));
     }
-  };
+  }, [vault]);
 
-  const syncModels = async () => {
+  const syncModels = useCallback(async () => {
     setSyncing(true);
     const added = await syncCatalog();
     persistCatalog();
     setSyncing(false);
     refresh();
     setToast(added === -1 ? 'Gateways unavailable' : added > 0 ? `Synced ${added} new models` : 'Catalog is up to date');
-  };
+  }, [refresh]);
 
-  const addGateway = (name: string, baseUrl: string, key: string) => {
+  const addGateway = useCallback((name: string, baseUrl: string, key: string) => {
     const slug = baseUrl.replace(/^https?:\/\//, '').replace(/[.\/:]/g, '').replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 24) || 'gateway';
     const id = `gw-${slug}`;
     const def: ProviderDef = { id, name: name || slug, baseUrl: baseUrl.replace(/\/+$/, ''), kind: 'gateway', auth: 'bearer', gateway: true, needsKey: !!key, website: baseUrl, description: 'Custom OpenAI-compatible gateway.' };
     registerProvider(def);
     if (key) {
       vault.setKey(id, key, { category: 'gateway', label: def.name, connectorType: 'Gateway' });
-      // Refresh this gateway's models from its /models endpoint so it appears in Chat.
       void syncGatewayModels(id, baseUrl, key);
     }
     persistCatalog();
@@ -195,27 +198,27 @@ export function KeysScreen() {
     setInputs((s) => ({ ...s, ['gw-key']: '', ['gw-name']: '', ['gw-base']: '' }));
     refresh();
     setToast(`Added gateway ${def.name}`);
-  };
+  }, [vault, refresh]);
 
-  const updateGatewayBaseUrl = (id: string, baseUrl: string) => {
+  const updateGatewayBaseUrl = useCallback((id: string, baseUrl: string) => {
     const def = getProvider(id);
     if (!def) return;
     registerProvider({ ...def, baseUrl });
     persistCatalog();
     refreshCatalog();
-  };
+  }, []);
 
   const allEntries = vault.allEntries();
-  const countFor = (cat: ConnectorCategory) => {
-    if (cat === 'custom') return allEntries.filter(([id]) => !findConnector(id) && !listGatewayProviders().some((g) => g.id === id)).length;
-    if (cat === 'gateway') return listGatewayProviders().filter((g) => vault.hasKey(g.id)).length;
+  const countFor = useMemo(() => (cat: ConnectorCategory) => {
+    if (cat === 'custom') return allEntries.filter(([id]) => !findConnector(id) && !cachedGatewayProviders.some((g) => g.id === id)).length;
+    if (cat === 'gateway') return cachedGatewayProviders.filter((g) => vault.hasKey(g.id)).length;
     return allEntries.filter(([id, e]) => e.category === cat).length;
-  };
+  }, [allEntries, cachedGatewayProviders, vault]);
 
   const customList: KnownConnector[] = useMemo(
     () =>
       allEntries
-        .filter(([id, e]) => e.category === 'custom' || (!findConnector(id) && !listGatewayProviders().some((g) => g.id === id) && e.category !== 'ai' && e.category !== 'gateway'))
+        .filter(([id, e]) => e.category === 'custom' || (!findConnector(id) && !cachedGatewayProviders.some((g) => g.id === id) && e.category !== 'ai' && e.category !== 'gateway'))
         .map(([id, e]) => ({
           id,
           label: e.label || id,
@@ -224,7 +227,7 @@ export function KeysScreen() {
           placeholder: e.label ? 'Paste a new key' : '…',
         })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allEntries.length, catalogVersion],
+    [allEntries.length, catalogVersion, cachedGatewayProviders],
   );
 
   const queried = useMemo(() => {
@@ -236,7 +239,9 @@ export function KeysScreen() {
     return known;
   }, [search, gatewayCards, customList]);
 
-  const list = queried ?? (active === 'custom' ? customList : active === 'gateway' ? gatewayCards : connectorsFor(active));
+  const activeConnectors = useMemo(() => connectorsFor(active), [active]);
+  const activeCategoryMeta = useMemo(() => categoryMeta(active), [active]);
+  const list = queried ?? (active === 'custom' ? customList : active === 'gateway' ? gatewayCards : activeConnectors);
 
   return (
     <Page maxWidth={1240}>
@@ -256,7 +261,7 @@ export function KeysScreen() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: tokens.space3, marginBottom: tokens.space5 }}>
         <SummaryStat label="Connectors stored" value={String(allEntries.length)} accent={tokens.primary} icon="🔐" />
         <SummaryStat label="AI providers" value={String(countFor('ai'))} accent={tokens.primary} icon="🧠" />
-        <SummaryStat label="Gateways" value={String(listGatewayProviders().length)} accent={tokens.info} icon="⇄" />
+        <SummaryStat label="Gateways" value={String(cachedGatewayProviders.length)} accent={tokens.info} icon="⇄" />
         <SummaryStat label="Business apps" value={String(countFor('business'))} accent={tokens.accent} icon="🏢" />
         <SummaryStat label="Dev & DevOps" value={String(countFor('dev'))} accent={tokens.success} icon="🛠" />
       </div>
@@ -306,8 +311,8 @@ export function KeysScreen() {
       {/* Section heading */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: tokens.space3, flexWrap: 'wrap', gap: tokens.space2 }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: tokens.fontSizeLg }}>{categoryMeta(active).label}</div>
-          <div style={{ fontSize: tokens.fontSizeSm, color: tokens.textMuted }}>{categoryMeta(active).description}</div>
+          <div style={{ fontWeight: 700, fontSize: tokens.fontSizeLg }}>{activeCategoryMeta.label}</div>
+          <div style={{ fontSize: tokens.fontSizeSm, color: tokens.textMuted }}>{activeCategoryMeta.description}</div>
         </div>
         <div style={{ display: 'flex', gap: tokens.space2 }}>
           {active === 'gateway' && (
@@ -437,7 +442,7 @@ async function syncGatewayModels(gatewayId: string, baseUrl: string, apiKey: str
   }
 }
 
-function SummaryStat({ label, value, accent, icon }: { label: string; value: string; accent: string; icon: string }) {
+const SummaryStat = React.memo(function SummaryStat({ label, value, accent, icon }: { label: string; value: string; accent: string; icon: string }) {
   const { tokens } = useTheme();
   return (
     <div style={{ background: tokens.surface, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusLg, padding: `${tokens.space3}px ${tokens.space4}px`, boxShadow: tokens.shadowSm }}>
@@ -448,9 +453,9 @@ function SummaryStat({ label, value, accent, icon }: { label: string; value: str
       <div style={{ fontSize: tokens.fontSize2xl, fontWeight: 800, color: tokens.text }}>{value}</div>
     </div>
   );
-}
+});
 
-function ConnectorCard({
+const ConnectorCard = React.memo(function ConnectorCard({
   c, storedKey, inputValue, onInput, baseUrlValue, onBaseUrlChange, revealed, toggleReveal, status, onSave, onRemove, onTest,
 }: {
   c: KnownConnector;
@@ -535,9 +540,9 @@ function ConnectorCard({
       </div>
     </Card>
   );
-}
+});
 
-function GatewayModal({
+const GatewayModal = React.memo(function GatewayModal({
   open, onClose, onSave, inputs, setInput,
 }: {
   open: boolean;
@@ -567,9 +572,9 @@ function GatewayModal({
       </div>
     </Modal>
   );
-}
+});
 
-function CustomModal({
+const CustomModal = React.memo(function CustomModal({
   open, onClose, onSave, inputs, setInput,
 }: {
   open: boolean;
@@ -595,4 +600,4 @@ function CustomModal({
       </div>
     </Modal>
   );
-}
+});
