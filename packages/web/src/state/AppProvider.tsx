@@ -87,6 +87,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return added;
   }, []);
 
+  const projectsRef = useRef<ProjectStore | null>(null);
+  if (!projectsRef.current) projectsRef.current = new ProjectStore();
+  const projects = projectsRef.current;
+
   const state: AppState = {
     vault: vaultRef.current,
     chat: engineRef.current,
@@ -94,7 +98,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     workflows: new WorkflowEngine(engineRef.current),
     evals: new EvalEngine(engineRef.current),
     prompts: new PromptRegistry(),
-    projects: new ProjectStore(),
+    projects,
     rag: new RAGMemory(),
     githubToken,
     setGithubToken: useCallback((t: string) => {

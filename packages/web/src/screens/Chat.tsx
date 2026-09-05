@@ -1718,7 +1718,7 @@ function SidebarPanel({ sessions, activeId, archived, onSelect, onUnarchive, onN
   const [projectSearch, setProjectSearch] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
 
-  const allProjects = projects.listProjects?.() ?? [];
+  const allProjects = projects.projectsList?.() ?? [];
   const filteredSessions = sessions.filter((s) =>
     !search || s.title.toLowerCase().includes(search.toLowerCase()),
   );
