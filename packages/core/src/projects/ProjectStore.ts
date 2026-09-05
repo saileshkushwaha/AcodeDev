@@ -114,6 +114,40 @@ export class ProjectStore {
     return this.projects.get(id);
   }
 
+  /** Update editable fields on a project. Only the fields provided in `updates` are changed. */
+  updateProject(id: string, updates: { name?: string; description?: string; color?: string; gitRepo?: string }): ProjectDoc | undefined {
+    const p = this.projects.get(id);
+    if (!p) return undefined;
+    if (updates.name !== undefined) p.name = updates.name.trim() || p.name;
+    if (updates.description !== undefined) p.description = updates.description;
+    if (updates.color !== undefined) p.color = updates.color;
+    if (updates.gitRepo !== undefined) p.gitRepo = updates.gitRepo;
+    p.updatedAt = Date.now();
+    this.persist();
+    return p;
+  }
+
+  /**
+   * Delete a project. Associated conversations have their `projectId` cleared
+   * (the conversations themselves are preserved) so users don't lose chat history.
+   * Returns the number of conversations that were unlinked.
+   */
+  deleteProject(id: string): number {
+    const p = this.projects.get(id);
+    if (!p) return 0;
+    let unlinked = 0;
+    for (const cid of p.conversations) {
+      const c = this.conversations.get(cid);
+      if (c && c.projectId === id) {
+        c.projectId = undefined;
+        unlinked++;
+      }
+    }
+    this.projects.delete(id);
+    this.persist();
+    return unlinked;
+  }
+
   createConversation(input: { title: string; projectId?: string; provider: ProviderId; model: string; settings?: ConversationSettings }): Conversation {
     const id = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     const conv: Conversation = {
