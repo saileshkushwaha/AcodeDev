@@ -621,14 +621,16 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         />
       )}
 
-      {/* Secondary tab bar: Session | Changes */}
-      <div style={{ display: 'flex', gap: tokens.space4, padding: `0 ${tokens.space3}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
-        <SubTab active={subtab === 'session'} onClick={() => setSubtab('session')}>Session</SubTab>
-        <SubTab active={subtab === 'files'} onClick={() => setSubtab('files')}>Changes{fileCount > 0 && subtab !== 'files' ? ` ${fileCount}` : ''}</SubTab>
-      </div>
+      {/* Secondary tab bar: Session | Changes — only when messages exist */}
+      {messages.length > 0 && (
+        <div style={{ display: 'flex', gap: tokens.space4, padding: `0 ${tokens.space3}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
+          <SubTab active={subtab === 'session'} onClick={() => setSubtab('session')}>Session</SubTab>
+          <SubTab active={subtab === 'files'} onClick={() => setSubtab('files')}>Changes{fileCount > 0 && subtab !== 'files' ? ` ${fileCount}` : ''}</SubTab>
+        </div>
+      )}
 
       {/* Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: `0 ${tokens.space4}px` }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: 0 }}>
         {/* Content header: title · spinner · overflow menu */}
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space3}px ${tokens.space4}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}` }}>
           <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sessionTitle}</div>
@@ -661,7 +663,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         </div>
 
         {/* Body */}
-        {subtab === 'session' ? (
+        {(subtab === 'session' || messages.length === 0) ? (
           <div ref={messagesRef} onScroll={onScrollBody} style={{ flex: 1, overflowY: 'auto', padding: tokens.space4, position: 'relative', display: 'flex', flexDirection: 'column', gap: tokens.space4 }}>
             {!connected && (
               <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, background: `linear-gradient(90deg, ${tokens.warning}1f, ${tokens.bgElevated})`, flexWrap: 'wrap' }}>
@@ -693,7 +695,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                   </div>
                 </div>
                 {/* Centered composer for empty sessions */}
-                <div style={{ width: '100%', maxWidth: 640, animation: 'opencode-fadein 0.8s ease-out 0.2s both' }}>
+                <div style={{ width: '100%', maxWidth: 800, animation: 'opencode-fadein 0.8s ease-out 0.2s both' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 0, background: tokens.bg, border: `1.5px dashed ${paramsOpen ? tokens.primary : tokens.borderStrong}`, borderRadius: tokens.radiusLg, padding: tokens.space2, transition: 'border-color 0.12s ease' }}>
                     <textarea
                       ref={textareaRef}
@@ -823,7 +825,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       {/* Fixed bottom composer - only show when there are messages */}
       {messages.length > 0 && (
       <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated, padding: `0 ${tokens.space4}px` }}>
-        <div style={{ maxWidth: 960, margin: '0 auto', padding: tokens.space3, position: 'relative' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.space3, position: 'relative' }}>
           <div
             style={{ display: 'flex', flexDirection: 'column', gap: 0, background: tokens.bg, border: `1.5px dashed ${paramsOpen ? tokens.primary : tokens.borderStrong}`, borderRadius: tokens.radiusLg, padding: tokens.space2, transition: 'border-color 0.12s ease' }}
           >
