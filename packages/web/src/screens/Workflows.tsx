@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, type ReactNode, type 
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Input, Select, Badge, Modal, useTheme, Spinner } from '@acode/ui';
+import { Markdown } from '../components/Markdown';
 import {
   type WorkflowDefinition,
   type WorkflowNode,
@@ -619,7 +620,13 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
               </>
             }
           >
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, fontFamily: tokens.fontMono, color: tokens.success }}>{runFinal || '(no output)'}</pre>
+            {finalOutputMode === 'md' ? (
+              <div style={{ color: tokens.success }}>
+                {runFinal ? <Markdown content={runFinal} /> : <span style={{ fontFamily: tokens.fontMono, fontSize: 13, color: tokens.textMuted }}>(no output)</span>}
+              </div>
+            ) : (
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 13, fontFamily: tokens.fontMono, color: tokens.success }}>{runFinal || '(no output)'}</pre>
+            )}
           </CollapsibleCard>
         </div>
       )}
