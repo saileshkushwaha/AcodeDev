@@ -721,7 +721,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         setMessages((prev) => {
           const next = [...prev];
           const idx = next.findIndex((m) => m.name === assistantId);
-          if (idx >= 0) next[idx] = { role: 'assistant', content: shown };
+          if (idx >= 0) next[idx] = { role: 'assistant', content: shown, name: assistantId };
           return next;
         });
       }
