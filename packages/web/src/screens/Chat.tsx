@@ -2276,7 +2276,6 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
             sessions={todaySessions.slice(0, 5)}
             activeId={activeId}
             onSelect={onSelect}
-            onNewSession={onNewSession}
             getProjectName={getProjectName}
             streaming={streaming}
           />
