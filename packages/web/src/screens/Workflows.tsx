@@ -21,8 +21,10 @@ let nodeSeq = 0;
 
 const ACTIVE_KEY = 'acode.workflows.active';
 const BLANK_ID = 'wf_blank';
-const LAST_RUN_KEY = 'acode.workflows.lastRun.v1';
+const RUNS_KEY = 'acode.workflows.runs.v1';
+const LEGACY_LAST_RUN_KEY = 'acode.workflows.lastRun.v1';
 const DRAFT_KEY = 'acode.workflows.draft.v1';
+const MAX_RUNS = 30;
 
 const DEFAULT_INPUT = 'The team shipped a new feature for the dashboard. It includes streaming responses and a new provider selector. Users can now switch between multiple LLM providers from one screen.';
 
@@ -50,18 +52,37 @@ interface RunRecord {
   results: WorkflowRunResult[];
   final: string;
   input: string;
+  /** Estimated USD cost of this run (sum of step costs). */
+  cost: number;
+  /** Total wall-clock duration of the run in ms. */
+  elapsedMs: number;
 }
 
-function loadLastRun(id: string): RunRecord | null {
-  const map = readJSON<Record<string, RunRecord>>(LAST_RUN_KEY);
-  return map?.[id] ?? null;
+function loadRunHistory(id: string): RunRecord[] {
+  const map = readJSON<Record<string, RunRecord[]>>(RUNS_KEY);
+  const runs = map?.[id] ?? [];
+  if (runs.length > 0) return runs;
+  // Migration: the pre-history layout stored a single last run under a flat key.
+  const legacy = readJSON<Record<string, RunRecord>>(LEGACY_LAST_RUN_KEY)?.[id];
+  return legacy ? [{ ...legacy, cost: 0, elapsedMs: 0 }] : [];
 }
 
-function saveLastRun(id: string, rec: RunRecord) {
-  const map = readJSON<Record<string, RunRecord>>(LAST_RUN_KEY) ?? {};
-  map[id] = rec;
-  writeJSON(LAST_RUN_KEY, map);
+function saveRunHistory(id: string, runs: RunRecord[]) {
+  const map = readJSON<Record<string, RunRecord[]>>(RUNS_KEY) ?? {};
+  map[id] = runs;
+  writeJSON(RUNS_KEY, map);
 }
+
+const fmtCost = (usd: number | undefined): string => {
+  if (usd === undefined || Number.isNaN(usd)) return '';
+  if (usd === 0) return 'free';
+  return `$${usd.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 6 })}`;
+};
+
+const fmtTokens = (r: WorkflowRunResult): string => {
+  if (!r.tokens) return '';
+  return `${r.tokens.prompt.toLocaleString()}→${r.tokens.completion.toLocaleString()} tok`;
+};
 
 function timeAgo(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -108,11 +129,9 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   const [defName, setDefName] = useState('');
   const [defDesc, setDefDesc] = useState('');
   const [input, setInput] = useState(DEFAULT_INPUT);
-  const [result, setResult] = useState<WorkflowRunResult[] | null>(null);
-  const [final, setFinal] = useState('');
-  const [runAt, setRunAt] = useState<number | null>(null);
-  const [lastRun, setLastRun] = useState<RunRecord | null>(null);
   const [running, setRunning] = useState(false);
+  const [history, setHistory] = useState<RunRecord[]>([]);
+  const [runIdx, setRunIdx] = useState(0);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [finalCollapsed, setFinalCollapsed] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -148,10 +167,8 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
       if (Array.isArray(draft?.nodes)) draft.nodes.forEach((n) => { const seq = /_(\d+)$/.exec(n.id); if (seq) nodeSeq = Math.max(nodeSeq, Number(seq[1])); });
       setActiveId(def.id);
       persistActiveId(def.id);
-      setResult(null);
-      setFinal('');
-      setRunAt(null);
-      setLastRun(loadLastRun(def.id));
+      setHistory(loadRunHistory(def.id));
+      setRunIdx(0);
       setCollapsed({});
       setFinalCollapsed(false);
     },
@@ -277,22 +294,39 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, config: { ...n.config, [key]: value } } : n)));
   };
 
+  const pushRun = useCallback(
+    (rec: RunRecord) => {
+      setHistory((prev) => {
+        const next = [rec, ...prev].slice(0, MAX_RUNS);
+        saveRunHistory(activeId, next);
+        return next;
+      });
+      setRunIdx(0);
+      setCollapsed({});
+      setFinalCollapsed(false);
+    },
+    [activeId],
+  );
+
   const runWorkflow = async () => {
     const llmNode = nodes.find((n) => n.type === 'llm');
     const p = (llmNode?.config.provider as ProviderId) ?? 'openrouter';
     const pdef = listProviders().find((x) => x.id === p);
     const needsKey = !!(pdef && pdef.needsKey !== false && pdef.kind !== 'local');
+    const startedAt = Date.now();
+    const makeRec = (results: WorkflowRunResult[], final: string): RunRecord => ({
+      at: Date.now(),
+      results,
+      final,
+      input,
+      cost: results.reduce((s, x) => s + (x.cost ?? 0), 0),
+      elapsedMs: Date.now() - startedAt,
+    });
     if (needsKey && !hasKey(p)) {
-      setResult([{ nodeId: 'err', nodeType: 'error', output: `⚠️ ${pdef?.name ?? p} isn't connected. Add an API key (Connections → Keys) or pick a key-free provider such as OpenCode Zen or Kilo Gateway.`, durationMs: 0, status: 'error' }]);
-      setFinal('');
-      setRunAt(Date.now());
+      pushRun(makeRec([{ nodeId: 'err', nodeType: 'error', output: `⚠️ ${pdef?.name ?? p} isn't connected. Add an API key (Connections → Keys) or pick a key-free provider such as OpenCode Zen or Kilo Gateway.`, durationMs: 0, status: 'error' }], ''));
       return;
     }
     setRunning(true);
-    setResult(null);
-    setFinal('');
-    setCollapsed({});
-    setFinalCollapsed(false);
     const def: WorkflowDefinition = {
       id: activeId && !activeIsBuiltin ? activeId : 'wf_run',
       name: defName.trim() || 'Untitled workflow',
@@ -306,20 +340,9 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     };
     try {
       const r = await workflows.run(def, { input });
-      setResult(r.results);
-      setFinal(r.final);
-      const at = Date.now();
-      setRunAt(at);
-      const rec: RunRecord = { at, results: r.results, final: r.final, input };
-      setLastRun(rec);
-      saveLastRun(activeId, rec);
+      pushRun(makeRec(r.results, r.final));
     } catch (e) {
-      const at = Date.now();
-      const rec: RunRecord = { at, results: [{ nodeId: 'err', nodeType: 'error', output: e instanceof Error ? e.message : String(e), durationMs: 0, status: 'error' }], final: '', input };
-      setResult(rec.results);
-      setRunAt(at);
-      setLastRun(rec);
-      saveLastRun(activeId, rec);
+      pushRun(makeRec([{ nodeId: 'err', nodeType: 'error', output: e instanceof Error ? e.message : String(e), durationMs: 0, status: 'error' }], ''));
     } finally {
       setRunning(false);
     }
@@ -340,14 +363,27 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     value: d.id,
   }));
 
-  const runResults = result ?? lastRun?.results ?? null;
-  const lastRunAt = runAt ?? lastRun?.at ?? null;
-  const runFinal = result ? (final || lastRun?.final || '') : (lastRun?.final ?? '');
+  const currentRun = history[runIdx] ?? null;
+  const runResults = currentRun?.results ?? null;
+  const lastRunAt = currentRun?.at ?? null;
+  const runFinal = currentRun?.final ?? '';
+  const runCost = currentRun?.cost ?? 0;
+  const runTokens = runResults?.reduce((s, r) => s + (r.tokens?.prompt ?? 0) + (r.tokens?.completion ?? 0), 0) ?? 0;
   const runResultByNode = useMemo(() => {
     const m = new Map<string, WorkflowRunResult>();
     runResults?.forEach((r) => m.set(r.nodeId, r));
     return m;
   }, [runResults]);
+
+  const runOptions = history.map((r, i) => ({
+    label: `#${history.length - i} · ${new Date(r.at).toLocaleTimeString()} · ${r.elapsedMs >= 1000 ? `${(r.elapsedMs / 1000).toFixed(1)}s` : `${r.elapsedMs}ms`}${r.cost > 0 ? ` · ${fmtCost(r.cost)}` : ''}`,
+    value: String(i),
+  }));
+  const selectRun = useCallback((idx: number) => {
+    setRunIdx(idx);
+    setCollapsed({});
+    setFinalCollapsed(false);
+  }, []);
 
   const toggleCollapse = useCallback((id: string) => setCollapsed((c) => (c[id] ? { ...c, [id]: false } : { ...c, [id]: true })), []);
   const collapseAllResults = () => setCollapsed(Object.fromEntries((runResults ?? []).map((r) => [r.nodeId, true])));
@@ -548,11 +584,16 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: tokens.text }}>Run output</span>
-            {lastRunAt && (
-              <span style={{ fontSize: 12, color: tokens.textMuted }}>
-                {runAt ? `ran ${timeAgo(lastRunAt)}` : `previous run · ${timeAgo(lastRunAt)}`}
-              </span>
+            {history.length > 1 && (
+              <div style={{ width: 320 }}>
+                <Select value={String(runIdx)} onChange={(v) => selectRun(Number(v))} options={runOptions} />
+              </div>
             )}
+            <span style={{ fontSize: 12, color: tokens.textMuted }}>
+              {runIdx === 0 ? `ran ${timeAgo(lastRunAt ?? Date.now())}` : `previous run · ${timeAgo(lastRunAt ?? Date.now())}`}
+            </span>
+            {runCost > 0 && <Badge color={tokens.primary}>{fmtCost(runCost)}</Badge>}
+            {runTokens > 0 && <Badge color={tokens.primary}>{runTokens.toLocaleString()} tok</Badge>}
             <div style={{ flex: 1 }} />
             <Button size="sm" variant="ghost" onClick={() => setCollapsed({})}>Expand all</Button>
             <Button size="sm" variant="ghost" onClick={collapseAllResults}>Collapse all</Button>
@@ -565,8 +606,10 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
               expanded={!collapsed[r.nodeId]}
               onToggle={() => toggleCollapse(r.nodeId)}
               actions={
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   {r.status ? <Badge color={r.status === 'error' ? tokens.danger : tokens.success}>{r.status === 'error' ? '✕ failed' : '✓ ok'}</Badge> : undefined}
+                  {r.cost !== undefined && r.cost > 0 && <Badge color={tokens.primary}>{fmtCost(r.cost)}</Badge>}
+                  {fmtTokens(r) && <span style={{ fontSize: 12, color: tokens.textMuted, whiteSpace: 'nowrap' }}>{fmtTokens(r)}</span>}
                   <span style={{ fontSize: 12, color: tokens.textMuted, whiteSpace: 'nowrap' }}>{r.durationMs}ms</span>
                 </span>
               }

@@ -3,6 +3,7 @@ import { useTheme, Card, Button, Input, Badge, TabBar, Spinner, Select, Modal, C
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubContent, GitHubCommit, GitHubBranch, GitHubRelease, GitHubPullRequest, GitHubIssue, GitHubWorkflowRun } from '@acode/core';
 import { makeClient, timeAgo, compact, splitRef, renderMd, trimSha } from './shared';
+import { EmptyState, LoadingSpinner, BackButton, Avatar } from '../../components/SharedComponents';
 
 export function RepositoriesView({ initialRepo, onInitialRepoConsumed }: { initialRepo?: string; onInitialRepoConsumed?: () => void }) {
   const { tokens } = useTheme();
@@ -73,7 +74,7 @@ export function RepositoriesView({ initialRepo, onInitialRepoConsumed }: { initi
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: tokens.space4 }}>
             {loading && filtered.length === 0 ? (
-              <div style={{ gridColumn: '1/-1', display: 'flex', justifyContent: 'center', padding: tokens.space8 }}><Spinner size={28} /></div>
+              <div style={{ gridColumn: '1/-1' }}><LoadingSpinner /></div>
             ) : filtered.length === 0 ? (
               <div style={{ gridColumn: '1/-1', color: tokens.textMuted, padding: tokens.space6, textAlign: 'center' }}>No repositories match</div>
             ) : (
@@ -162,9 +163,7 @@ function RepoDetail({ repo, onBack, onRefresh }: { repo: GitHubRepo; onBack: () 
 
   return (
     <div className="rise">
-      <button onClick={onBack} style={{ background: 'transparent', border: 'none', color: tokens.textSecondary, cursor: 'pointer', fontSize: tokens.fontSizeSm, fontWeight: 600, padding: `${tokens.space1}px 0`, marginBottom: tokens.space2 }}>
-        ← Back to repositories
-      </button>
+      <BackButton onClick={onBack} label="Back to repositories" />
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.space4, flexWrap: 'wrap', marginBottom: tokens.space3 }}>
         <div style={{ minWidth: 0 }}>
@@ -334,7 +333,7 @@ function CommitsPanel({ owner, name, branch }: { owner: string; name: string; br
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {commits.map((c, i) => (
         <div key={c.sha} style={{ display: 'flex', gap: tokens.space3, padding: `${tokens.space2}px 0`, borderBottom: i < commits.length - 1 ? `1px solid ${tokens.border}` : 'none' }}>
-          {c.authorAvatar ? <img src={c.authorAvatar} alt="" width={30} height={30} style={{ borderRadius: '50%' }} /> : <Avatar text={c.author[0]?.toUpperCase() ?? '?'} />}
+          {c.authorAvatar ? <img src={c.authorAvatar} alt="" width={30} height={30} style={{ borderRadius: '50%' }} /> : <Avatar text={c.author[0]?.toUpperCase() ?? '?'} size={30} />}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.message.split('\n')[0]}</div>
             <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{c.author} · {timeAgo(c.date)}</div>
@@ -537,11 +536,6 @@ function PrState({ pr }: { pr: GitHubPullRequest }) {
   const color = pr.merged ? tokens.info : pr.state === 'closed' ? tokens.danger : tokens.success;
   const icon = pr.merged ? '✔' : pr.state === 'closed' ? '✖' : '⟳';
   return <span style={{ color, width: 20, textAlign: 'center' }}>{icon}</span>;
-}
-
-function Avatar({ text }: { text: string }) {
-  const { tokens } = useTheme();
-  return <div style={{ width: 30, height: 30, borderRadius: '50%', background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: tokens.fontSizeSm, fontWeight: 600 }}>{text}</div>;
 }
 
 function Empty({ text }: { text: string }) {

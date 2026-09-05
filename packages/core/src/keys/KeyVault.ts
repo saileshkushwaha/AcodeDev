@@ -25,20 +25,23 @@ export class KeyVault {
   private entries = new Map<string, KeyEntry>();
   private adapter: CryptoAdapter;
   private storageKey = 'acode.vault.v1';
+  private readyPromise: Promise<void>;
+  private persistChain: Promise<void> = Promise.resolve();
 
   constructor(adapter: CryptoAdapter) {
     this.adapter = adapter;
-    this.load();
+    this.readyPromise = this.load();
   }
 
-  private load() {
-    void this.adapter.secureStore.get(this.storageKey).then((raw) => {
+  private async load() {
+    try {
+      const raw = await this.adapter.secureStore.get(this.storageKey);
       if (!raw) return;
-      try {
-        const parsed = JSON.parse(raw) as Record<string, string>;
-        Object.entries(parsed).forEach(([id, payload]) => {
+      const parsed = JSON.parse(raw) as Record<string, string>;
+      await Promise.all(
+        Object.entries(parsed).map(async ([id, payload]) => {
           try {
-            const decrypted = this.adapter.decrypt(payload);
+            const decrypted = await this.adapter.decrypt(payload);
             // New format: JSON entry
             try {
               const entry = JSON.parse(decrypted) as KeyEntry;
@@ -52,7 +55,7 @@ export class KeyVault {
             // Legacy format: raw secret -> treat as an AI provider key
             this.entries.set(id, {
               value: decrypted,
-              category: (id === 'local' ? 'ai' : 'ai'),
+              category: id === 'local' ? 'ai' : 'ai',
               label: id,
               connectorType: 'LLM',
               createdAt: Date.now(),
@@ -61,19 +64,40 @@ export class KeyVault {
           } catch {
             /* ignore corrupted */
           }
-        });
-      } catch {
-        /* ignore */
-      }
-    });
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
   }
 
-  private async persist() {
-    const out: Record<string, string> = {};
-    this.entries.forEach((entry, id) => {
-      out[id] = this.adapter.encrypt(JSON.stringify(entry));
-    });
-    await this.adapter.secureStore.set(this.storageKey, JSON.stringify(out));
+  private persist() {
+    this.persistChain = this.persistChain
+      .then(async () => {
+        const out: Record<string, string> = {};
+        for (const [id, entry] of this.entries) {
+          try {
+            out[id] = await this.adapter.encrypt(JSON.stringify(entry));
+          } catch {
+            /* skip entries that fail to encrypt */
+          }
+        }
+        await this.adapter.secureStore.set(this.storageKey, JSON.stringify(out));
+      })
+      .catch(() => {
+        /* a failed write must not stall subsequent writes */
+      });
+    return this.persistChain;
+  }
+
+  /** Resolves once persisted entries have been loaded into memory. */
+  ready(): Promise<void> {
+    return this.readyPromise;
+  }
+
+  /** Resolves once all pending writes have been flushed to storage. */
+  flush(): Promise<void> {
+    return Promise.all([this.readyPromise, this.persistChain]).then(() => undefined);
   }
 
   /** Set a key with optional connector metadata (defaults to an AI provider). */

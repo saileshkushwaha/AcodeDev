@@ -132,13 +132,20 @@ API: `all()`, `get(id)`, `save(def)`, `remove(id)`, `resetBuiltin(id)`,
   The engine records each step's output, duration and `ok`/`error` status, so a
   failed LLM call is attributed to the exact step that broke instead of failing
   the whole run.
-- **Trace the last run** — each node row shows its status (`✓ 1234ms` or
-  `✕ failed`) and the pipeline header shows a success/error badge with how long
-  ago the run happened. Selecting a node shows a **Last run** panel with that
-  step's output, duration and status. The last run is persisted per workflow
-  (`acode.workflows.lastRun.v1`), so after a failed run you can tweak a prompt,
-  reload the workflow (or the page) and still inspect what the previous run
-  produced step-by-step.
+- **Trace past runs** — each node row shows its status (`✓ 1234ms` or
+  `✕ failed`) plus token usage and cost when known, and the pipeline header
+  shows a success/error badge with how long ago the run happened. Selecting a
+  node shows a **Last run** panel with that step's output, duration and status.
+  Runs are persisted as a per-workflow history (newest first, capped at 30,
+  key `acode.workflows.runs.v1`; legacy `acode.workflows.lastRun.v1` data
+  migrates on first load), so after a failed run you can tweak a prompt,
+  reload the workflow (or the page) and still inspect what any previous run
+  produced step-by-step. A run picker in the **Run output** header switches
+  between past runs.
+- **Cost & token telemetry** — LLM steps record prompt/completion token usage
+  (from the provider's `usage` when available, otherwise estimated) and an
+  estimated USD cost from the model catalog per-1k pricing. The run header
+  totals cost and tokens across all steps.
 - **Result actions** — copy the final output, send it to Chat, or create a
   GitHub issue with the output as the body (requires a token in
   Connections → Keys).

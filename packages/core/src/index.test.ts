@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   KeyVault,
   webCryptoAdapter,
@@ -17,15 +17,47 @@ import {
   estimateTokens,
   PROMPT_LIBRARY,
   PROMPT_CATEGORIES,
+  setStorageBackend,
 } from './index';
 
 describe('KeyVault', () => {
-  it('encrypts and decrypts keys', () => {
+  const memStorage = (): Storage => {
+    const m = new Map<string, string>();
+    return {
+      get length() {
+        return m.size;
+      },
+      getItem: (k) => m.get(k) ?? null,
+      setItem: (k, v) => void m.set(k, v),
+      removeItem: (k) => void m.delete(k),
+      clear: () => m.clear(),
+      key: (i) => [...m.keys()][i] ?? null,
+    } as Storage;
+  };
+
+  beforeEach(() => setStorageBackend(memStorage()));
+  afterEach(() => setStorageBackend(undefined));
+
+  it('encrypts with AES-GCM: roundtrip, no plaintext leak, unique IVs', async () => {
+    const crypto = webCryptoAdapter();
+    const c1 = await crypto.encrypt('sk-or-test');
+    expect(c1).not.toContain('sk-or-test');
+    expect(await crypto.decrypt(c1)).toBe('sk-or-test');
+    const c2 = await crypto.encrypt('sk-or-test');
+    expect(c2).not.toBe(c1);
+  });
+
+  it('stores, reads and removes keys across vault instances', async () => {
     const vault = new KeyVault(webCryptoAdapter());
+    await vault.ready();
     vault.setKey('openrouter', 'sk-or-test');
     expect(vault.getKey('openrouter')).toBe('sk-or-test');
-    vault.removeKey('openrouter');
-    expect(vault.hasKey('openrouter')).toBe(false);
+    await vault.flush();
+    const persisted = new KeyVault(webCryptoAdapter());
+    await persisted.ready();
+    expect(persisted.getKey('openrouter')).toBe('sk-or-test');
+    persisted.removeKey('openrouter');
+    expect(persisted.hasKey('openrouter')).toBe(false);
   });
 });
 
@@ -133,7 +165,7 @@ describe('workflow library', () => {
 });
 
 describe('WorkflowEngine', () => {
-  const fakeEngine = ({ chat: async () => ({ content: 'ok' }) }) as any;
+  const fakeEngine = ({ chat: async () => ({ content: 'ok', usage: { promptTokens: 7, completionTokens: 2 } }) }) as any;
 
   it('records outputs for every step in chain order', async () => {
     const engine = new WorkflowEngine(fakeEngine);
@@ -153,6 +185,23 @@ describe('WorkflowEngine', () => {
     expect(r.results).toHaveLength(4);
     expect(r.results.every((x) => x.status === 'ok')).toBe(true);
     expect(r.results.map((x) => x.nodeId)).toEqual(['in', 'a', 'b', 'out']);
+    // LLM steps carry token usage (provider-reported here) and a numeric cost.
+    const llm = r.results.find((x) => x.nodeId === 'a')!;
+    expect(llm.tokens).toEqual({ prompt: 7, completion: 2 });
+    expect(llm.cost).toBeTypeOf('number');
+  });
+
+  it('estimates tokens when the provider reports no usage', async () => {
+    const engine = new WorkflowEngine({ chat: async () => ({ content: 'ok' }) } as any);
+    const nodes = [
+      { id: 'in', type: 'input', name: 'Input', config: { value: '{{input}}' }, position: { x: 0, y: 0 } },
+      { id: 'a', type: 'llm', name: 'LLM A', config: {}, position: { x: 1, y: 0 } },
+    ];
+    const edges = [{ id: 'e1', source: 'in', target: 'a', sourceHandle: 'out', targetHandle: 'in' }];
+    const r = await engine.run({ id: 't', name: 't', nodes: nodes as any, edges: edges as any, variables: {}, updatedAt: 0 }, { input: 'x' });
+    const llm = r.results.find((x) => x.nodeId === 'a')!;
+    expect(llm.tokens?.prompt).toBeGreaterThan(0);
+    expect(llm.tokens?.completion).toBe(1);
   });
 
   it('attributes a failing step to its node instead of aborting the run', async () => {

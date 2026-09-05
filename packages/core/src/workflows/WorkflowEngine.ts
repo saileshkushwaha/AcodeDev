@@ -1,4 +1,6 @@
 import { ChatEngine } from '../llm/ChatEngine';
+import { estimateTokens } from '../prompts/PromptRegistry';
+import { listModels } from '../models/catalog';
 import type { ChatMessage, ChatRequest, ProviderId } from '../types';
 
 export type WorkflowNodeType = 'llm' | 'transform' | 'condition' | 'prompt_template' | 'input' | 'output';
@@ -45,6 +47,10 @@ export interface WorkflowRunResult {
   durationMs: number;
   /** 'ok' when the step produced output normally; 'error' when it threw. */
   status?: 'ok' | 'error';
+  /** Token usage for LLM steps (provider usage when reported, else estimated). */
+  tokens?: { prompt: number; completion: number };
+  /** Estimated USD cost for LLM steps based on the model catalog. */
+  cost?: number;
 }
 
 /**
@@ -97,14 +103,18 @@ export class WorkflowEngine {
       const start = Date.now();
       let output = '';
       let status: 'ok' | 'error' = 'ok';
+      let tokens: { prompt: number; completion: number } | undefined;
+      let cost = 0;
       try {
         switch (node.type) {
           case 'llm': {
             const provider = (node.config.provider as ProviderId) ?? def.provider ?? 'openrouter';
             const model = String(node.config.model ?? def.model ?? 'nvidia/nemotron-3.5-lightning:free');
+            const system = String(node.config.systemPrompt ?? 'You are a helpful AI assistant.');
+            const user = upstreamText || 'Please respond.';
             const messages: ChatMessage[] = [
-              { role: 'system', content: String(node.config.systemPrompt ?? 'You are a helpful AI assistant.') },
-              { role: 'user', content: upstreamText || 'Please respond.' },
+              { role: 'system', content: system },
+              { role: 'user', content: user },
             ];
             const req: ChatRequest = {
               provider,
@@ -117,6 +127,13 @@ export class WorkflowEngine {
             };
             const res = await this.engine.chat(req);
             output = res.content;
+            const prompt = res.usage?.promptTokens ?? estimateTokens(`${system}\n\n${user}`);
+            const completion = res.usage?.completionTokens ?? estimateTokens(output);
+            tokens = { prompt, completion };
+            const modelInfo = listModels(provider).find((m) => m.id === model);
+            const pin = modelInfo?.costPer1kIn ?? 0;
+            const pout = modelInfo?.costPer1kOut ?? 0;
+            if (pin > 0 || pout > 0) cost = (prompt / 1000) * pin + (completion / 1000) * pout;
             break;
           }
           case 'transform': {
@@ -147,7 +164,7 @@ export class WorkflowEngine {
         status = 'error';
         output = `⚠️ Step "${node.name || node.id}" failed: ${e instanceof Error ? e.message : String(e)}`;
       }
-      results.set(node.id, { nodeId: node.id, nodeType: node.type, output, durationMs: Date.now() - start, status });
+      results.set(node.id, { nodeId: node.id, nodeType: node.type, output, durationMs: Date.now() - start, status, tokens, cost });
     };
 
     await execute(entry);

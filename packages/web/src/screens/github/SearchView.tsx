@@ -3,6 +3,7 @@ import { useTheme, Card, Input, Button, Badge, Spinner } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubSearchResult } from '@acode/core';
 import { makeClient, compact } from './shared';
+import { EmptyState, LoadingSpinner } from '../../components/SharedComponents';
 
 type Mode = 'repositories' | 'users';
 
@@ -53,13 +54,11 @@ export function SearchView() {
       )}
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: tokens.space8 }}><Spinner size={28} /></div>
+        <LoadingSpinner />
       ) : !searched ? (
-        <div style={{ textAlign: 'center', color: tokens.textMuted, padding: tokens.space8 }}>
-          Search across GitHub's public repositories and users.
-        </div>
+        <EmptyState>Search across GitHub's public repositories and users.</EmptyState>
       ) : !activeResults || (activeResults as { items: unknown[] }).items.length === 0 ? (
-        <div style={{ textAlign: 'center', color: tokens.textMuted, padding: tokens.space8 }}>No results for “{query}”</div>
+        <EmptyState>No results for "{query}"</EmptyState>
       ) : mode === 'repositories' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: tokens.space4 }}>
           {(results?.repos.items ?? []).map((r) => (

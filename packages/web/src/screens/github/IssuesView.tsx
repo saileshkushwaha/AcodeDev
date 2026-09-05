@@ -3,6 +3,7 @@ import { useTheme, Card, Button, Input, Badge, Spinner, Select, Modal } from '@a
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubIssue, GitHubComment } from '@acode/core';
 import { makeClient, timeAgo, splitRef, renderMd } from './shared';
+import { EmptyState, LoadingSpinner, BackButton, FilterChips, FormModal } from '../../components/SharedComponents';
 
 interface IssueWithRepo extends GitHubIssue {
   repository: string;
@@ -70,12 +71,12 @@ export function IssuesView() {
             <Button variant="secondary" onClick={() => void load()}>{loading ? <Spinner size={15} /> : 'Refresh'}</Button>
           </div>
 
-          {repos.length > 0 && <RepoChips repos={repos} value={repoFilter} onChange={setRepoFilter} />}
+          {repos.length > 0 && <FilterChips repos={repos} value={repoFilter} onChange={setRepoFilter} />}
 
           {loading && filtered.length === 0 ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: tokens.space8 }}><Spinner size={28} /></div>
+            <LoadingSpinner />
           ) : filtered.length === 0 ? (
-            <div style={{ textAlign: 'center', color: tokens.textMuted, padding: tokens.space8 }}>No issues matched</div>
+            <EmptyState>No issues matched</EmptyState>
           ) : (
             <Card padded={false}>
               {filtered.map((i, idx) => <IssueRow key={`${i.number}-${i.repository}`} issue={i} onClick={() => setSelected(i)} last={idx === filtered.length - 1} />)}
@@ -85,19 +86,6 @@ export function IssuesView() {
           <CreateIssueModal open={createOpen} onClose={() => setCreateOpen(false)} repos={repos} myLogin={myLogin} onCreated={() => { setCreateOpen(false); void load(); }} />
         </>
       )}
-    </div>
-  );
-}
-
-function RepoChips({ repos, value, onChange }: { repos: GitHubRepo[]; value: string; onChange: (v: string) => void }) {
-  const { tokens } = useTheme();
-  return (
-    <div style={{ display: 'flex', gap: tokens.space1, flexWrap: 'wrap', marginBottom: tokens.space3 }}>
-      {repos.map((r) => (
-        <button key={r.fullName} onClick={() => onChange(r.fullName === value ? 'all' : r.fullName)} style={{ padding: '4px 10px', borderRadius: tokens.radiusFull, border: `1px solid ${tokens.borderStrong}`, background: r.fullName === value ? tokens.primary : 'transparent', color: r.fullName === value ? tokens.primaryForeground : tokens.textSecondary, fontSize: tokens.fontSizeXs, fontWeight: 600, cursor: 'pointer' }}>
-          {r.name}
-        </button>
-      ))}
     </div>
   );
 }
@@ -181,9 +169,7 @@ function IssueDetail({ issue, onBack, onChanged }: { issue: IssueWithRepo; onBac
 
   return (
     <div className="rise">
-      <button onClick={onBack} style={{ background: 'transparent', border: 'none', color: tokens.textSecondary, cursor: 'pointer', fontSize: tokens.fontSizeSm, fontWeight: 600, padding: 0, marginBottom: tokens.space2 }}>
-        ← Back to issues
-      </button>
+      <BackButton onClick={onBack} label="Back to issues" />
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.space3, flexWrap: 'wrap', marginBottom: tokens.space3 }}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ marginTop: 4 }}><circle cx="12" cy="12" r="9" /></svg>

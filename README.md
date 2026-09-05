@@ -2,7 +2,7 @@
 
 **AcodeDev** — an all-in-one AI studio and project management platform.
 
-A single place to build, test, version, and deploy AI applications, plus manage your GitHub projects — across web and mobile.
+A single place to build, test, version, and deploy AI applications, plus manage your GitHub projects.
 
 ## Monorepo layout
 
@@ -11,16 +11,17 @@ packages/
   core/     @acode/core      Shared TypeScript engine (LLM providers, agents, workflows, evals, GitHub)
   ui/       @acode/ui        Enterprise design system (shared React components)
   web/      @acode/web       React + Vite web application
-  mobile/   @acode/mobile    React Native + Expo mobile app (Android / iOS)
 ```
+
+> A React Native / Expo app (`packages/mobile`) is planned; it will reuse `@acode/core` with a pluggable storage/secure-store backend.
 
 ## Getting started
 
 ```bash
 npm install
 npm run web          # start the web app (http://localhost:5173)
-npm run mobile       # start the mobile app (Expo)
 npm run web:build    # production build
+npm run ci           # typecheck + unit tests + production build (same gates as CI)
 ```
 
 ## Using OpenCode Zen / Kilo gateways (local proxy)

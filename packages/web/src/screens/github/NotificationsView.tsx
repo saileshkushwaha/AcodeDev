@@ -3,6 +3,7 @@ import { useTheme, Card, Button, Spinner } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubNotification } from '@acode/core';
 import { makeClient, timeAgo } from './shared';
+import { EmptyState, LoadingSpinner } from '../../components/SharedComponents';
 
 export function NotificationsView({ onUnread }: { onUnread: (n: number) => void }) {
   const { tokens } = useTheme();
@@ -65,11 +66,9 @@ export function NotificationsView({ onUnread }: { onUnread: (n: number) => void 
       </div>
 
       {loading && notifs.length === 0 ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: tokens.space8 }}><Spinner size={28} /></div>
+        <LoadingSpinner />
       ) : notifs.length === 0 ? (
-        <div style={{ textAlign: 'center', color: tokens.textMuted, padding: tokens.space8 }}>
-          {showAll ? 'No notifications' : 'All caught up! 🎉'}
-        </div>
+        <EmptyState>{showAll ? 'No notifications' : 'All caught up! 🎉'}</EmptyState>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2 }}>
           {notifs.map((n) => (

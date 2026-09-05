@@ -15,13 +15,23 @@ export const GITHUB_TOKEN_KEY = 'acode.github.token';
 export type StorageErrorHandler = (key: string, error: unknown) => void;
 
 let errorHandler: StorageErrorHandler | null = null;
+let injectedBackend: Storage | null | undefined;
 
 /** Register a callback invoked whenever a storage read/write fails. */
 export function setStorageErrorHandler(handler: StorageErrorHandler | null): void {
   errorHandler = handler;
 }
 
+/**
+ * Override the auto-detected backend (used by tests, SSR, and native apps).
+ * Pass `undefined` to revert to auto-detection.
+ */
+export function setStorageBackend(backend: Storage | null | undefined): void {
+  injectedBackend = backend;
+}
+
 function backend(): Storage | null {
+  if (injectedBackend !== undefined) return injectedBackend;
   return typeof localStorage !== 'undefined' ? localStorage : null;
 }
 

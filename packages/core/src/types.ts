@@ -137,8 +137,8 @@ export interface ModelInfo {
 }
 
 export type CryptoAdapter = {
-  encrypt: (plain: string) => string;
-  decrypt: (cipher: string) => string;
+  encrypt: (plain: string) => Promise<string>;
+  decrypt: (cipher: string) => Promise<string>;
   secureStore: {
     set: (key: string, value: string) => Promise<void>;
     get: (key: string) => Promise<string | undefined>;

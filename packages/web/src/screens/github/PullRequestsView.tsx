@@ -3,6 +3,7 @@ import { useTheme, Card, Button, Input, Badge, Spinner, Select } from '@acode/ui
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubPullRequest, GitHubComment } from '@acode/core';
 import { makeClient, timeAgo, splitRef, renderMd, trimSha } from './shared';
+import { EmptyState, LoadingSpinner, BackButton, FilterChips, Avatar } from '../../components/SharedComponents';
 
 export function PullRequestsView() {
   const { tokens } = useTheme();
@@ -75,9 +76,9 @@ export function PullRequestsView() {
           {repos.length > 0 && <FilterChips repos={repos} value={repoFilter} onChange={setRepoFilter} />}
 
           {loading && filtered.length === 0 ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: tokens.space8 }}><Spinner size={28} /></div>
+            <LoadingSpinner />
           ) : filtered.length === 0 ? (
-            <div style={{ textAlign: 'center', color: tokens.textMuted, padding: tokens.space8 }}>No pull requests matched</div>
+            <EmptyState>No pull requests matched</EmptyState>
           ) : (
             <Card padded={false}>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -122,19 +123,6 @@ function PrRow({ pr, onClick, last }: { pr: PrWithRepo; onClick: () => void; las
       </div>
       {pr.draft && <Badge color={tokens.textMuted}>draft</Badge>}
     </button>
-  );
-}
-
-function FilterChips({ repos, value, onChange }: { repos: GitHubRepo[]; value: string; onChange: (v: string) => void }) {
-  const { tokens } = useTheme();
-  return (
-    <div style={{ display: 'flex', gap: tokens.space1, flexWrap: 'wrap', marginBottom: tokens.space3 }}>
-      {repos.map((r) => (
-        <button key={r.fullName} onClick={() => onChange(r.fullName === value ? 'all' : r.fullName)} style={{ padding: '4px 10px', borderRadius: tokens.radiusFull, border: `1px solid ${tokens.borderStrong}`, background: r.fullName === value ? tokens.primary : 'transparent', color: r.fullName === value ? tokens.primaryForeground : tokens.textSecondary, fontSize: tokens.fontSizeXs, fontWeight: 600, cursor: 'pointer' }}>
-          {r.name}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -229,9 +217,7 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
 
   return (
     <div className="rise">
-      <button onClick={onBack} style={{ background: 'transparent', border: 'none', color: tokens.textSecondary, cursor: 'pointer', fontSize: tokens.fontSizeSm, fontWeight: 600, padding: 0, marginBottom: tokens.space2 }}>
-        ← Back to pull requests
-      </button>
+      <BackButton onClick={onBack} label="Back to pull requests" />
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.space2, flexWrap: 'wrap', marginBottom: tokens.space2 }}>
         <span style={{ color: stateColor, fontSize: 18, marginTop: 2 }}>{detail.merged ? '✔' : detail.state === 'closed' ? '✖' : '⟳'}</span>
@@ -334,7 +320,3 @@ function baseRef(pr: GitHubPullRequest): string {
   return `${pr.baseRef} ← ${pr.headRef}`;
 }
 
-function Avatar({ text }: { text: string }) {
-  const { tokens } = useTheme();
-  return <div style={{ width: 28, height: 28, borderRadius: '50%', background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: tokens.fontSizeXs, fontWeight: 600 }}>{text}</div>;
-}

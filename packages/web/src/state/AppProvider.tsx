@@ -47,6 +47,7 @@ export interface AppState {
   catalogVersion: number;
   refreshCatalog: () => void;
   syncCatalog: () => Promise<number>;
+  vaultTick: number;
 }
 
 const AppContext = createContext<AppState | null>(null);
@@ -73,6 +74,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const vaultRef = useRef<KeyVault | null>(null);
   if (!vaultRef.current) vaultRef.current = new KeyVault(webCryptoAdapter());
+
+  // Re-render once the vault has decrypted/persisted keys into memory, so
+  // key-dependent UI (Keys screen, `hasKey` checks) never reads stale state.
+  const [vaultTick, setVaultTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    void vaultRef.current
+      ?.ready()
+      .then(() => {
+        if (alive) setVaultTick((v) => v + 1);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const engineRef = useRef<ChatEngine | null>(null);
   if (!engineRef.current) engineRef.current = new ChatEngine({ vault: vaultRef.current });
@@ -129,6 +146,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const state: AppState = {
     vault: vaultRef.current,
+    vaultTick,
     chat: engineRef.current,
     agents: agentsRef.current,
     agentStore: agentStoreRef.current,

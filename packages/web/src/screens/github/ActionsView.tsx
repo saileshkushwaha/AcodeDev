@@ -3,6 +3,7 @@ import { useTheme, Card, Button, Badge, Spinner, Select } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubWorkflowRun } from '@acode/core';
 import { makeClient, timeAgo, splitRef, compact, shortDate } from './shared';
+import { EmptyState, LoadingSpinner, BackButton } from '../../components/SharedComponents';
 
 export function ActionsView() {
   const { tokens } = useTheme();
@@ -55,9 +56,9 @@ export function ActionsView() {
       {selected ? (
         <RunLogs run={selected} onBack={() => setSelected(null)} />
       ) : loading && filtered.length === 0 ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: tokens.space8 }}><Spinner size={28} /></div>
+        <LoadingSpinner />
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', color: tokens.textMuted, padding: tokens.space8 }}>No workflow runs found</div>
+        <EmptyState>No workflow runs found</EmptyState>
       ) : (
         <Card padded={false}>
           {filtered.slice(0, 40).map((r, i) => (
@@ -117,9 +118,7 @@ function RunLogs({ run, onBack }: { run: GitHubWorkflowRun; onBack: () => void }
 
   return (
     <div className="rise">
-      <button onClick={onBack} style={{ background: 'transparent', border: 'none', color: tokens.textSecondary, cursor: 'pointer', fontSize: tokens.fontSizeSm, fontWeight: 600, padding: 0, marginBottom: tokens.space2 }}>
-        ← Back to runs
-      </button>
+      <BackButton onClick={onBack} label="Back to runs" />
       <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, marginBottom: tokens.space3, flexWrap: 'wrap' }}>
         <span style={{ width: 12, height: 12, borderRadius: '50%', background: resultColor(run.conclusion ?? run.status, tokens) }} />
         <div>
@@ -132,7 +131,7 @@ function RunLogs({ run, onBack }: { run: GitHubWorkflowRun; onBack: () => void }
       </div>
       <Card title={error ? 'Logs unavailable' : `Logs (${compact(logs.length)} chars)`}>
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: tokens.space6 }}><Spinner /></div>
+          <LoadingSpinner size={20} padding={tokens.space6} />
         ) : error ? (
           <div style={{ color: tokens.danger, fontSize: tokens.fontSizeSm, padding: tokens.space3 }}>
             {error}
