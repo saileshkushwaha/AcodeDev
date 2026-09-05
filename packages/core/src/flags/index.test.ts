@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { setStorageErrorHandler } from "./index";
+import { setStorageErrorHandler } from "../storage";
 import {
   loadFlags,
   isOn,
