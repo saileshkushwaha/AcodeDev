@@ -2459,7 +2459,6 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onEdit, onDel
   const [newName, setNewName] = useState('');
   const [newGitRepo, setNewGitRepo] = useState('');
   const [creating, setCreating] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<ProjectDoc | null>(null);
 
   const handleCreate = () => {
     if (!newName.trim()) return;
@@ -2470,21 +2469,6 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onEdit, onDel
   };
 
   const repoName = (p: ProjectDoc) => p.gitRepo?.split('/').pop()?.replace(/\.git$/, '') ?? null;
-
-  if (confirmDelete) {
-    return (
-      <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 80, minWidth: 280, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space4 }}>
-        <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.text, marginBottom: tokens.space2 }}>Delete project?</div>
-        <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginBottom: tokens.space3, lineHeight: 1.5 }}>
-          <b style={{ color: tokens.text }}>{confirmDelete.name}</b> will be removed. Conversations will be kept but unlinked from this project.
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.space2 }}>
-          <button onClick={() => setConfirmDelete(null)} style={{ padding: `4px ${tokens.space3}px`, borderRadius: tokens.radiusSm, border: `1px solid ${tokens.border}`, background: 'transparent', color: tokens.text, fontSize: tokens.fontSizeXs, cursor: 'pointer', fontFamily: tokens.fontSans }}>Cancel</button>
-          <button onClick={() => { onDelete(confirmDelete.id); setConfirmDelete(null); }} style={{ padding: `4px ${tokens.space3}px`, borderRadius: tokens.radiusSm, border: 'none', background: tokens.danger, color: '#fff', fontSize: tokens.fontSizeXs, fontWeight: 600, cursor: 'pointer', fontFamily: tokens.fontSans }}>Delete</button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 80, minWidth: 260, maxHeight: 360, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
@@ -2521,7 +2505,7 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onEdit, onDel
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); setConfirmDelete(p); }}
+                onClick={(e) => { e.stopPropagation(); onDelete(p.id); onClose(); }}
                 aria-label={`Delete ${p.name}`}
                 title="Delete project"
                 style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: tokens.radiusSm }}
