@@ -2398,9 +2398,11 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
   const [gitError, setGitError] = useState('');
   const [gitLoading, setGitLoading] = useState(false);
 
+  const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
   const loadGit = useCallback(async () => {
-    if (!proxyBase) {
-      setGitError('No gateway proxy configured — set one in Connections → Gateways → Proxy URL to reach the local git repo.');
+    if (!proxyBase || !isLocal) {
+      setGitError(isLocal ? 'No gateway proxy configured — set one in Connections → Gateways → Proxy URL to reach the local git repo.' : 'Git changes require the app to run locally. Deployed versions cannot access the local file system.');
       setGitFiles(null);
       return;
     }
@@ -2502,7 +2504,7 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
         ) : mode === 'git' && gitError ? (
           <div style={{ textAlign: 'center', padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space3 }}>
             <div style={{ fontSize: tokens.fontSizeXs }}>⚠️ {gitError}</div>
-            <Button size="sm" onClick={() => void loadGit()}>Retry</Button>
+            {isLocal && <Button size="sm" onClick={() => void loadGit()}>Retry</Button>}
           </div>
         ) : shown.length === 0 ? (
           <div style={{ textAlign: 'center', padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
