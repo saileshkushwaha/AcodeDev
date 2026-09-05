@@ -287,7 +287,7 @@ async function copyText(t: string) {
 /* ------------------------------------------------------------------- */
 /* Small building blocks                                               */
 /* ------------------------------------------------------------------- */
-function StatRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+const StatRow = React.memo(function StatRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   const { tokens } = useTheme();
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
@@ -295,9 +295,9 @@ function StatRow({ label, value, accent }: { label: string; value: string; accen
       <span style={{ fontSize: tokens.fontSizeMd, fontWeight: 700, color: accent ? tokens.primary : tokens.text }}>{value}</span>
     </div>
   );
-}
+});
 
-function CatButton({ icon, label, count, active, onClick, title }: { icon: string; label: string; count: number; active: boolean; onClick: () => void; title?: string }) {
+const CatButton = React.memo(function CatButton({ icon, label, count, active, onClick, title }: { icon: string; label: string; count: number; active: boolean; onClick: () => void; title?: string }) {
   const { tokens } = useTheme();
   return (
     <button
@@ -324,9 +324,9 @@ function CatButton({ icon, label, count, active, onClick, title }: { icon: strin
       <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{count}</span>
     </button>
   );
-}
+});
 
-function TagPill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+const TagPill = React.memo(function TagPill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   const { tokens } = useTheme();
   return (
     <button
@@ -346,7 +346,7 @@ function TagPill({ label, active, onClick }: { label: string; active: boolean; o
       #{label}
     </button>
   );
-}
+});
 
 /* ------------------------------------------------------------------- */
 /* Prompt card                                                         */
@@ -417,7 +417,7 @@ const PromptCard = React.memo(function PromptCard({
 /* ------------------------------------------------------------------- */
 /* Highlighted prompt content with {{var}} emphasis                    */
 /* ------------------------------------------------------------------- */
-function HighlightedPrompt({ content }: { content: string }) {
+const HighlightedPrompt = React.memo(function HighlightedPrompt({ content }: { content: string }) {
   const { tokens } = useTheme();
   const parts = content.split(/(\{\{\s*[a-zA-Z0-9_.-]+\s*\}\})/g);
   return (
@@ -431,12 +431,12 @@ function HighlightedPrompt({ content }: { content: string }) {
       )}
     </pre>
   );
-}
+});
 
 /* ------------------------------------------------------------------- */
 /* Detail modal                                                        */
 /* ------------------------------------------------------------------- */
-function PromptDetailModal({ id, onClose, onUse, refresh }: { id: string; onClose: () => void; onUse: () => void; refresh: () => void }) {
+const PromptDetailModal = React.memo(function PromptDetailModal({ id, onClose, onUse, refresh }: { id: string; onClose: () => void; onUse: () => void; refresh: () => void }) {
   const { prompts } = useApp();
   const { tokens } = useTheme();
   const [tab, setTab] = useState<'prompt' | 'history'>('prompt');
@@ -446,6 +446,14 @@ function PromptDetailModal({ id, onClose, onUse, refresh }: { id: string; onClos
   const cur = p.versions.find((v) => v.version === p.currentVersion);
   const vars = extractVariables((p.systemPrompt ?? '') + (cur?.content ?? ''));
   const copies = [p.systemPrompt, cur?.content].filter(Boolean).join('\n\n');
+
+  const copyPrompt = useCallback(() => copyText(copies), [copies]);
+  const resetBuiltin = useCallback(() => {
+    if (confirm('Reset this prompt to its built-in definition? (creates a new version)')) {
+      prompts.resetBuiltin(p.id);
+      refresh();
+    }
+  }, [prompts, p.id, refresh]);
 
   return (
     <Modal open onClose={onClose} title={`${meta?.icon ?? ''} ${p.name}`} width={760}>
@@ -487,9 +495,9 @@ function PromptDetailModal({ id, onClose, onUse, refresh }: { id: string; onClos
           </div>
           <div style={{ display: 'flex', gap: tokens.space2, flexWrap: 'wrap' }}>
             <Button onClick={onUse}>Use in chat</Button>
-            <Button variant="secondary" onClick={() => copyText(copies)}>Copy prompt</Button>
+            <Button variant="secondary" onClick={copyPrompt}>Copy prompt</Button>
             {p.builtin ? (
-              <Button variant="ghost" onClick={() => { if (confirm('Reset this prompt to its built-in definition? (creates a new version)')) { prompts.resetBuiltin(p.id); refresh(); } }}>Reset to built-in</Button>
+              <Button variant="ghost" onClick={resetBuiltin}>Reset to built-in</Button>
             ) : null}
           </div>
         </div>
@@ -498,13 +506,21 @@ function PromptDetailModal({ id, onClose, onUse, refresh }: { id: string; onClos
       )}
     </Modal>
   );
-}
+});
 
-function HistoryList({ prompt, refresh }: { prompt: PromptRecord; refresh: () => void }) {
+const HistoryList = React.memo(function HistoryList({ prompt, refresh }: { prompt: PromptRecord; refresh: () => void }) {
   const { prompts } = useApp();
   const { tokens } = useTheme();
   const [active, setActive] = useState<number>(prompt.currentVersion);
   const v = prompt.versions.find((x) => x.version === active);
+
+  const rollback = useCallback(() => {
+    if (v) {
+      prompts.rollback(prompt.id, v.version);
+      refresh();
+    }
+  }, [prompts, prompt.id, v, refresh]);
+
   return (
     <div style={{ display: 'flex', gap: tokens.space3, marginTop: tokens.space3 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 120 }}>
@@ -533,18 +549,18 @@ function HistoryList({ prompt, refresh }: { prompt: PromptRecord; refresh: () =>
         )}
         {v && v.version !== prompt.currentVersion && (
           <div style={{ marginTop: tokens.space2 }}>
-            <Button size="sm" variant="secondary" onClick={() => { prompts.rollback(prompt.id, v.version); refresh(); }}>Rollback to v{v.version}</Button>
+            <Button size="sm" variant="secondary" onClick={rollback}>Rollback to v{v.version}</Button>
           </div>
         )}
       </div>
     </div>
   );
-}
+});
 
 /* ------------------------------------------------------------------- */
 /* Use in chat modal: variable fill + provider/model + rendered preview */
 /* ------------------------------------------------------------------- */
-function UseInChatModal({ id, onClose, onNavigate, refresh }: { id: string; onClose: () => void; onNavigate?: (tab: string) => void; refresh: () => void }) {
+const UseInChatModal = React.memo(function UseInChatModal({ id, onClose, onNavigate, refresh }: { id: string; onClose: () => void; onNavigate?: (tab: string) => void; refresh: () => void }) {
   const { prompts } = useApp();
   const { tokens } = useTheme();
   const [provider, setProvider] = useState('openrouter');
@@ -556,30 +572,36 @@ function UseInChatModal({ id, onClose, onNavigate, refresh }: { id: string; onCl
   if (!p) return null;
   const cur = p.versions.find((v) => v.version === p.currentVersion);
   const vars = extractVariables((p.systemPrompt ?? '') + (cur?.content ?? ''));
-  const modelOpts = listModels(provider as never).map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id }));
-  const _providerRef = provider;
-  void _providerRef;
+  const modelOpts = useMemo(() => listModels(provider as never).map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id })), [provider]);
+  const providerOpts = useMemo(() => listProviders().filter((x) => x.id !== 'local').map((x) => ({ label: x.gateway ? `${x.name} · gateway` : x.name, value: x.id })), []);
 
-  const setVar = (k: string, val: string) => setValues((vs) => ({ ...vs, [k]: val }));
+  const setVar = useCallback((k: string, val: string) => setValues((vs) => ({ ...vs, [k]: val })), []);
 
-  const rendered = renderPrompt(cur?.content ?? '', values);
-  const sysRendered = renderPrompt(p.systemPrompt ?? '', values);
-  const totalTokens = estimateTokens(rendered + '\n' + sysRendered);
-  const allFilled = vars.every((v) => (values[v] ?? '').trim().length > 0);
+  const rendered = useMemo(() => renderPrompt(cur?.content ?? '', values), [cur?.content, values]);
+  const sysRendered = useMemo(() => renderPrompt(p.systemPrompt ?? '', values), [p.systemPrompt, values]);
+  const totalTokens = useMemo(() => estimateTokens(rendered + '\n' + sysRendered), [rendered, sysRendered]);
+  const allFilled = useMemo(() => vars.every((v) => (values[v] ?? '').trim().length > 0), [vars, values]);
 
-  const doCopyOpen = async () => {
+  const doCopyOpen = useCallback(async () => {
     const txt = [sysRendered && `<system>\n${sysRendered}\n</system>`, rendered].filter(Boolean).join('\n\n');
     await copyText(txt);
     prompts.recordUse(p.id);
     refresh();
     setCopied(true);
     setTimeout(() => { onClose(); onNavigate?.('chat'); }, 400);
-  };
+  }, [sysRendered, rendered, prompts, p.id, refresh, onClose, onNavigate]);
+
+  const useWithoutCopy = useCallback(() => {
+    prompts.recordUse(p.id);
+    refresh();
+    onClose();
+    onNavigate?.('chat');
+  }, [prompts, p.id, refresh, onClose, onNavigate]);
 
   return (
-    <Modal open onClose={onClose} title={`Use “${p.name}” in chat`} width={720}>
+    <Modal open onClose={onClose} title={`Use "${p.name}" in chat`} width={720}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.space3, marginBottom: tokens.space3 }}>
-        <Select label="Provider" value={provider} onChange={setProvider} options={listProviders().filter((x) => x.id !== 'local').map((x) => ({ label: x.gateway ? `${x.name} · gateway` : x.name, value: x.id }))} />
+        <Select label="Provider" value={provider} onChange={setProvider} options={providerOpts} />
         <Select label="Model" value={model} onChange={setModel} options={modelOpts} />
       </div>
 
@@ -612,17 +634,17 @@ function UseInChatModal({ id, onClose, onNavigate, refresh }: { id: string; onCl
         <Button onClick={() => void doCopyOpen()} disabled={vars.length > 0 && !allFilled}>
           {copied ? '✓ Copied' : 'Copy & open chat'}
         </Button>
-        <Button variant="ghost" onClick={() => { prompts.recordUse(p.id); refresh(); onClose(); onNavigate?.('chat'); }}>Use without copying</Button>
+        <Button variant="ghost" onClick={useWithoutCopy}>Use without copying</Button>
         {!allFilled && vars.length > 0 && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.warning }}>Fill all variables to enable copy.</span>}
       </div>
     </Modal>
   );
-}
+});
 
 /* ------------------------------------------------------------------- */
 /* Editor modal (create / edit)                                        */
 /* ------------------------------------------------------------------- */
-function EditorModal({ id, onClose, refresh }: { id: string | null; onClose: () => void; refresh: () => void }) {
+const EditorModal = React.memo(function EditorModal({ id, onClose, refresh }: { id: string | null; onClose: () => void; refresh: () => void }) {
   const { prompts } = useApp();
   const { tokens } = useTheme();
   const existing = id ? prompts.get(id) : undefined;
@@ -635,7 +657,11 @@ function EditorModal({ id, onClose, refresh }: { id: string | null; onClose: () 
   const [content, setContent] = useState(existing ? prompts.currentVersion(id!)?.content ?? '' : '');
   const [note, setNote] = useState('');
 
-  const save = () => {
+  const categoryOptions = useMemo(() => [{ label: '— uncategorized —', value: '' }, ...PROMPT_CATEGORIES.map((c) => ({ label: `${c.icon} ${c.label}`, value: c.id }))], []);
+  const extractedVars = useMemo(() => extractVariables(content), [content]);
+  const tokenEstimate = useMemo(() => estimateTokens(content), [content]);
+
+  const save = useCallback(() => {
     if (!name.trim() || !content.trim()) return;
     const tagArr = tags.split(',').map((t) => t.trim()).filter(Boolean);
     if (isNew) {
@@ -647,7 +673,6 @@ function EditorModal({ id, onClose, refresh }: { id: string | null; onClose: () 
         note: note || 'Initial version',
       });
     } else {
-      const fresh = prompts.get(id!);
       const cv = prompts.currentVersion(id!)?.content;
       if (cv === content) {
         prompts.updateMeta(id!, { name, description: description || undefined, category: category || undefined, tags: tagArr, systemPrompt: systemPrompt || undefined });
@@ -658,7 +683,7 @@ function EditorModal({ id, onClose, refresh }: { id: string | null; onClose: () 
     }
     refresh();
     onClose();
-  };
+  }, [name, content, tags, isNew, description, category, systemPrompt, note, prompts, id, refresh, onClose]);
 
   return (
     <Modal open onClose={onClose} title={isNew ? 'New Prompt' : `Edit ${existing?.name ?? ''}`} width={720}>
@@ -669,7 +694,7 @@ function EditorModal({ id, onClose, refresh }: { id: string | null; onClose: () 
             label="Category"
             value={category || ''}
             onChange={(v) => setCategory(v as PromptCategory)}
-            options={[{ label: '— uncategorized —', value: '' }, ...PROMPT_CATEGORIES.map((c) => ({ label: `${c.icon} ${c.label}`, value: c.id }))]}
+            options={categoryOptions}
           />
         </div>
         <Input label="Description" value={description} onChange={setDescription} placeholder="What this prompt is for (one line)" />
@@ -684,17 +709,17 @@ function EditorModal({ id, onClose, refresh }: { id: string | null; onClose: () 
           </Button>
         </div>
         <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
-          {extractVariables(content).length} variable(s) detected · ~{formatTokens(estimateTokens(content))} tokens
+          {extractedVars.length} variable(s) detected · ~{formatTokens(tokenEstimate)} tokens
         </div>
       </div>
     </Modal>
   );
-}
+});
 
 /* ------------------------------------------------------------------- */
 /* Evals (kept functional, moderately polished)                        */
 /* ------------------------------------------------------------------- */
-function EvalPanel() {
+const EvalPanel = React.memo(function EvalPanel() {
   const { tokens } = useTheme();
   const app = useApp();
   const { evals } = app;
@@ -713,11 +738,46 @@ function EvalPanel() {
     writeEvalSnapshot({ def, sysPrompt, inputText, expected, cases, result });
   }, [def, sysPrompt, inputText, expected, cases, result]);
 
-  const allProviders = listProviders();
-  const providerOpts = allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id }));
-  const modelOpts = listModels((def.provider ?? 'openrouter') as never).map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id }));
-  const pdef = allProviders.find((x) => x.id === def.provider);
-  const needsKey = !!(pdef && pdef.needsKey !== false && pdef.kind !== 'local') && !app.hasKey((def.provider ?? 'openrouter') as never);
+  const allProviders = useMemo(() => listProviders(), []);
+  const providerOpts = useMemo(() => allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id })), [allProviders]);
+  const modelOpts = useMemo(() => listModels((def.provider ?? 'openrouter') as never).map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id })), [def.provider]);
+  const pdef = useMemo(() => allProviders.find((x) => x.id === def.provider), [allProviders, def.provider]);
+  const needsKey = useMemo(() => !!(pdef && pdef.needsKey !== false && pdef.kind !== 'local') && !app.hasKey((def.provider ?? 'openrouter') as never), [pdef, app, def.provider]);
+
+  const addCase = useCallback(() => {
+    if (inputText) {
+      setCases((c) => [...c, { id: String(c.length + 1), input: inputText, expected: expected || undefined }]);
+      setInputText('');
+      setExpected('');
+    }
+  }, [inputText, expected]);
+
+  const runEval = useCallback(async () => {
+    if (needsKey) {
+      setResult({ name: def.name || 'Untitled eval', passRate: 0, results: [{ caseId: '1', pass: false, score: 0, input: '(no key)', actual: '⚠️ Add an API key for this provider, or pick a key-free provider (OpenCode Zen / Kilo Gateway) in Connections → Keys.' }] });
+      return;
+    }
+    setRunning(true);
+    setResult(null);
+    const r = await app.evals.run(
+      {
+        id: `eval_${Date.now()}`,
+        name: def.name || 'Untitled eval',
+        model: def.model,
+        provider: def.provider,
+        systemPrompt: sysPrompt || undefined,
+        criteria: def.criteria,
+        type: (def.type ?? 'contains'),
+        cases: cases.length ? cases : [{ id: '1', input: 'Hello world', expected: 'Hello' }],
+      } as never,
+      def.model,
+      def.provider,
+    ) as never;
+    const rr = r as unknown as { name: string; passRate: number; results: { caseId: string; pass: boolean; score: number; input: string; actual: string; llmJudge?: string }[] };
+    setResult(rr);
+    setOpen(false);
+    setRunning(false);
+  }, [needsKey, def, sysPrompt, cases, app.evals]);
 
   return (
     <>
@@ -763,39 +823,14 @@ function EvalPanel() {
           <Input label="Prompt / system prompt" textarea rows={3} value={sysPrompt} onChange={setSysPrompt} />
           <Input label="Test input" textarea rows={2} value={inputText} onChange={setInputText} />
           <Input label="Expected (optional)" value={expected} onChange={setExpected} />
-          <Button variant="secondary" onClick={() => { if (inputText) { setCases((c) => [...c, { id: String(c.length + 1), input: inputText, expected: expected || undefined }]); setInputText(''); setExpected(''); } }}>
+          <Button variant="secondary" onClick={addCase}>
             Add case ({cases.length})
           </Button>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {cases.map((c) => <Badge key={c.id}>#{c.id}: {c.input.slice(0, 20)}</Badge>)}
           </div>
           <Button
-            onClick={async () => {
-              if (needsKey) {
-                setResult({ name: def.name || 'Untitled eval', passRate: 0, results: [{ caseId: '1', pass: false, score: 0, input: '(no key)', actual: '⚠️ Add an API key for this provider, or pick a key-free provider (OpenCode Zen / Kilo Gateway) in Connections → Keys.' }] });
-                return;
-              }
-              setRunning(true);
-              setResult(null);
-              const r = await app.evals.run(
-                {
-                  id: `eval_${Date.now()}`,
-                  name: def.name || 'Untitled eval',
-                  model: def.model,
-                  provider: def.provider,
-                  systemPrompt: sysPrompt || undefined,
-                  criteria: def.criteria,
-                  type: (def.type ?? 'contains'),
-                  cases: cases.length ? cases : [{ id: '1', input: 'Hello world', expected: 'Hello' }],
-                } as never,
-                def.model,
-                def.provider,
-              ) as never;
-              const rr = r as unknown as { name: string; passRate: number; results: { caseId: string; pass: boolean; score: number; input: string; actual: string; llmJudge?: string }[] };
-              setResult(rr);
-              setOpen(false);
-              setRunning(false);
-            }}
+            onClick={runEval}
             disabled={running || cases.length === 0}
           >
             {running ? 'Running…' : 'Run eval'}
@@ -804,4 +839,4 @@ function EvalPanel() {
       </Modal>
     </>
   );
-}
+});
