@@ -22,6 +22,8 @@ import {
   readGithubToken,
   writeGithubToken,
   createKeyManager,
+  generateOAuthPKCEParams,
+  exchangeOAuthCode,
   type ConnectorCategory,
   type KnownConnector,
   type ProviderDef,
@@ -76,6 +78,8 @@ export function KeysScreen() {
   const [mgmtKeyRevealed, setMgmtKeyRevealed] = useState<Record<string, boolean>>({});
   const [rotationStatus, setRotationStatus] = useState<Record<string, Status>>({});
   const [managedKeys, setManagedKeys] = useState<Record<string, ManagedKey[]>>({});
+  const [oauthPending, setOauthPending] = useState<{ provider: string; codeVerifier: string; state: string; popup: Window | null } | null>(null);
+  const [oauthStatus, setOauthStatus] = useState<Record<string, 'idle' | 'pending' | 'success' | 'error'>>({});
   const addCustomConnector = useCallback((label: string, connectorType: string) => {
     const id = 'custom-' + Date.now();
     const v = inputs['custom-new'] ?? '';
@@ -292,6 +296,103 @@ export function KeysScreen() {
       setTesting((s) => ({ ...s, [c.id]: 'fail' }));
     }
   }, [vault]);
+
+  // --- OAuth Account Management ---
+
+  const startOAuth = useCallback(async (c: KnownConnector) => {
+    if (!c.isProvider && !c.gateway) return;
+
+    setOauthStatus((s) => ({ ...s, [c.id]: 'pending' }));
+
+    const redirectUri = `${window.location.origin}${window.location.pathname}`;
+    const { url, codeVerifier, state } = await generateOAuthPKCEParams(redirectUri);
+
+    // Open popup window
+    const width = 600;
+    const height = 700;
+    const left = (window.innerWidth - width) / 2;
+    const top = (window.innerHeight - height) / 2;
+
+    const popup = window.open(
+      url,
+      'oauth',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+    );
+
+    if (!popup) {
+      setOauthStatus((s) => ({ ...s, [c.id]: 'error' }));
+      setToast('Could not open OAuth popup. Please disable popup blocker.');
+      return;
+    }
+
+    setOauthPending({ provider: c.id, codeVerifier, state, popup });
+
+    // Listen for the OAuth callback
+    const checkPopup = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(checkPopup);
+        setOauthStatus((s) => ({ ...s, [c.id]: 'error' }));
+      }
+    }, 1000);
+  }, []);
+
+  const handleOAuthCallback = useCallback(async (code: string, state: string, provider: string, codeVerifier: string) => {
+    // Verify state matches
+    if (oauthPending?.provider !== provider || oauthPending?.state !== state) {
+      setOauthStatus((s) => ({ ...s, [provider]: 'error' }));
+      setToast('OAuth state mismatch');
+      return;
+    }
+
+    try {
+      const redirectUri = `${window.location.origin}${window.location.pathname}`;
+      const tokenData = await exchangeOAuthCode(code, codeVerifier, redirectUri);
+
+      // Store the account
+      const apiKey = tokenData.access_token;
+      const accountId = `oauth_${Date.now()}`;
+      vault.setAccount(provider, accountId, apiKey, {
+        refreshToken: tokenData.refresh_token,
+        expiresAt: Date.now() + (tokenData.expires_in || 3600) * 1000,
+        label: `${provider} OAuth (${accountId.slice(0, 8)})`,
+      });
+
+      setOauthStatus((s) => ({ ...s, [provider]: 'success' }));
+      refresh();
+      setToast(`Account added ✓`);
+
+      if (oauthPending?.popup) {
+        oauthPending.popup.close();
+      }
+    } catch (e) {
+      setOauthStatus((s) => ({ ...s, [provider]: 'error' }));
+      setToast(`OAuth failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setOauthPending(null);
+      setTimeout(() => setOauthStatus((s) => ({ ...s, [provider]: 'idle' })), 3000);
+    }
+  }, [oauthPending, vault, refresh]);
+
+  // Check for OAuth callback in URL on mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    const provider = urlParams.get('provider') || 'openrouter';
+
+    if (code && state && oauthPending) {
+      void handleOAuthCallback(code, state, provider, oauthPending.codeVerifier);
+      // Clean up URL
+      const cleanUrl = `${window.location.pathname}${window.location.hash}`;
+      window.history.replaceState({}, '', cleanUrl);
+    }
+  }, [oauthPending, handleOAuthCallback]);
+
+  const removeAccount = useCallback((provider: string, accountId: string, label: string) => {
+    vault.removeAccount(provider, accountId);
+    refresh();
+    setToast(`Removed account: ${label}`);
+  }, [vault, refresh]);
 
   const syncModels = useCallback(async () => {
     setSyncing(true);
@@ -521,6 +622,10 @@ export function KeysScreen() {
             onRotate={() => void rotateApiKey(c)}
             rotationStatus={rotationStatus[c.id] ?? 'idle'}
             managedKeys={managedKeys[c.id]}
+            oauthStatus={oauthStatus[c.id] ?? 'idle'}
+            onOAuth={() => startOAuth(c)}
+            accounts={vault.getAccounts(c.id)}
+            onRemoveAccount={(accountId, label) => removeAccount(c.id, accountId, label)}
           />
           );
         })}
@@ -598,7 +703,7 @@ const SummaryStat = React.memo(function SummaryStat({ label, value, accent, icon
 });
 
 const ConnectorCard = React.memo(function ConnectorCard({
-  c, storedKey, fallbackKeys = [], inputValue, onInput, onAddFallback, onRemoveFallback, baseUrlValue, onBaseUrlChange, revealed, toggleReveal, fallbackRevealed, toggleFallbackReveal, fallbackInput, onFallbackInput, status, onSave, onRemove, onTest, managementKey, mgmtRevealed, toggleMgmtReveal, mgmtInput, onMgmtInput, onSaveMgmt, onTestMgmt, onRotate, rotationStatus, managedKeys,
+  c, storedKey, fallbackKeys = [], inputValue, onInput, onAddFallback, onRemoveFallback, baseUrlValue, onBaseUrlChange, revealed, toggleReveal, fallbackRevealed, toggleFallbackReveal, fallbackInput, onFallbackInput, status, onSave, onRemove, onTest, managementKey, mgmtRevealed, toggleMgmtReveal, mgmtInput, onMgmtInput, onSaveMgmt, onTestMgmt, onRotate, rotationStatus, managedKeys, oauthStatus, onOAuth, accounts, onRemoveAccount,
 }: {
   c: KnownConnector;
   storedKey?: string;
@@ -629,6 +734,10 @@ const ConnectorCard = React.memo(function ConnectorCard({
   onRotate: () => void;
   rotationStatus: Status;
   managedKeys?: ManagedKey[];
+  oauthStatus: 'idle' | 'pending' | 'success' | 'error';
+  onOAuth: () => void;
+  accounts?: Array<{ accountId: string; apiKey: string; label: string; refreshToken?: string; expiresAt?: number }>;
+  onRemoveAccount: (accountId: string, label: string) => void;
 }) {
   const { tokens } = useTheme();
   const connected = !!storedKey;
@@ -687,6 +796,41 @@ const ConnectorCard = React.memo(function ConnectorCard({
             <Button variant="ghost" size="sm" onClick={onRemove}>{c.gateway && c.removable ? 'Remove' : 'Remove key'}</Button>
           )}
         </div>
+
+        {/* OAuth Account Management (OpenRouter) */}
+        {c.id === 'openrouter' && (
+          <div style={{ marginTop: tokens.space2, paddingTop: tokens.space2, borderTop: `1px solid ${tokens.border}` }}>
+            <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, marginBottom: tokens.space2 }}>
+              OAuth Accounts
+            </div>
+            {(accounts?.length ?? 0) > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2 }}>
+                {accounts?.map((acct) => (
+                  <div key={acct.accountId} style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: tokens.space1, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd }}>
+                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                      <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.text }}>{acct.label}</div>
+                      <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {maskKey(acct.apiKey)}
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => onRemoveAccount(acct.accountId, acct.label)} style={{ color: tokens.danger, fontSize: 11 }}>✕</Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary, marginBottom: tokens.space2 }}>
+                Add multiple OpenRouter accounts via OAuth. Each account's keys are managed independently.
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: tokens.space2, alignItems: 'center' }}>
+              <Button variant="secondary" size="sm" onClick={onOAuth} disabled={oauthStatus === 'pending'}>
+                {oauthStatus === 'pending' ? <Spinner size={14} /> : 'Add account (OAuth)'}
+              </Button>
+              {oauthStatus === 'success' && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.success }}>✓ Account added</span>}
+              {oauthStatus === 'error' && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.danger }}>✗ OAuth failed</span>}
+            </div>
+          </div>
+        )}
 
         {/* API Key Rotation section (OpenRouter only) */}
         {c.id === 'openrouter' && (

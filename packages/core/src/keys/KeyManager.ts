@@ -3,6 +3,102 @@
  * Uses the provider's management API to list, create, and revoke API keys.
  */
 
+// Browser-compatible crypto helpers using Web Crypto API
+function base64URLEncode(buffer: ArrayBuffer): string {
+  return Buffer.from(buffer)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+function generateCodeVerifier(): string {
+  // Use Web Crypto API (available in both browsers and modern Node.js)
+  const array = new Uint8Array(32);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(array);
+  }
+  return base64URLEncode(array.buffer).slice(0, 43);
+}
+
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const data = new TextEncoder().encode(verifier);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return base64URLEncode(hash);
+  }
+  // Fallback for Node.js < 19 (using createHash via dynamic import)
+  const { createHash } = await import('node:crypto');
+  return base64URLEncode(createHash('sha256').update(verifier).digest().buffer);
+}
+
+function generateState(): string {
+  const array = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(array);
+  }
+  return Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** OAuth PKCE parameters for initiating a browser-based OAuth flow. */
+export interface OAuthPKCEParams {
+  url: string;
+  codeVerifier: string;
+  state: string;
+}
+
+/** Generate OAuth PKCE parameters for OpenRouter OAuth flow. */
+export async function generateOAuthPKCEParams(redirectUri: string, clientId: string = 'acode-web'): Promise<OAuthPKCEParams> {
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = await generateCodeChallenge(codeVerifier);
+  const state = generateState();
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: 'code',
+    redirect_uri: redirectUri,
+    scope: 'user:api_keys',
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+  });
+  return {
+    url: `https://openrouter.ai/oauth/auth?${params.toString()}`,
+    codeVerifier,
+    state,
+  };
+}
+
+/** Exchange an OAuth authorization code for an access token. */
+export async function exchangeOAuthCode(
+  code: string,
+  codeVerifier: string,
+  redirectUri: string,
+  clientId: string = 'acode-web'
+): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
+  const res = await fetch('https://openrouter.ai/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: codeVerifier,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Token exchange failed: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+/** Result of a key rotation operation. */
+export interface KeyRotationResult {
+  newApiKey: string;
+  oldKeyCount: number;
+  rotatedKeys: number;
+}
+
 export interface ManagedKey {
   id: string;
   name: string;
