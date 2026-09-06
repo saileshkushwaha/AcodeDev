@@ -211,6 +211,43 @@ export class KeyVault {
     this.setKey(provider, value, { category: 'ai', label, connectorType: 'LLM' });
   }
 
+  /** Store an API management key for automated key rotation (e.g. OpenRouter management key). */
+  setManagementKey(provider: string, value: string): void {
+    const now = Date.now();
+    this.entries.set(`${provider}.mgmt`, {
+      value,
+      category: 'ai',
+      label: `${provider} API management key`,
+      connectorType: 'Key Manager',
+      createdAt: now,
+      updatedAt: now,
+    });
+    void this.persist();
+  }
+
+  /** Get the API management key for a provider. */
+  getManagementKey(provider: string): string | undefined {
+    return this.entries.get(`${provider}.mgmt`)?.value;
+  }
+
+  /** Check if a management key is configured for a provider. */
+  hasManagementKey(provider: string): boolean {
+    return this.entries.has(`${provider}.mgmt`);
+  }
+
+  /** Remove the API management key for a provider. */
+  removeManagementKey(provider: string): void {
+    this.entries.delete(`${provider}.mgmt`);
+    void this.persist();
+  }
+
+  /** List all management keys by provider. */
+  allManagementKeys(): Array<{ provider: string; value: string }> {
+    return [...this.entries.entries()]
+      .filter(([id]) => id.endsWith('.mgmt'))
+      .map(([id, entry]) => ({ provider: id.replace(/\.mgmt$/, ''), value: entry.value }));
+  }
+
   clear() {
     this.entries.clear();
     void this.persist();

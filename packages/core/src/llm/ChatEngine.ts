@@ -1,5 +1,6 @@
 import { createProvider } from './provider';
 import { KeyVault } from '../keys/KeyVault';
+import { createKeyManager, type KeyManagerApi, type ManagedKey } from '../keys/KeyManager';
 import { getProxyBase } from '../proxy';
 import { getProvider } from '../models/catalog';
 import type { ChatMessage, ChatRequest, ChatResponse, ChatStreamChunk, CryptoAdapter, ProviderId } from '../types';
@@ -122,6 +123,86 @@ export class ChatEngine {
    */
   async runTools(req: ChatRequest): Promise<ChatResponse> {
     return this.chat(req);
+  }
+
+  /**
+   * Automatically rotate the API key for a provider using its management key.
+   * Creates a new key via the provider's key management API and replaces the
+   * old key. Falls back gracefully if no management key is configured.
+   * Returns the new key value and the key manager info on success.
+   */
+  async rotateApiKey(provider: string): Promise<{ newValue: string; keyId: string; managedKeys: number } | null> {
+    const mgmtKey = this.vault.getManagementKey(provider);
+    if (!mgmtKey) return null;
+
+    const manager = createKeyManager(provider, mgmtKey);
+    if (!manager) return null;
+
+    // List existing managed keys to clean up
+    const existing = await manager.list();
+    
+    // Create a new key
+    const { key, value } = await manager.createWithSecret({
+      name: `${provider}-auto-${Date.now()}`,
+    });
+
+    if (!value) {
+      throw new Error('OpenRouter did not return the new key value');
+    }
+
+    // Replace the primary key
+    const existingEntry = this.vault.getEntry(provider);
+    if (existingEntry) {
+      // Move old key to fallback keys
+      const oldKeys = existingEntry.keys ?? [];
+      oldKeys.push({
+        value: existingEntry.value,
+        createdAt: existingEntry.createdAt,
+        updatedAt: existingEntry.updatedAt,
+      });
+      // Set new key as primary, keep old ones as fallbacks (last 3)
+      const recentFallbacks = oldKeys.slice(-3);
+      this.vault.setEntry(provider, {
+        value,
+        category: existingEntry.category,
+        label: existingEntry.label,
+        connectorType: existingEntry.connectorType,
+        createdAt: existingEntry.createdAt,
+        updatedAt: Date.now(),
+        keys: recentFallbacks,
+      });
+    } else {
+      this.vault.setKey(provider, value, { category: 'ai', label: `${provider}-auto`, connectorType: 'LLM' });
+    }
+
+    // Optionally clean up old keys (keep the 5 most recent including the new one)
+    const keysToKeep = [...existing].sort((a, b) => b.created - a.created).slice(0, 4);
+    for (const oldKey of existing) {
+      if (!keysToKeep.some(k => k.id === oldKey.id)) {
+        try {
+          await manager.delete(oldKey.id);
+        } catch {
+          /* ignore cleanup errors */
+        }
+      }
+    }
+
+    return {
+      newValue: value,
+      keyId: key.id,
+      managedKeys: existing.length,
+    };
+  }
+
+  /**
+   * Get the list of managed API keys for a provider.
+   */
+  async listManagedKeys(provider: string): Promise<ManagedKey[]> {
+    const mgmtKey = this.vault.getManagementKey(provider);
+    if (!mgmtKey) return [];
+    const manager = createKeyManager(provider, mgmtKey);
+    if (!manager) return [];
+    return manager.list();
   }
 }
 
