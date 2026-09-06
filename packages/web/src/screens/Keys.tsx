@@ -21,9 +21,11 @@ import {
   routeThroughProxy,
   readGithubToken,
   writeGithubToken,
+  createKeyManager,
   type ConnectorCategory,
   type KnownConnector,
   type ProviderDef,
+  type ManagedKey,
 } from '@acode/core';
 
 // Base URLs + auth style used for live "Test connection" on supported providers.
@@ -70,6 +72,10 @@ export function KeysScreen() {
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState('');
   const [proxyUrl, setProxyUrlState] = useState(getProxyBase());
+  const [mgmtKeyInputs, setMgmtKeyInputs] = useState<Record<string, string>>({});
+  const [mgmtKeyRevealed, setMgmtKeyRevealed] = useState<Record<string, boolean>>({});
+  const [rotationStatus, setRotationStatus] = useState<Record<string, Status>>({});
+  const [managedKeys, setManagedKeys] = useState<Record<string, ManagedKey[]>>({});
   const addCustomConnector = useCallback((label: string, connectorType: string) => {
     const id = 'custom-' + Date.now();
     const v = inputs['custom-new'] ?? '';
@@ -141,6 +147,7 @@ export function KeysScreen() {
 
   const removeKey = useCallback((c: KnownConnector) => {
     vault.removeKey(c.id);
+    vault.removeManagementKey(c.id);
     if (c.id === 'github') {
       writeGithubToken('');
     }
@@ -164,6 +171,93 @@ export function KeysScreen() {
     vault.removeKeyAt(c.id, index);
     refresh();
     setToast(`Removed fallback key for ${c.label}`);
+  }, [vault, refresh]);
+
+  const saveManagementKey = useCallback((c: KnownConnector) => {
+    const v = (mgmtKeyInputs[c.id] ?? '').trim();
+    if (!v) {
+      vault.removeManagementKey(c.id);
+      setToast(`Removed management key for ${c.label}`);
+    } else {
+      vault.setManagementKey(c.id, v);
+      setToast(`Saved management key for ${c.label}`);
+    }
+    setMgmtKeyInputs((s) => ({ ...s, [c.id]: '' }));
+    refresh();
+  }, [vault, mgmtKeyInputs, refresh]);
+
+  const testManagementKey = useCallback(async (c: KnownConnector) => {
+    const mgmtKey = vault.getManagementKey(c.id);
+    if (!mgmtKey) return;
+    setRotationStatus((s) => ({ ...s, [c.id]: 'testing' }));
+    try {
+      const manager = createKeyManager(c.id, mgmtKey);
+      if (!manager) {
+        setRotationStatus((s) => ({ ...s, [c.id]: 'fail' }));
+        return;
+      }
+      const keys = await manager.list();
+      setManagedKeys((s) => ({ ...s, [c.id]: keys }));
+      setRotationStatus((s) => ({ ...s, [c.id]: 'ok' }));
+    } catch {
+      setRotationStatus((s) => ({ ...s, [c.id]: 'fail' }));
+    }
+  }, [vault]);
+
+  const rotateApiKey = useCallback(async (c: KnownConnector) => {
+    const mgmtKey = vault.getManagementKey(c.id);
+    if (!mgmtKey) {
+      setToast('Save a management key first');
+      return;
+    }
+    const manager = createKeyManager(c.id, mgmtKey);
+    if (!manager) {
+      setToast(`${c.label} does not support key rotation`);
+      return;
+    }
+    setRotationStatus((s) => ({ ...s, [c.id]: 'testing' }));
+    try {
+      const existing = await manager.list();
+      const { key, value } = await manager.createWithSecret({
+        name: `${c.label}-auto-${Date.now()}`,
+      });
+      if (!value) throw new Error('Key value not returned');
+
+      // Replace primary key, move old to fallback
+      const existingEntry = vault.getEntry(c.id);
+      if (existingEntry) {
+        const oldKeys = existingEntry.keys ?? [];
+        oldKeys.push({
+          value: existingEntry.value,
+          createdAt: existingEntry.createdAt,
+          updatedAt: existingEntry.updatedAt,
+        });
+        vault.setEntry(c.id, {
+          ...existingEntry,
+          value,
+          updatedAt: Date.now(),
+          keys: oldKeys.slice(-3),
+        });
+      } else {
+        vault.setKey(c.id, value, { category: c.category, label: c.label, connectorType: c.connectorType });
+      }
+
+      // Clean up old managed keys (keep 5 most recent)
+      const keysToKeep = [...existing].sort((a, b) => b.created - a.created).slice(0, 4);
+      for (const oldKey of existing) {
+        if (!keysToKeep.some(k => k.id === oldKey.id)) {
+          try { await manager.delete(oldKey.id); } catch { /* ignore */ }
+        }
+      }
+
+      setManagedKeys((s) => ({ ...s, [c.id]: [...existing.slice(0, 4), key] }));
+      setRotationStatus((s) => ({ ...s, [c.id]: 'ok' }));
+      refresh();
+      setToast(`Rotated ${c.label} API key ✓`);
+    } catch (e) {
+      setRotationStatus((s) => ({ ...s, [c.id]: 'fail' }));
+      setToast(`Rotation failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }, [vault, refresh]);
 
   const clearAll = useCallback(() => {
@@ -417,6 +511,16 @@ export function KeysScreen() {
             onSave={() => saveKey(c)}
             onRemove={() => removeKey(c)}
             onTest={() => void test(c)}
+            managementKey={vault.getManagementKey(c.id)}
+            mgmtRevealed={!!mgmtKeyRevealed[c.id]}
+            toggleMgmtReveal={() => setMgmtKeyRevealed((s) => ({ ...s, [c.id]: !s[c.id] }))}
+            mgmtInput={mgmtKeyInputs[c.id] ?? ''}
+            onMgmtInput={(v) => setMgmtKeyInputs((s) => ({ ...s, [c.id]: v }))}
+            onSaveMgmt={() => { saveManagementKey(c); }}
+            onTestMgmt={() => { setMgmtKeyInputs((s) => ({ ...s, [c.id]: '' })); void testManagementKey(c); }}
+            onRotate={() => void rotateApiKey(c)}
+            rotationStatus={rotationStatus[c.id] ?? 'idle'}
+            managedKeys={managedKeys[c.id]}
           />
           );
         })}
@@ -494,7 +598,7 @@ const SummaryStat = React.memo(function SummaryStat({ label, value, accent, icon
 });
 
 const ConnectorCard = React.memo(function ConnectorCard({
-  c, storedKey, fallbackKeys = [], inputValue, onInput, onAddFallback, onRemoveFallback, baseUrlValue, onBaseUrlChange, revealed, toggleReveal, fallbackRevealed, toggleFallbackReveal, fallbackInput, onFallbackInput, status, onSave, onRemove, onTest,
+  c, storedKey, fallbackKeys = [], inputValue, onInput, onAddFallback, onRemoveFallback, baseUrlValue, onBaseUrlChange, revealed, toggleReveal, fallbackRevealed, toggleFallbackReveal, fallbackInput, onFallbackInput, status, onSave, onRemove, onTest, managementKey, mgmtRevealed, toggleMgmtReveal, mgmtInput, onMgmtInput, onSaveMgmt, onTestMgmt, onRotate, rotationStatus, managedKeys,
 }: {
   c: KnownConnector;
   storedKey?: string;
@@ -515,6 +619,16 @@ const ConnectorCard = React.memo(function ConnectorCard({
   onSave: () => void;
   onRemove: () => void;
   onTest: () => void;
+  managementKey?: string;
+  mgmtRevealed: boolean;
+  toggleMgmtReveal: () => void;
+  mgmtInput: string;
+  onMgmtInput: (v: string) => void;
+  onSaveMgmt: () => void;
+  onTestMgmt: () => void;
+  onRotate: () => void;
+  rotationStatus: Status;
+  managedKeys?: ManagedKey[];
 }) {
   const { tokens } = useTheme();
   const connected = !!storedKey;
@@ -573,6 +687,69 @@ const ConnectorCard = React.memo(function ConnectorCard({
             <Button variant="ghost" size="sm" onClick={onRemove}>{c.gateway && c.removable ? 'Remove' : 'Remove key'}</Button>
           )}
         </div>
+
+        {/* API Key Rotation section (OpenRouter only) */}
+        {c.id === 'openrouter' && (
+          <div style={{ marginTop: tokens.space2, paddingTop: tokens.space2, borderTop: `1px solid ${tokens.border}` }}>
+            <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, marginBottom: tokens.space2 }}>Automatic key rotation</div>
+            {!managementKey ? (
+              <div>
+                <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary, marginBottom: tokens.space2 }}>
+                  Add an OpenRouter API management key to enable automatic key rotation. The key will be used to create and revoke API keys automatically when your primary key fails.
+                </div>
+                <div style={{ display: 'flex', gap: tokens.space2, alignItems: 'flex-end' }}>
+                  <div style={{ flex: 1 }}>
+                    <Input
+                      label="Management key"
+                      type={mgmtRevealed ? 'text' : 'password'}
+                      monospace
+                      value={mgmtInput}
+                      onChange={onMgmtInput}
+                      placeholder="sk-or-v1-..."
+                    />
+                  </div>
+                  {managementKey && (
+                    <Button variant="ghost" size="sm" onClick={toggleMgmtReveal} style={{ whiteSpace: 'nowrap' }}>
+                      {mgmtRevealed ? 'Hide' : 'Reveal'}
+                    </Button>
+                  )}
+                </div>
+                <Button variant="secondary" size="sm" style={{ marginTop: tokens.space2 }} disabled={!mgmtInput.trim()} onClick={onSaveMgmt}>Save management key</Button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2 }}>
+                <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary }}>
+                  Management key configured. Click below to rotate your API key.
+                </div>
+                <div style={{ display: 'flex', gap: tokens.space2, alignItems: 'center' }}>
+                  <Button variant="secondary" size="sm" onClick={onRotate} disabled={rotationStatus === 'testing'}>
+                    {rotationStatus === 'testing' ? <Spinner size={14} /> : 'Rotate key'}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={onTestMgmt} disabled={rotationStatus === 'testing'}>
+                    Refresh key list
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => { onMgmtInput(''); onSaveMgmt(); }} style={{ color: tokens.danger, fontSize: 11 }}>Remove management key</Button>
+                </div>
+                {rotationStatus === 'ok' && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.success, fontWeight: 600 }}>✓ Key rotated successfully</div>}
+                {rotationStatus === 'fail' && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.danger, fontWeight: 600 }}>✗ Rotation failed</div>}
+                {managedKeys && managedKeys.length > 0 && (
+                  <div style={{ marginTop: tokens.space1 }}>
+                    <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginBottom: tokens.space1 }}>Managed keys ({managedKeys.length}):</div>
+                    {managedKeys.map((mk) => (
+                      <div key={mk.id} style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary, padding: `${tokens.space1}px 0`, borderBottom: `1px solid ${tokens.border}` }}>
+                        <div style={{ fontWeight: 600 }}>{mk.name}</div>
+                        <div style={{ display: 'flex', gap: tokens.space2, marginTop: 2 }}>
+                          <span style={{ color: tokens.textMuted }}>Created: {new Date(mk.created * 1000).toLocaleDateString()}</span>
+                          {mk.usage !== undefined && <span style={{ color: tokens.textMuted }}>Usage: {mk.usage}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Fallback keys section */}
         {connected && (
