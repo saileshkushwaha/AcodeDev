@@ -1149,7 +1149,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                   </div>
                 </div>
                 {/* Centered composer for empty sessions */}
-                <div style={{ width: '100%', maxWidth: 800, animation: 'opencode-fadein 0.8s ease-out 0.2s both' }}>
+                <div style={{ width: '100%', maxWidth: 1200, animation: 'opencode-fadein 0.8s ease-out 0.2s both' }}>
                   <Composer
                     input={input}
                     setInput={setInput}
