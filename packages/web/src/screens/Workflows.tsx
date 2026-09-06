@@ -3,6 +3,8 @@ import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
 import { Card, Button, Input, Select, Badge, Modal, useTheme, Spinner, useIsMobile, Icon, GithubIcon } from '@acode/ui';
 import { Markdown } from '../components/Markdown';
+import { WorkflowGraph, type XYPos } from '../components/workflow/WorkflowGraph';
+import { layoutWorkflow, isIndexLayout } from '../components/workflow/autoLayout';
 import {
   type WorkflowDefinition,
   type WorkflowNode,
@@ -122,6 +124,8 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   const [ghLabels, setGhLabels] = useState('');
   const [ghBusy, setGhBusy] = useState(false);
   const [ghMsg, setGhMsg] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'graph'>('graph');
+  const [layoutKey, setLayoutKey] = useState(0);
 
   const allDefs = useMemo(() => workflowStore.all(), [workflowStore, ver]);
   const customCount = useMemo(() => allDefs.filter((d) => !d.builtin).length, [allDefs]);
@@ -146,8 +150,10 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
       const draft = loadDraft(def.id);
       const savedNodes = def.nodes.map((n) => ({ ...n }));
       const savedEdges = def.edges.map((e) => ({ ...e }));
-      setNodes(Array.isArray(draft?.nodes) ? draft.nodes.map((n) => ({ ...n })) : savedNodes);
-      setEdges(Array.isArray(draft?.edges) ? draft.edges.map((e) => ({ ...e })) : savedEdges);
+      const baseNodes = Array.isArray(draft?.nodes) ? draft.nodes.map((n) => ({ ...n })) : savedNodes;
+      const baseEdges = Array.isArray(draft?.edges) ? draft.edges.map((e) => ({ ...e })) : savedEdges;
+      setNodes(isIndexLayout(baseNodes) ? layoutWorkflow(baseNodes, baseEdges) : baseNodes);
+      setEdges(baseEdges);
       setDefName(draft?.defName ?? def.name);
       setDefDesc(draft?.defDesc ?? def.description ?? '');
       setInput(draft?.input ?? DEFAULT_INPUT);
@@ -158,6 +164,7 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
       setRunIdx(0);
       setCollapsed({});
       setFinalCollapsed(false);
+      setLayoutKey((k) => k + 1);
     },
     [workflowStore],
   );
@@ -235,9 +242,29 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
     if (type === 'secret') config = { name: '' };
     if (type === 'parallel') config = {};
     if (type === 'loop') config = { array: '[]', body: 'upstream', separator: '\n' };
-    const next = [...nodes, { id, type, name: `${type} ${seq}`, config, position: { x: nodes.length, y: 0 } }];
+    const newNode: WorkflowNode = {
+      id,
+      type,
+      name: `${type} ${seq}`,
+      config,
+      position: { x: 40 + (seq % 6) * 260, y: 40 + Math.floor(seq / 6) * 150 },
+    };
+    const next = [...nodes, newNode];
     setNodes(next);
-    setEdges(rewireNodes(next));
+    if (viewMode === 'graph') {
+      const src = nodes.find((n) => n.id === selectedNodeId);
+      if (src && src.type !== 'output') {
+        setEdges((es) => es.concat([{
+          id: `e_${Date.now().toString(36)}_${seq}`,
+          source: src.id,
+          target: newNode.id,
+          sourceHandle: 'out',
+          targetHandle: 'in',
+        }]));
+      }
+    } else {
+      setEdges(rewireNodes(next));
+    }
     setSelectedNodeId(id);
   };
 
@@ -296,6 +323,32 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
   const updateConfig = (id: string, key: string, value: unknown) => {
     setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, config: { ...n.config, [key]: value } } : n)));
   };
+
+  const updatePositions = useCallback((updates: Record<string, XYPos>) => {
+    setNodes((ns) => ns.map((n) => (updates[n.id] ? { ...n, position: { x: updates[n.id].x, y: updates[n.id].y } } : n)));
+  }, []);
+
+  const addEdge = useCallback((edge: WorkflowEdge) => {
+    setEdges((es) => {
+      const dup = es.some((e) => e.source === edge.source && e.target === edge.target && (e.sourceHandle ?? 'out') === (edge.sourceHandle ?? 'out') && (e.targetHandle ?? 'in') === (edge.targetHandle ?? 'in'));
+      return dup ? es : [...es, edge];
+    });
+  }, []);
+
+  const removeEdges = useCallback((ids: string[]) => {
+    setEdges((es) => es.filter((e) => !ids.includes(e.id)));
+  }, []);
+
+  const deleteNodeGraph = useCallback((id: string) => {
+    setNodes((ns) => ns.filter((n) => n.id !== id));
+    setEdges((es) => es.filter((e) => e.source !== id && e.target !== id));
+    setSelectedNodeId((sel) => (sel === id ? null : sel));
+  }, []);
+
+  const autoArrange = useCallback(() => {
+    setNodes(layoutWorkflow(nodes, edges));
+    setLayoutKey((k) => k + 1);
+  }, [nodes, edges]);
 
   const pushRun = useCallback(
     (rec: WorkflowRunRecord) => {
@@ -492,12 +545,33 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
         </div>
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : viewMode === 'graph' ? '2fr 1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
         <Card
           title="Pipeline"
-          subtitle="Runs top → bottom · up/down reorders, duplicate, delete · click to edit"
+          subtitle={viewMode === 'graph' ? 'Canvas · drag to arrange, connect handles to link steps, click a node to edit' : 'Runs top → bottom · up/down reorders, duplicate, delete · click to edit'}
           actions={
-            <span style={{ fontSize: 12, color: tokens.textMuted, display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: tokens.textMuted, display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ display: 'inline-flex', border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, overflow: 'hidden' }}>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  title="List view"
+                  style={{ padding: '4px 10px', border: 'none', background: viewMode === 'list' ? tokens.primary : 'transparent', color: viewMode === 'list' ? tokens.primaryForeground : tokens.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: tokens.fontSans }}
+                >
+                  📋 List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('graph')}
+                  title="Graph view"
+                  style={{ padding: '4px 10px', border: 'none', background: viewMode === 'graph' ? tokens.primary : 'transparent', color: viewMode === 'graph' ? tokens.primaryForeground : tokens.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: tokens.fontSans }}
+                >
+                  🕸 Graph
+                </button>
+              </span>
+              {viewMode === 'graph' && (
+                <Button size="sm" variant="ghost" onClick={autoArrange} title="Auto-arrange nodes into a tidy flow">Auto-arrange</Button>
+              )}
               <span>{nodes.length} nodes · {edges.length} links</span>
               {lastRunAt && (
                 <Badge color={[...(runResults ?? [])].some((r) => r.status === 'error') ? tokens.danger : tokens.success}>
@@ -507,51 +581,67 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
             </span>
           }
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {nodes.map((n, i) => {
-              const isTerminal = n.type === 'input' || n.type === 'output';
-              const canUp = !isTerminal && i > 0 && nodes[i - 1].type !== 'input';
-              const canDown = !isTerminal && i < nodes.length - 1 && nodes[i + 1].type !== 'output';
-              const stepResult = runResultByNode.get(n.id);
-              return (
-                <div key={n.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <RowBtn onClick={() => moveNode(n.id, 'up')} disabled={!canUp} title="Move up"><Icon name="chevronUp" size={14} /></RowBtn>
-                    <RowBtn onClick={() => moveNode(n.id, 'down')} disabled={!canDown} title="Move down"><Icon name="chevronDown" size={14} /></RowBtn>
-                  </div>
-                  {i > 0 && <div style={{ width: 14, textAlign: 'center', color: tokens.textMuted }}>↓</div>}
-                  <div
-                    onClick={() => setSelectedNodeId(n.id)}
-                    style={{
-                      flex: 1,
-                      padding: 12,
-                      border: `1px solid ${selectedNodeId === n.id ? tokens.primary : n.type === 'llm' ? tokens.primary : tokens.borderStrong}`,
-                      borderRadius: 12,
-                      background: selectedNodeId === n.id ? `${tokens.primary}0d` : tokens.surfaceHover,
-                      cursor: 'pointer',
-                      boxShadow: selectedNodeId === n.id ? `0 0 0 2px ${tokens.primary}33` : tokens.shadowSm,
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Badge color={n.type === 'llm' ? tokens.primary : undefined}>{nodeLabel[n.type]}</Badge>
-                      {stepResult ? (
-                        <Badge color={stepResult.status === 'error' ? tokens.danger : tokens.success}>
-                          {stepResult.status === 'error' ? '✕ failed' : `✓ ${stepResult.durationMs}ms`}
-                        </Badge>
-                      ) : (
-                        <span style={{ fontSize: 12, color: tokens.textMuted }}>#{i + 1} · step {i + 1}</span>
-                      )}
+          {viewMode === 'graph' ? (
+            <WorkflowGraph
+              nodes={nodes}
+              edges={edges}
+              selectedNodeId={selectedNodeId}
+              running={running}
+              runResultByNode={runResultByNode}
+              fitKey={layoutKey}
+              onPositionsChange={updatePositions}
+              onAddEdge={addEdge}
+              onRemoveEdges={removeEdges}
+              onSelectNode={setSelectedNodeId}
+              onDeleteNode={deleteNodeGraph}
+            />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {nodes.map((n, i) => {
+                const isTerminal = n.type === 'input' || n.type === 'output';
+                const canUp = !isTerminal && i > 0 && nodes[i - 1].type !== 'input';
+                const canDown = !isTerminal && i < nodes.length - 1 && nodes[i + 1].type !== 'output';
+                const stepResult = runResultByNode.get(n.id);
+                return (
+                  <div key={n.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <RowBtn onClick={() => moveNode(n.id, 'up')} disabled={!canUp} title="Move up"><Icon name="chevronUp" size={14} /></RowBtn>
+                      <RowBtn onClick={() => moveNode(n.id, 'down')} disabled={!canDown} title="Move down"><Icon name="chevronDown" size={14} /></RowBtn>
                     </div>
-                    <div style={{ marginTop: 6, fontSize: 13, fontWeight: 600 }}>{n.name}</div>
+                    {i > 0 && <div style={{ width: 14, textAlign: 'center', color: tokens.textMuted }}>↓</div>}
+                    <div
+                      onClick={() => setSelectedNodeId(n.id)}
+                      style={{
+                        flex: 1,
+                        padding: 12,
+                        border: `1px solid ${selectedNodeId === n.id ? tokens.primary : n.type === 'llm' ? tokens.primary : tokens.borderStrong}`,
+                        borderRadius: 12,
+                        background: selectedNodeId === n.id ? `${tokens.primary}0d` : tokens.surfaceHover,
+                        cursor: 'pointer',
+                        boxShadow: selectedNodeId === n.id ? `0 0 0 2px ${tokens.primary}33` : tokens.shadowSm,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Badge color={n.type === 'llm' ? tokens.primary : undefined}>{nodeLabel[n.type]}</Badge>
+                        {stepResult ? (
+                          <Badge color={stepResult.status === 'error' ? tokens.danger : tokens.success}>
+                            {stepResult.status === 'error' ? '✕ failed' : `✓ ${stepResult.durationMs}ms`}
+                          </Badge>
+                        ) : (
+                          <span style={{ fontSize: 12, color: tokens.textMuted }}>#{i + 1} · step {i + 1}</span>
+                        )}
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 13, fontWeight: 600 }}>{n.name}</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <RowBtn onClick={() => duplicateNode(n.id)} disabled={isTerminal} title={isTerminal ? 'Entry/exit nodes can’t be duplicated' : 'Duplicate'}><Icon name="copy" size={14} /></RowBtn>
+                      <RowBtn onClick={() => deleteNode(n.id)} danger title="Delete"><Icon name="x" size={14} /></RowBtn>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <RowBtn onClick={() => duplicateNode(n.id)} disabled={isTerminal} title={isTerminal ? 'Entry/exit nodes can’t be duplicated' : 'Duplicate'}><Icon name="copy" size={14} /></RowBtn>
-                    <RowBtn onClick={() => deleteNode(n.id)} danger title="Delete"><Icon name="x" size={14} /></RowBtn>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </Card>
 
         <Card
