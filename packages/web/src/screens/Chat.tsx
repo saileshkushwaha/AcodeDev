@@ -335,11 +335,14 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     refreshChangedFiles();
   }, [refreshSessions, refreshArchived, refreshInactive, refreshChangedFiles]);
 
+  // Keep the last-used model/params when reopening; only fall back when the
+  // provider no longer offers the saved model (respect freeOnly on fallback).
   useEffect(() => {
-    if (!providerModels.some((m) => m.id === model)) {
-      setModel(providerModels[0]?.id ?? '');
+    const all = listModels(provider);
+    if (all.length && !all.some((m) => m.id === model)) {
+      setModel(all.find((m) => (freeOnly ? m.isFree : true))?.id ?? all[0]?.id ?? '');
     }
-  }, [provider, freeOnly]);
+  }, [provider, model, freeOnly]);
 
   useEffect(() => {
     if (!convId) {
@@ -1590,7 +1593,7 @@ function Composer(props: {
               />
             )}
           </div>
-          <div style={{ position: 'relative', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
             <button
               onClick={() => setParamsOpen((o) => !o)}
               title="Model & settings"
@@ -1715,14 +1718,33 @@ function ParamsMenu({ provider, setProvider, gatewayProviders, directProviders, 
   onClose: () => void;
 }) {
   const { tokens } = useTheme();
+  const isMobile = useIsMobile();
   const [showAdvanced, setShowAdvanced] = useState(false);
   const context = formatContext(models.find((m) => m.id === model)?.contextWindow ?? 0);
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
-      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 71, width: 340, maxWidth: 'calc(100vw - 32px)', maxHeight: '70vh', overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space3 }}>
+      <div
+        style={{
+          position: isMobile ? 'fixed' : 'absolute',
+          left: isMobile ? '50%' : undefined,
+          top: isMobile ? '50%' : undefined,
+          transform: isMobile ? 'translate(-50%, -50%)' : undefined,
+          bottom: isMobile ? undefined : 'calc(100% + 8px)',
+          right: isMobile ? undefined : 0,
+          width: isMobile ? 'min(360px, calc(100vw - 32px))' : 340,
+          zIndex: 71,
+          maxHeight: '70vh',
+          overflowY: 'auto',
+          background: tokens.surface,
+          border: `1px solid ${tokens.borderStrong}`,
+          borderRadius: tokens.radiusMd,
+          boxShadow: tokens.shadowLg,
+          padding: tokens.space3,
+        }}
+      >
         <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 700, marginBottom: tokens.space2 }}>Model</div>
-        <Select label="Provider" value={provider} onChange={(v) => { setProvider(v as ProviderId); setModel(models[0]?.id ?? ''); }} options={[
+        <Select label="Provider" value={provider} onChange={(v) => { setProvider(v as ProviderId); const first = listModels(v as ProviderId).find((m) => (freeOnly ? m.isFree : true))?.id ?? ''; setModel(first); }} options={[
           ...gatewayProviders.map((p) => ({ label: `${p.name} · gateway`, value: p.id })),
           ...directProviders.map((p) => ({ label: p.name, value: p.id })),
         ]} />

@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import React from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
-import { Card, Button, Input, Select, Toggle, Badge, useTheme, Spinner, useIsMobile } from '@acode/ui';
+import { Card, Button, Input, Select, Toggle, Badge, useTheme, Spinner, useIsMobile, Icon } from '@acode/ui';
 import { Toolbox, listModels, listProviders, type ProviderId } from '@acode/core';
+import { Markdown } from '../components/Markdown';
 
 const TOOL_NAMES: Record<string, string> = {
   web_search: 'Web search',
@@ -15,21 +16,30 @@ const TOOL_NAMES: Record<string, string> = {
 type ConvMsg = { role: 'user' | 'assistant'; content: string };
 
 const ConvMsgItem = React.memo(function ConvMsgItem({ msg, tokens }: { msg: ConvMsg; tokens: ReturnType<typeof useTheme>['tokens'] }) {
+  const isUser = msg.role === 'user';
   return (
-    <div style={{ textAlign: msg.role === 'user' ? 'right' : 'left' }}>
+    <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
       <div
         style={{
           display: 'inline-block',
           padding: '8px 12px',
           borderRadius: 12,
-          background: msg.role === 'user' ? tokens.primary : tokens.surfaceHover,
-          color: msg.role === 'user' ? tokens.primaryForeground : tokens.text,
+          borderTopRightRadius: isUser ? 4 : 12,
+          borderTopLeftRadius: isUser ? 12 : 4,
+          background: isUser ? tokens.primary : tokens.surfaceHover,
+          color: isUser ? tokens.primaryForeground : tokens.text,
           whiteSpace: 'pre-wrap',
           maxWidth: '85%',
+          minWidth: 0,
           fontSize: 13,
+          textAlign: 'left',
+          lineHeight: 1.55,
+          overflow: 'hidden',
         }}
       >
-        {msg.content}
+        {isUser ? msg.content : (
+          <span style={{ color: 'inherit' }}><Markdown content={msg.content} /></span>
+        )}
       </div>
     </div>
   );
@@ -81,6 +91,14 @@ export function AgentsScreen() {
   const models = useMemo(() => providerModels.map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id })), [providerModels]);
   const providerOptions = useMemo(() => allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id })), [allProviders]);
 
+  // Keep the last-used model when the provider list changes; only fall back if
+  // the saved model is no longer offered by the selected provider.
+  useEffect(() => {
+    if (models.length && !models.some((m) => m.value === model)) {
+      setModel(models[0]?.value ?? '');
+    }
+  }, [models, model]);
+
   const ingestDocs = useCallback(() => {
     if (!docs.trim()) return;
     rag.addDocuments(docs.split('\n').filter((l) => l.trim()));
@@ -131,9 +149,9 @@ export function AgentsScreen() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <Input label="Agent name" value={name} onChange={setName} />
               <Input label="System prompt" textarea rows={4} value={systemPrompt} onChange={setSystemPrompt} />
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flex: 1 }}><Select label="Provider" value={provider} onChange={(v) => { setProvider(v as ProviderId); setModel(listModels(v as ProviderId)[0]?.id ?? model); }} options={providerOptions} /></div>
-                <div style={{ flex: 2 }}><Select label="Model" value={model} onChange={setModel} options={models} /></div>
+              <div style={{ display: 'flex', gap: 12, flexDirection: isMobile ? 'column' : 'row', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, minWidth: 0, width: isMobile ? '100%' : undefined }}><Select label="Provider" value={provider} onChange={(v) => { setProvider(v as ProviderId); setModel(listModels(v as ProviderId)[0]?.id ?? model); }} options={providerOptions} /></div>
+                <div style={{ flex: 2, minWidth: 0, width: isMobile ? '100%' : undefined }}><Select label="Model" value={model} onChange={setModel} options={models} /></div>
                 {!connected && <Badge color={tokens.danger}>No key</Badge>}
               </div>
               <Input label="Max tool iterations" type="number" value={String(maxIter)} onChange={(v) => setMaxIter(Math.max(1, Number(v) || 4))} />
@@ -166,16 +184,43 @@ export function AgentsScreen() {
         </div>
 
         <Card title="Chat with agent" subtitle={`${activeTools.length} tools enabled ${enableRAG ? '· RAG on' : ''}`} padded>
-          <div style={{ height: isMobile ? 'min(50dvh, 360px)' : 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-            {conv.length === 0 && <div style={{ color: tokens.textMuted, fontSize: 13, textAlign: 'center', marginTop: 40 }}>Ask your agent something</div>}
+          <div style={{ height: isMobile ? 'min(55dvh, 420px)' : 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+            {conv.length === 0 && !running && (
+              <>
+                <div style={{ color: tokens.textMuted, fontSize: 13, textAlign: 'center', marginTop: 28 }}>Ask your agent something</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 4 }}>
+                  {['Summarize your project docs', 'Explain a complex topic', 'Analyze the latest git changes'].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setChat(s)}
+                      style={{ border: `1px solid ${tokens.borderStrong}`, background: tokens.bgSubtle, color: tokens.textSecondary, borderRadius: tokens.radiusFull, padding: '6px 12px', fontSize: tokens.fontSizeXs, cursor: 'pointer', fontFamily: tokens.fontSans, transition: 'all 0.15s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = tokens.surfaceHover; e.currentTarget.style.color = tokens.text; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = tokens.bgSubtle; e.currentTarget.style.color = tokens.textSecondary; }}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             {conv.map((m, i) => (
               <ConvMsgItem key={i} msg={m} tokens={tokens} />
             ))}
             {running && <div style={{ display: 'flex', gap: 6, alignItems: 'center', color: tokens.textMuted, fontSize: 13 }}><Spinner size={14} /> Agent thinking…</div>}
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Input value={chat} onChange={setChat} placeholder="Message the agent…" />
-            <Button onClick={runAgent} disabled={!chat.trim() || running}>{running ? '…' : 'Send'}</Button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Input value={chat} onChange={setChat} placeholder="Message the agent…" onEnter={() => void runAgent()} />
+            </div>
+            <button
+              onClick={() => void runAgent()}
+              disabled={!chat.trim() || running}
+              aria-label="Send"
+              title="Send"
+              style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: !chat.trim() || running ? tokens.surfaceHover : tokens.primary, color: !chat.trim() || running ? tokens.textMuted : '#fff', cursor: !chat.trim() || running ? 'not-allowed' : 'pointer' }}
+            >
+              {running ? <Spinner size={16} color="#fff" /> : <Icon name="send" size={18} />}
+            </button>
           </div>
         </Card>
       </div>
