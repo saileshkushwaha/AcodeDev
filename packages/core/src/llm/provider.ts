@@ -150,6 +150,7 @@ export class OpenAICompatibleProvider implements AbstractProvider {
       model: req.model,
       messages: buildOpenAIMessages(req.messages),
       stream: false,
+      type: 'chat',
     };
     Object.entries(req.params ?? {}).forEach(([k, v]) => {
       if (v !== undefined && k !== 'stream') body[k] = v;
@@ -180,6 +181,7 @@ export class OpenAICompatibleProvider implements AbstractProvider {
       model: req.model,
       messages: buildOpenAIMessages(req.messages),
       stream: true,
+      type: 'chat',
     };
     Object.entries(req.params ?? {}).forEach(([k, v]) => {
       if (v !== undefined && k !== 'stream') body[k] = v;
