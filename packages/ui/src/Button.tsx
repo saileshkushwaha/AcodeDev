@@ -13,6 +13,7 @@ export function Button({
   full,
   style,
   type = 'button',
+  title,
 }: {
   variant?: Variant;
   size?: Size;
@@ -22,6 +23,7 @@ export function Button({
   full?: boolean;
   style?: React.CSSProperties;
   type?: 'button' | 'submit';
+  title?: string;
 }) {
   const { tokens } = useTheme();
   const sizes: Record<Size, React.CSSProperties> = {
@@ -41,6 +43,7 @@ export function Button({
       type={type}
       onClick={onClick}
       disabled={disabled}
+      title={title}
       style={{
         ...sizes[size],
         ...variants[variant],
