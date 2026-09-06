@@ -86,8 +86,7 @@ export const darkTokens: ThemeTokens = {
   space5: 20,
   space6: 24,
   space8: 32,
-  fontSans:
-    "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  fontSans: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
   fontMono: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace",
   fontSizeXs: '0.75rem',
   fontSizeSm: '0.875rem',
@@ -133,8 +132,7 @@ export const lightTokens: ThemeTokens = {
   space5: 20,
   space6: 24,
   space8: 32,
-  fontSans:
-    "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  fontSans: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
   fontMono: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace",
   fontSizeXs: '0.75rem',
   fontSizeSm: '0.875rem',

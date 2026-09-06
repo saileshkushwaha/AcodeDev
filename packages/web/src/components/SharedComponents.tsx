@@ -1,14 +1,10 @@
-import React, { useState, memo } from 'react';
-import { Button, Input, Spinner, Modal, useTheme } from '@acode/ui';
+import React, { memo } from 'react';
+import { Button, Spinner, Modal, useTheme } from '@acode/ui';
 
 /** Centered empty state message. */
 export function EmptyState({ children }: { children: React.ReactNode }) {
   const { tokens } = useTheme();
-  return (
-    <div style={{ textAlign: 'center', color: tokens.textMuted, padding: tokens.space8 }}>
-      {children}
-    </div>
-  );
+  return <div style={{ textAlign: 'center', color: tokens.textMuted, padding: tokens.space8 }}>{children}</div>;
 }
 
 /** Centered loading spinner. */
@@ -25,7 +21,21 @@ export function LoadingSpinner({ size = 28, padding }: { size?: number; padding?
 export function Avatar({ text, size = 28 }: { text: string; size?: number }) {
   const { tokens } = useTheme();
   return (
-    <div style={{ width: size, height: size, borderRadius: '50%', background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: tokens.fontSizeXs, fontWeight: 600, flexShrink: 0 }}>
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: tokens.primary,
+        color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: tokens.fontSizeXs,
+        fontWeight: 600,
+        flexShrink: 0,
+      }}
+    >
       {text}
     </div>
   );
@@ -37,7 +47,16 @@ export function BackButton({ onClick, label = 'Back' }: { onClick: () => void; l
   return (
     <button
       onClick={onClick}
-      style={{ background: 'transparent', border: 'none', color: tokens.textSecondary, cursor: 'pointer', fontSize: tokens.fontSizeSm, fontWeight: 600, padding: 0, marginBottom: tokens.space2 }}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        color: tokens.textSecondary,
+        cursor: 'pointer',
+        fontSize: tokens.fontSizeSm,
+        fontWeight: 600,
+        padding: 0,
+        marginBottom: tokens.space2,
+      }}
     >
       ← {label}
     </button>
@@ -45,7 +64,15 @@ export function BackButton({ onClick, label = 'Back' }: { onClick: () => void; l
 }
 
 /** Filter chip pills for selecting a repo. */
-export const FilterChips = memo(function FilterChips({ repos, value, onChange }: { repos: { fullName: string; name: string }[]; value: string; onChange: (v: string) => void }) {
+export const FilterChips = memo(function FilterChips({
+  repos,
+  value,
+  onChange,
+}: {
+  repos: { fullName: string; name: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
   const { tokens } = useTheme();
   return (
     <div style={{ display: 'flex', gap: tokens.space1, flexWrap: 'wrap', marginBottom: tokens.space3 }}>
@@ -53,7 +80,16 @@ export const FilterChips = memo(function FilterChips({ repos, value, onChange }:
         <button
           key={r.fullName}
           onClick={() => onChange(r.fullName === value ? 'all' : r.fullName)}
-          style={{ padding: '4px 10px', borderRadius: tokens.radiusFull, border: `1px solid ${tokens.borderStrong}`, background: r.fullName === value ? tokens.primary : 'transparent', color: r.fullName === value ? tokens.primaryForeground : tokens.textSecondary, fontSize: tokens.fontSizeXs, fontWeight: 600, cursor: 'pointer' }}
+          style={{
+            padding: '4px 10px',
+            borderRadius: tokens.radiusFull,
+            border: `1px solid ${tokens.borderStrong}`,
+            background: r.fullName === value ? tokens.primary : 'transparent',
+            color: r.fullName === value ? tokens.primaryForeground : tokens.textSecondary,
+            fontSize: tokens.fontSizeXs,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
         >
           {r.name}
         </button>
@@ -63,7 +99,13 @@ export const FilterChips = memo(function FilterChips({ repos, value, onChange }:
 });
 
 /** Standardized modal form layout. */
-export function FormModal({ title, onClose, onSubmit, submitting, children }: {
+export function FormModal({
+  title,
+  onClose,
+  onSubmit,
+  submitting,
+  children,
+}: {
   title: string;
   onClose: () => void;
   onSubmit: () => void;
@@ -73,12 +115,12 @@ export function FormModal({ title, onClose, onSubmit, submitting, children }: {
   const { tokens } = useTheme();
   return (
     <Modal open onClose={onClose} title={title}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>
-        {children}
-      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>{children}</div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.space2, marginTop: tokens.space5 }}>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={onSubmit} disabled={submitting}>{submitting ? 'Saving…' : 'Save'}</Button>
+        <Button onClick={onSubmit} disabled={submitting}>
+          {submitting ? 'Saving…' : 'Save'}
+        </Button>
       </div>
     </Modal>
   );

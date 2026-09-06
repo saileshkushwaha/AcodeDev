@@ -3,7 +3,7 @@ import React from 'react';
 import { useTheme, Card, Button, Input, Badge, Spinner, Select, Icon, type IconName } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubPullRequest, GitHubComment } from '@acode/core';
-import { makeClient, timeAgo, splitRef, renderMd, trimSha } from './shared';
+import { makeClient, timeAgo, splitRef, renderMd } from './shared';
 import { EmptyState, LoadingSpinner, BackButton, FilterChips, Avatar } from '../../components/SharedComponents';
 
 export function PullRequestsView() {
@@ -42,12 +42,16 @@ export function PullRequestsView() {
     void load();
   }, [load]);
 
-  const filtered = useMemo(() => prs.filter((pr) => {
-    if (stateFilter !== 'all' && pr.state !== stateFilter) return false;
-    if (repoFilter !== 'all' && pr.repository !== repoFilter) return false;
-    if (sourceFilter === 'mine' && pr.user !== myLogin) return false;
-    return true;
-  }), [prs, stateFilter, repoFilter, sourceFilter, myLogin]);
+  const filtered = useMemo(
+    () =>
+      prs.filter((pr) => {
+        if (stateFilter !== 'all' && pr.state !== stateFilter) return false;
+        if (repoFilter !== 'all' && pr.repository !== repoFilter) return false;
+        if (sourceFilter === 'mine' && pr.user !== myLogin) return false;
+        return true;
+      }),
+    [prs, stateFilter, repoFilter, sourceFilter, myLogin],
+  );
 
   return (
     <div style={{ padding: 'clamp(12px, 2.5vw, 28px)', maxWidth: 1200, margin: '0 auto' }}>
@@ -58,20 +62,30 @@ export function PullRequestsView() {
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, marginBottom: tokens.space4, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700, fontSize: tokens.fontSizeLg }}>Pull requests</span>
             <div style={{ width: 200, minWidth: 160 }}>
-              <Select value={stateFilter} onChange={(v) => setStateFilter(v as 'open' | 'closed' | 'all')} options={[
-                { value: 'open', label: 'Open' },
-                { value: 'closed', label: 'Closed' },
-                { value: 'all', label: 'All' },
-              ]} />
+              <Select
+                value={stateFilter}
+                onChange={(v) => setStateFilter(v as 'open' | 'closed' | 'all')}
+                options={[
+                  { value: 'open', label: 'Open' },
+                  { value: 'closed', label: 'Closed' },
+                  { value: 'all', label: 'All' },
+                ]}
+              />
             </div>
             <div style={{ width: 180, minWidth: 140 }}>
-              <Select value={sourceFilter} onChange={setSourceFilter} options={[
-                { value: 'all', label: 'All' },
-                { value: 'mine', label: 'Created by me' },
-              ]} />
+              <Select
+                value={sourceFilter}
+                onChange={setSourceFilter}
+                options={[
+                  { value: 'all', label: 'All' },
+                  { value: 'mine', label: 'Created by me' },
+                ]}
+              />
             </div>
             <div style={{ flex: 1 }} />
-            <Button variant="secondary" onClick={() => void load()}>{loading ? <Spinner size={15} /> : 'Refresh'}</Button>
+            <Button variant="secondary" onClick={() => void load()}>
+              {loading ? <Spinner size={15} /> : 'Refresh'}
+            </Button>
           </div>
 
           {repos.length > 0 && <FilterChips repos={repos} value={repoFilter} onChange={setRepoFilter} />}
@@ -103,13 +117,40 @@ interface PrWithRepo extends GitHubPullRequest {
 const PrRow = React.memo(function PrRow({ pr, onClick, last }: { pr: PrWithRepo; onClick: () => void; last: boolean }) {
   const { tokens } = useTheme();
   const color = pr.merged ? tokens.info : pr.state === 'closed' ? tokens.danger : tokens.success;
-  const icon: IconName = pr.merged ? 'gitMerge' : pr.state === 'closed' ? 'gitPullRequestClosed' : pr.draft ? 'gitPullRequestDraft' : 'gitPullRequest';
+  const icon: IconName = pr.merged
+    ? 'gitMerge'
+    : pr.state === 'closed'
+      ? 'gitPullRequestClosed'
+      : pr.draft
+        ? 'gitPullRequestDraft'
+        : 'gitPullRequest';
   return (
-    <button onClick={onClick} style={{ width: '100%', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: tokens.space3, padding: tokens.space3, background: 'transparent', border: 'none', borderBottom: last ? 'none' : `1px solid ${tokens.border}`, cursor: 'pointer', textAlign: 'left' }}>
-      <span style={{ color, width: 20, textAlign: 'center', display: 'inline-flex', justifyContent: 'center' }}><Icon name={icon} size={16} /></span>
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: tokens.space3,
+        padding: tokens.space3,
+        background: 'transparent',
+        border: 'none',
+        borderBottom: last ? 'none' : `1px solid ${tokens.border}`,
+        cursor: 'pointer',
+        textAlign: 'left',
+      }}
+    >
+      <span style={{ color, width: 20, textAlign: 'center', display: 'inline-flex', justifyContent: 'center' }}>
+        <Icon name={icon} size={16} />
+      </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {pr.repository && <span style={{ color: tokens.textMuted, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, marginRight: tokens.space1 }}>{pr.repository}</span>}
+          {pr.repository && (
+            <span style={{ color: tokens.textMuted, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, marginRight: tokens.space1 }}>
+              {pr.repository}
+            </span>
+          )}
           <span style={{ color: tokens.textMuted, fontSize: tokens.fontSizeXs, marginRight: tokens.space1 }}>#{pr.number}</span>
           {pr.title}
         </div>
@@ -120,7 +161,11 @@ const PrRow = React.memo(function PrRow({ pr, onClick, last }: { pr: PrWithRepo;
       <div style={{ fontSize: tokens.fontSizeXs, color: tokens.success, whiteSpace: 'nowrap' }}>+{pr.additions}</div>
       <div style={{ fontSize: tokens.fontSizeXs, color: tokens.danger, whiteSpace: 'nowrap' }}>−{pr.deletions}</div>
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        {pr.labels.slice(0, 2).map((l) => <Badge key={l.name} color={`#${l.color}`}>{l.name}</Badge>)}
+        {pr.labels.slice(0, 2).map((l) => (
+          <Badge key={l.name} color={`#${l.color}`}>
+            {l.name}
+          </Badge>
+        ))}
       </div>
       {pr.draft && <Badge color={tokens.textMuted}>draft</Badge>}
     </button>
@@ -221,14 +266,19 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
       <BackButton onClick={onBack} label="Back to pull requests" />
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.space2, flexWrap: 'wrap', marginBottom: tokens.space2 }}>
-        <span style={{ color: stateColor, marginTop: 2, display: 'inline-flex' }}><Icon name={detail.merged ? 'gitMerge' : detail.state === 'closed' ? 'gitPullRequestClosed' : 'gitPullRequest'} size={20} /></span>
+        <span style={{ color: stateColor, marginTop: 2, display: 'inline-flex' }}>
+          <Icon name={detail.merged ? 'gitMerge' : detail.state === 'closed' ? 'gitPullRequestClosed' : 'gitPullRequest'} size={20} />
+        </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ margin: 0, fontSize: 'clamp(1.1rem, 2.5vw, 1.5rem)', fontWeight: 700 }}>{detail.title}</h1>
           <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginTop: 4 }}>
             {pr.repository} · #{detail.number} opened by <b>{detail.user}</b> · {baseRef(detail)} · {timeAgo(detail.updatedAt)}
           </div>
         </div>
-        <Badge color={stateColor}>{detail.merged ? 'Merged' : detail.state}{detail.draft ? ' · draft' : ''}</Badge>
+        <Badge color={stateColor}>
+          {detail.merged ? 'Merged' : detail.state}
+          {detail.draft ? ' · draft' : ''}
+        </Badge>
       </div>
 
       <div style={{ display: 'flex', gap: tokens.space4, flexWrap: 'wrap' }}>
@@ -240,9 +290,15 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
         <div style={{ flex: 1 }} />
         {!detail.merged && detail.state === 'open' && !detail.draft && (
           <div style={{ display: 'flex', gap: tokens.space2 }}>
-            <Button variant="success" size="sm" onClick={() => void doMerge('merge')} disabled={busy}>{busy ? <Spinner size={14} /> : 'Merge'}</Button>
-            <Button variant="secondary" size="sm" onClick={() => void doMerge('squash')} disabled={busy}>Squash</Button>
-            <Button variant="secondary" size="sm" onClick={() => void doMerge('rebase')} disabled={busy}>Rebase</Button>
+            <Button variant="success" size="sm" onClick={() => void doMerge('merge')} disabled={busy}>
+              {busy ? <Spinner size={14} /> : 'Merge'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => void doMerge('squash')} disabled={busy}>
+              Squash
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => void doMerge('rebase')} disabled={busy}>
+              Rebase
+            </Button>
           </div>
         )}
       </div>
@@ -266,7 +322,11 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
               <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>
                 {comments.map((c) => (
                   <div key={c.id} style={{ display: 'flex', gap: tokens.space2 }}>
-                    {c.userAvatar ? <img src={c.userAvatar} alt="" width={28} height={28} style={{ borderRadius: '50%' }} /> : <Avatar text={c.user[0]?.toUpperCase() ?? '?'} />}
+                    {c.userAvatar ? (
+                      <img src={c.userAvatar} alt="" width={28} height={28} style={{ borderRadius: '50%' }} />
+                    ) : (
+                      <Avatar text={c.user[0]?.toUpperCase() ?? '?'} />
+                    )}
                     <div style={{ flex: 1, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, padding: tokens.space3 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: tokens.space1 }}>
                         <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 600 }}>{c.user}</span>
@@ -285,7 +345,9 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
             <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, marginBottom: tokens.space2 }}>Leave a comment</div>
             <Input textarea rows={3} value={comment} onChange={setComment} placeholder="Write a comment (markdown supported)" />
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: tokens.space2 }}>
-              <Button onClick={submitComment} disabled={!comment.trim() || busy}>Comment</Button>
+              <Button onClick={submitComment} disabled={!comment.trim() || busy}>
+                Comment
+              </Button>
             </div>
           </Card>
         </div>
@@ -295,9 +357,15 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
           <Card title="Code review">
             <Input textarea rows={4} value={review} onChange={setReview} placeholder="Review summary..." />
             <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2, marginTop: tokens.space3 }}>
-              <Button variant="success" size="sm" onClick={() => void submitReview('APPROVE')} disabled={busy || (!review.trim() && true)}>✓ Approve</Button>
-              <Button variant="danger" size="sm" onClick={() => void submitReview('REQUEST_CHANGES')} disabled={busy}>✗ Request changes</Button>
-              <Button variant="secondary" size="sm" onClick={() => void submitReview('COMMENT')} disabled={busy}>Comment</Button>
+              <Button variant="success" size="sm" onClick={() => void submitReview('APPROVE')} disabled={busy || (!review.trim() && true)}>
+                ✓ Approve
+              </Button>
+              <Button variant="danger" size="sm" onClick={() => void submitReview('REQUEST_CHANGES')} disabled={busy}>
+                ✗ Request changes
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => void submitReview('COMMENT')} disabled={busy}>
+                Comment
+              </Button>
             </div>
             <div style={{ marginTop: tokens.space4 }}>
               <Button variant="secondary" size="sm" full onClick={loadDiff} disabled={loadingDiff}>
@@ -310,7 +378,20 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
 
       {showDiff && (
         <Card title="Diff" style={{ marginTop: tokens.space4 }}>
-          <pre style={{ background: 'var(--code-bg)', padding: tokens.space4, borderRadius: tokens.radiusMd, overflow: 'auto', fontSize: 12, lineHeight: 1.6, maxHeight: 500, margin: 0 }}>{diff}</pre>
+          <pre
+            style={{
+              background: 'var(--code-bg)',
+              padding: tokens.space4,
+              borderRadius: tokens.radiusMd,
+              overflow: 'auto',
+              fontSize: 12,
+              lineHeight: 1.6,
+              maxHeight: 500,
+              margin: 0,
+            }}
+          >
+            {diff}
+          </pre>
         </Card>
       )}
     </div>
@@ -320,4 +401,3 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
 function baseRef(pr: GitHubPullRequest): string {
   return `${pr.baseRef} ← ${pr.headRef}`;
 }
-

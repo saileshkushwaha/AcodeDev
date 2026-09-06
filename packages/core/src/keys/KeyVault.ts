@@ -251,7 +251,12 @@ export class KeyVault {
   }
 
   /** Store an OAuth-authenticated account for a provider. */
-  setAccount(provider: string, accountId: string, apiKey: string, meta?: { refreshToken?: string; expiresAt?: number; label?: string }): void {
+  setAccount(
+    provider: string,
+    accountId: string,
+    apiKey: string,
+    meta?: { refreshToken?: string; expiresAt?: number; label?: string },
+  ): void {
     const now = Date.now();
     const entry: KeyEntry = {
       value: apiKey,

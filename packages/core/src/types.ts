@@ -52,9 +52,7 @@ export type ModelCapability =
   | 'code' // code-aware
   | 'reasoning'; // chain-of-thought / reasoning model
 
-export type ChatContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } };
+export type ChatContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';

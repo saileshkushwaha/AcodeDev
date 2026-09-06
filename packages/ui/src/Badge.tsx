@@ -1,15 +1,7 @@
 import React from 'react';
 import { useTheme } from './Theme';
 
-export function Badge({
-  children,
-  color,
-  style,
-}: {
-  children: React.ReactNode;
-  color?: string;
-  style?: React.CSSProperties;
-}) {
+export function Badge({ children, color, style }: { children: React.ReactNode; color?: string; style?: React.CSSProperties }) {
   const { tokens } = useTheme();
   return (
     <span

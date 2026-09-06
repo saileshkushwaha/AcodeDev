@@ -114,11 +114,7 @@ export function webCryptoAdapter(): CryptoAdapter {
       if (ivB64 && dataB64) {
         try {
           const key = await getCryptoKey();
-          const plain = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: base64ToBytes(ivB64) },
-            key,
-            base64ToBytes(dataB64),
-          );
+          const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToBytes(ivB64) }, key, base64ToBytes(dataB64));
           return new TextDecoder().decode(plain);
         } catch {
           /* fall through to legacy */

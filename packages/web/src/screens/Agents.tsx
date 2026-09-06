@@ -37,8 +37,12 @@ const ConvMsgItem = React.memo(function ConvMsgItem({ msg, tokens }: { msg: Conv
           overflow: 'hidden',
         }}
       >
-        {isUser ? msg.content : (
-          <span style={{ color: 'inherit' }}><Markdown content={msg.content} /></span>
+        {isUser ? (
+          msg.content
+        ) : (
+          <span style={{ color: 'inherit' }}>
+            <Markdown content={msg.content} />
+          </span>
         )}
       </div>
     </div>
@@ -52,7 +56,9 @@ export function AgentsScreen() {
   const saved = agentStore.all()[0];
   const mainId = saved?.id ?? 'main';
   const [name, setName] = useState(saved?.name ?? 'My Agent');
-  const [systemPrompt, setSystemPrompt] = useState(saved?.systemPrompt ?? 'You are a helpful AI assistant. Answer based on the provided context when available.');
+  const [systemPrompt, setSystemPrompt] = useState(
+    saved?.systemPrompt ?? 'You are a helpful AI assistant. Answer based on the provided context when available.',
+  );
   const [provider, setProvider] = useState<ProviderId>(saved?.provider ?? 'openrouter');
   const [model, setModel] = useState(saved?.model ?? 'nvidia/nemotron-3.5-lightning:free');
   const [tools, setTools] = useState<string[]>(saved?.tools ?? ['web_search', 'calculator']);
@@ -88,8 +94,14 @@ export function AgentsScreen() {
   const needsKey = useMemo(() => !!(provDef && provDef.needsKey !== false && provDef.kind !== 'local'), [provDef]);
   const connected = useMemo(() => !needsKey || hasKey(provider), [needsKey, provider, hasKey]);
   const providerModels = useMemo(() => listModels(provider), [provider]);
-  const models = useMemo(() => providerModels.map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id })), [providerModels]);
-  const providerOptions = useMemo(() => allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id })), [allProviders]);
+  const models = useMemo(
+    () => providerModels.map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''}`, value: m.id })),
+    [providerModels],
+  );
+  const providerOptions = useMemo(
+    () => allProviders.filter((p) => p.id !== 'local').map((p) => ({ label: p.gateway ? `${p.name} · gateway` : p.name, value: p.id })),
+    [allProviders],
+  );
 
   // Keep the last-used model when the provider list changes; only fall back if
   // the saved model is no longer offered by the selected provider.
@@ -109,7 +121,13 @@ export function AgentsScreen() {
     if (!chat.trim() || running) return;
     if (!connected) {
       setConv((c) => [...c, { role: 'user', content: chat }]);
-      setConv((c) => [...c, { role: 'assistant', content: `⚠️ ${provDef?.name ?? provider} isn't connected. Add an API key (Connections → Keys) or pick a key-free provider such as OpenCode Zen or Kilo Gateway.` }]);
+      setConv((c) => [
+        ...c,
+        {
+          role: 'assistant',
+          content: `⚠️ ${provDef?.name ?? provider} isn't connected. Add an API key (Connections → Keys) or pick a key-free provider such as OpenCode Zen or Kilo Gateway.`,
+        },
+      ]);
       setChat('');
       return;
     }
@@ -138,7 +156,7 @@ export function AgentsScreen() {
     } finally {
       setRunning(false);
     }
-  }, [chat, running, connected, provDef, provider, agents, rag, name, systemPrompt, model, activeTools, maxIter]);
+  }, [chat, running, connected, provDef, provider, agents, rag, name, systemPrompt, model, activeTools, maxIter, enableRAG]);
 
   return (
     <Page maxWidth={1100}>
@@ -150,11 +168,28 @@ export function AgentsScreen() {
               <Input label="Agent name" value={name} onChange={setName} />
               <Input label="System prompt" textarea rows={4} value={systemPrompt} onChange={setSystemPrompt} />
               <div style={{ display: 'flex', gap: 12, flexDirection: isMobile ? 'column' : 'row', alignItems: 'flex-start' }}>
-                <div style={{ flex: 1, minWidth: 0, width: isMobile ? '100%' : undefined }}><Select label="Provider" value={provider} onChange={(v) => { setProvider(v as ProviderId); setModel(listModels(v as ProviderId)[0]?.id ?? model); }} options={providerOptions} /></div>
-                <div style={{ flex: 2, minWidth: 0, width: isMobile ? '100%' : undefined }}><Select label="Model" value={model} onChange={setModel} options={models} /></div>
+                <div style={{ flex: 1, minWidth: 0, width: isMobile ? '100%' : undefined }}>
+                  <Select
+                    label="Provider"
+                    value={provider}
+                    onChange={(v) => {
+                      setProvider(v as ProviderId);
+                      setModel(listModels(v as ProviderId)[0]?.id ?? model);
+                    }}
+                    options={providerOptions}
+                  />
+                </div>
+                <div style={{ flex: 2, minWidth: 0, width: isMobile ? '100%' : undefined }}>
+                  <Select label="Model" value={model} onChange={setModel} options={models} />
+                </div>
                 {!connected && <Badge color={tokens.danger}>No key</Badge>}
               </div>
-              <Input label="Max tool iterations" type="number" value={String(maxIter)} onChange={(v) => setMaxIter(Math.max(1, Number(v) || 4))} />
+              <Input
+                label="Max tool iterations"
+                type="number"
+                value={String(maxIter)}
+                onChange={(v) => setMaxIter(Math.max(1, Number(v) || 4))}
+              />
             </div>
           </Card>
 
@@ -166,7 +201,10 @@ export function AgentsScreen() {
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{TOOL_NAMES[t.name]}</div>
                     <div style={{ fontSize: 12, color: tokens.textMuted }}>{t.description}</div>
                   </div>
-                  <Toggle checked={tools.includes(t.name)} onChange={(v) => setTools((cur) => (v ? [...cur, t.name] : cur.filter((x) => x !== t.name)))} />
+                  <Toggle
+                    checked={tools.includes(t.name)}
+                    onChange={(v) => setTools((cur) => (v ? [...cur, t.name] : cur.filter((x) => x !== t.name)))}
+                  />
                 </div>
               ))}
             </div>
@@ -178,13 +216,24 @@ export function AgentsScreen() {
               <Input textarea rows={3} value={docs} onChange={setDocs} placeholder="Paste documents, one per line…" />
             </div>
             <div style={{ marginTop: 8 }}>
-              <Button variant="secondary" onClick={ingestDocs}>Ingest ({rag.size} chunks)</Button>
+              <Button variant="secondary" onClick={ingestDocs}>
+                Ingest ({rag.size} chunks)
+              </Button>
             </div>
           </Card>
         </div>
 
         <Card title="Chat with agent" subtitle={`${activeTools.length} tools enabled ${enableRAG ? '· RAG on' : ''}`} padded>
-          <div style={{ height: isMobile ? 'min(55dvh, 420px)' : 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+          <div
+            style={{
+              height: isMobile ? 'min(55dvh, 420px)' : 360,
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              marginBottom: 12,
+            }}
+          >
             {conv.length === 0 && !running && (
               <>
                 <div style={{ color: tokens.textMuted, fontSize: 13, textAlign: 'center', marginTop: 28 }}>Ask your agent something</div>
@@ -193,9 +242,25 @@ export function AgentsScreen() {
                     <button
                       key={s}
                       onClick={() => setChat(s)}
-                      style={{ border: `1px solid ${tokens.borderStrong}`, background: tokens.bgSubtle, color: tokens.textSecondary, borderRadius: tokens.radiusFull, padding: '6px 12px', fontSize: tokens.fontSizeXs, cursor: 'pointer', fontFamily: tokens.fontSans, transition: 'all 0.15s' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = tokens.surfaceHover; e.currentTarget.style.color = tokens.text; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = tokens.bgSubtle; e.currentTarget.style.color = tokens.textSecondary; }}
+                      style={{
+                        border: `1px solid ${tokens.borderStrong}`,
+                        background: tokens.bgSubtle,
+                        color: tokens.textSecondary,
+                        borderRadius: tokens.radiusFull,
+                        padding: '6px 12px',
+                        fontSize: tokens.fontSizeXs,
+                        cursor: 'pointer',
+                        fontFamily: tokens.fontSans,
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = tokens.surfaceHover;
+                        e.currentTarget.style.color = tokens.text;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = tokens.bgSubtle;
+                        e.currentTarget.style.color = tokens.textSecondary;
+                      }}
                     >
                       {s}
                     </button>
@@ -206,7 +271,11 @@ export function AgentsScreen() {
             {conv.map((m, i) => (
               <ConvMsgItem key={i} msg={m} tokens={tokens} />
             ))}
-            {running && <div style={{ display: 'flex', gap: 6, alignItems: 'center', color: tokens.textMuted, fontSize: 13 }}><Spinner size={14} /> Agent thinking…</div>}
+            {running && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', color: tokens.textMuted, fontSize: 13 }}>
+                <Spinner size={14} /> Agent thinking…
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -217,7 +286,19 @@ export function AgentsScreen() {
               disabled={!chat.trim() || running}
               aria-label="Send"
               title="Send"
-              style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: !chat.trim() || running ? tokens.surfaceHover : tokens.primary, color: !chat.trim() || running ? tokens.textMuted : '#fff', cursor: !chat.trim() || running ? 'not-allowed' : 'pointer' }}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: '50%',
+                border: 'none',
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: !chat.trim() || running ? tokens.surfaceHover : tokens.primary,
+                color: !chat.trim() || running ? tokens.textMuted : '#fff',
+                cursor: !chat.trim() || running ? 'not-allowed' : 'pointer',
+              }}
             >
               {running ? <Spinner size={16} color="#fff" /> : <Icon name="send" size={18} />}
             </button>

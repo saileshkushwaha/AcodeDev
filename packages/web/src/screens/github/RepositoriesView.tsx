@@ -1,9 +1,18 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useTheme, Card, Button, Input, Badge, TabBar, Spinner, Select, Modal, Chip, Icon, type IconName } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
-import type { GitHubRepo, GitHubContent, GitHubCommit, GitHubBranch, GitHubRelease, GitHubPullRequest, GitHubIssue, GitHubWorkflowRun } from '@acode/core';
+import type {
+  GitHubRepo,
+  GitHubContent,
+  GitHubCommit,
+  GitHubBranch,
+  GitHubRelease,
+  GitHubPullRequest,
+  GitHubIssue,
+  GitHubWorkflowRun,
+} from '@acode/core';
 import { makeClient, timeAgo, compact, splitRef, renderMd, trimSha } from './shared';
-import { EmptyState, LoadingSpinner, BackButton, Avatar } from '../../components/SharedComponents';
+import { LoadingSpinner, BackButton, Avatar } from '../../components/SharedComponents';
 
 export function RepositoriesView({ initialRepo, onInitialRepoConsumed }: { initialRepo?: string; onInitialRepoConsumed?: () => void }) {
   const { tokens } = useTheme();
@@ -41,55 +50,99 @@ export function RepositoriesView({ initialRepo, onInitialRepoConsumed }: { initi
   }, [load]);
 
   const q = useMemo(() => query.trim().toLowerCase(), [query]);
-  const filtered = useMemo(() => repos.filter((r) => {
-    if (filter === 'private' && !r.private) return false;
-    if (filter === 'public' && r.private) return false;
-    if (filter === 'archived' && !r.archived) return false;
-    if (q && !(r.name.toLowerCase().includes(q) || (r.description ?? '').toLowerCase().includes(q) || r.fullName.toLowerCase().includes(q))) return false;
-    return true;
-  }), [repos, filter, q]);
+  const filtered = useMemo(
+    () =>
+      repos.filter((r) => {
+        if (filter === 'private' && !r.private) return false;
+        if (filter === 'public' && r.private) return false;
+        if (filter === 'archived' && !r.archived) return false;
+        if (
+          q &&
+          !(r.name.toLowerCase().includes(q) || (r.description ?? '').toLowerCase().includes(q) || r.fullName.toLowerCase().includes(q))
+        )
+          return false;
+        return true;
+      }),
+    [repos, filter, q],
+  );
 
   const refresh = () => void load();
 
   return (
     <div style={{ padding: 'clamp(12px, 2.5vw, 28px)', maxWidth: 1200, margin: '0 auto' }}>
       {selected ? (
-        <RepoDetail repo={selected} onBack={() => setSelected(null)} onRefresh={async () => { const c = makeClient(githubToken); const { owner, name } = splitRef(selected.fullName); setSelected(await c.repo(owner, name)); }} />
+        <RepoDetail
+          repo={selected}
+          onBack={() => setSelected(null)}
+          onRefresh={async () => {
+            const c = makeClient(githubToken);
+            const { owner, name } = splitRef(selected.fullName);
+            setSelected(await c.repo(owner, name));
+          }}
+        />
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, marginBottom: tokens.space4, flexWrap: 'wrap' }}>
             <Input value={query} onChange={setQuery} placeholder="Filter repositories..." />
             <div style={{ width: 180, minWidth: 150 }}>
-              <Select value={filter} onChange={setFilter} options={[
-                { value: 'all', label: 'All' },
-                { value: 'public', label: 'Public' },
-                { value: 'private', label: 'Private' },
-                { value: 'archived', label: 'Archived' },
-              ]} />
+              <Select
+                value={filter}
+                onChange={setFilter}
+                options={[
+                  { value: 'all', label: 'All' },
+                  { value: 'public', label: 'Public' },
+                  { value: 'private', label: 'Private' },
+                  { value: 'archived', label: 'Archived' },
+                ]}
+              />
             </div>
             <div style={{ flex: 1 }} />
             <Button onClick={() => setCreateOpen(true)}>+ New repository</Button>
-            <Button variant="secondary" onClick={refresh}>{loading ? <Spinner size={15} /> : 'Refresh'}</Button>
+            <Button variant="secondary" onClick={refresh}>
+              {loading ? <Spinner size={15} /> : 'Refresh'}
+            </Button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 240px), 1fr))', gap: tokens.space4 }}>
             {loading && filtered.length === 0 ? (
-              <div style={{ gridColumn: '1/-1' }}><LoadingSpinner /></div>
+              <div style={{ gridColumn: '1/-1' }}>
+                <LoadingSpinner />
+              </div>
             ) : filtered.length === 0 ? (
-              <div style={{ gridColumn: '1/-1', color: tokens.textMuted, padding: tokens.space6, textAlign: 'center' }}>No repositories match</div>
+              <div style={{ gridColumn: '1/-1', color: tokens.textMuted, padding: tokens.space6, textAlign: 'center' }}>
+                No repositories match
+              </div>
             ) : (
               filtered.map((r) => (
-                <Card key={r.fullName} style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2, transition: 'transform 0.12s ease, border-color 0.12s ease' }}>
+                <Card
+                  key={r.fullName}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: tokens.space2,
+                    transition: 'transform 0.12s ease, border-color 0.12s ease',
+                  }}
+                >
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: tokens.space2 }}>
-                    <button onClick={() => setSelected(r)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+                    <button
+                      onClick={() => setSelected(r)}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                    >
                       <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, color: tokens.primary }}>{r.name}</div>
-                      <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{r.private ? 'Private' : 'Public'}{r.archived ? ' · archived' : ''}</div>
+                      <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
+                        {r.private ? 'Private' : 'Public'}
+                        {r.archived ? ' · archived' : ''}
+                      </div>
                     </button>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <Badge color={tokens.warning}><Icon name="star" size={11} /> {compact(r.stars)}</Badge>
+                      <Badge color={tokens.warning}>
+                        <Icon name="star" size={11} /> {compact(r.stars)}
+                      </Badge>
                     </div>
                   </div>
-                  <div style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary, minHeight: 32, lineHeight: 1.5 }}>{r.description || 'No description'}</div>
+                  <div style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary, minHeight: 32, lineHeight: 1.5 }}>
+                    {r.description || 'No description'}
+                  </div>
                   <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: tokens.space3 }}>
                     {r.language && <Badge color={tokens.info}>{r.language}</Badge>}
                     <Stat icon="⑂" label={compact(r.forks)} />
@@ -118,7 +171,11 @@ export function RepositoriesView({ initialRepo, onInitialRepoConsumed }: { initi
 
 function Stat({ icon, label }: { icon: string; label: string }) {
   const { tokens } = useTheme();
-  return <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary, display: 'inline-flex', alignItems: 'center', gap: 2 }}>{icon} {label}</span>;
+  return (
+    <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+      {icon} {label}
+    </span>
+  );
 }
 
 type RepoViewTab = 'code' | 'commits' | 'branches' | 'releases' | 'pulls' | 'issues' | 'actions';
@@ -130,23 +187,32 @@ function RepoDetail({ repo, onBack, onRefresh }: { repo: GitHubRepo; onBack: () 
   const [branch, setBranch] = useState(repo.defaultBranch);
   const [path, setPath] = useState('');
   const [starred, setStarred] = useState(false);
-  const [repoMeta, setRepoMeta] = useState(repo);
+  const [repoMeta] = useState(repo);
   const { owner, name } = splitRef(repoMeta.fullName);
 
   useEffect(() => {
     const c = makeClient(githubToken);
-    c.isStarred(owner, name).then(setStarred).catch(() => {});
+    c.isStarred(owner, name)
+      .then(setStarred)
+      .catch(() => {});
   }, [owner, name, githubToken]);
 
   const renderTab = () => {
     switch (tab) {
-      case 'code': return <CodeBrowser owner={owner} name={name} refName={branch} path={path} onPath={setPath} />;
-      case 'commits': return <CommitsPanel owner={owner} name={name} branch={branch} />;
-      case 'branches': return <BranchesPanel owner={owner} name={name} />;
-      case 'releases': return <ReleasesPanel owner={owner} name={name} />;
-      case 'pulls': return <RepoPulls owner={owner} name={name} />;
-      case 'issues': return <RepoIssues owner={owner} name={name} />;
-      case 'actions': return <RepoActions owner={owner} name={name} />;
+      case 'code':
+        return <CodeBrowser owner={owner} name={name} refName={branch} path={path} onPath={setPath} />;
+      case 'commits':
+        return <CommitsPanel owner={owner} name={name} branch={branch} />;
+      case 'branches':
+        return <BranchesPanel owner={owner} name={name} />;
+      case 'releases':
+        return <ReleasesPanel owner={owner} name={name} />;
+      case 'pulls':
+        return <RepoPulls owner={owner} name={name} />;
+      case 'issues':
+        return <RepoIssues owner={owner} name={name} />;
+      case 'actions':
+        return <RepoActions owner={owner} name={name} />;
     }
   };
 
@@ -167,37 +233,70 @@ function RepoDetail({ repo, onBack, onRefresh }: { repo: GitHubRepo; onBack: () 
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.space4, flexWrap: 'wrap', marginBottom: tokens.space3 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: tokens.fontSizeXl, fontWeight: 700, display: 'flex', alignItems: 'center', gap: tokens.space2, flexWrap: 'wrap' }}>
-            <span style={{ color: tokens.textMuted, fontWeight: 500 }}>{owner}/</span>{name}
+          <div
+            style={{
+              fontSize: tokens.fontSizeXl,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space2,
+              flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ color: tokens.textMuted, fontWeight: 500 }}>{owner}/</span>
+            {name}
             <Badge color={repoMeta.private ? tokens.warning : tokens.success}>{repoMeta.private ? 'Private' : 'Public'}</Badge>
             {repoMeta.archived && <Badge color={tokens.textMuted}>archived</Badge>}
           </div>
-          {repoMeta.description && <div style={{ color: tokens.textSecondary, fontSize: tokens.fontSizeMd, marginTop: tokens.space1 }}>{repoMeta.description}</div>}
+          {repoMeta.description && (
+            <div style={{ color: tokens.textSecondary, fontSize: tokens.fontSizeMd, marginTop: tokens.space1 }}>{repoMeta.description}</div>
+          )}
           <div style={{ display: 'flex', gap: tokens.space4, marginTop: tokens.space2, flexWrap: 'wrap' }}>
             {repoMeta.language && <Badge color={tokens.info}>{repoMeta.language}</Badge>}
-            <Badge color={tokens.warning}><Icon name="star" size={11} /> {compact(repoMeta.stars)}</Badge>
+            <Badge color={tokens.warning}>
+              <Icon name="star" size={11} /> {compact(repoMeta.stars)}
+            </Badge>
             <Badge color={tokens.textSecondary}>⑂ {compact(repoMeta.forks)}</Badge>
             <Badge color={tokens.info}>⚑ {compact(repoMeta.openIssues)}</Badge>
           </div>
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: tokens.space2 }}>
-          <Button variant={starred ? 'secondary' : 'primary'} onClick={toggleStar} size="sm"><Icon name="star" size={12} /> {starred ? 'Unstar' : 'Star'}</Button>
+          <Button variant={starred ? 'secondary' : 'primary'} onClick={toggleStar} size="sm">
+            <Icon name="star" size={12} /> {starred ? 'Unstar' : 'Star'}
+          </Button>
           <a href={repoMeta.htmlUrl} target="_blank" rel="noreferrer">
-            <Button variant="secondary" size="sm">Open on GitHub</Button>
+            <Button variant="secondary" size="sm">
+              Open on GitHub
+            </Button>
           </a>
-          <Button variant="secondary" size="sm" onClick={onRefresh} title="Refresh"><Icon name="refresh" size={14} /></Button>
+          <Button variant="secondary" size="sm" onClick={onRefresh} title="Refresh">
+            <Icon name="refresh" size={14} />
+          </Button>
         </div>
       </div>
 
       {repoMeta.topics.length > 0 && (
         <div style={{ display: 'flex', gap: tokens.space1, flexWrap: 'wrap', marginBottom: tokens.space3 }}>
-          {repoMeta.topics.map((t) => <Chip key={t} active>#{t}</Chip>)}
+          {repoMeta.topics.map((t) => (
+            <Chip key={t} active>
+              #{t}
+            </Chip>
+          ))}
         </div>
       )}
 
       <Card padded={false}>
-        <div style={{ padding: `0 ${tokens.space4}px`, display: 'flex', alignItems: 'center', gap: tokens.space3, borderBottom: `1px solid ${tokens.border}`, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            padding: `0 ${tokens.space4}px`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.space3,
+            borderBottom: `1px solid ${tokens.border}`,
+            flexWrap: 'wrap',
+          }}
+        >
           <TabBar
             tabs={[
               { id: 'code', label: 'Code' },
@@ -230,17 +329,47 @@ function BranchPicker({ owner, name, value, onChange }: { owner: string; name: s
   const [branches, setBranches] = useState<string[]>([]);
   useEffect(() => {
     const c = makeClient(githubToken);
-    c.branches(owner, name).then((b) => setBranches(b.map((x) => x.name))).catch(() => {});
+    c.branches(owner, name)
+      .then((b) => setBranches(b.map((x) => x.name)))
+      .catch(() => {});
   }, [owner, name, githubToken]);
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} style={{ background: tokens.bg, color: tokens.text, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusSm, padding: '4px 8px', fontSize: tokens.fontSizeXs, fontFamily: tokens.fontMono }}>
-      {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        background: tokens.bg,
+        color: tokens.text,
+        border: `1px solid ${tokens.borderStrong}`,
+        borderRadius: tokens.radiusSm,
+        padding: '4px 8px',
+        fontSize: tokens.fontSizeXs,
+        fontFamily: tokens.fontMono,
+      }}
+    >
+      {branches.map((b) => (
+        <option key={b} value={b}>
+          {b}
+        </option>
+      ))}
       {!branches.includes(value) && <option value={value}>{value}</option>}
     </select>
   );
 }
 
-function CodeBrowser({ owner, name, refName, path, onPath }: { owner: string; name: string; refName: string; path: string; onPath: (p: string) => void }) {
+function CodeBrowser({
+  owner,
+  name,
+  refName,
+  path,
+  onPath,
+}: {
+  owner: string;
+  name: string;
+  refName: string;
+  path: string;
+  onPath: (p: string) => void;
+}) {
   const { tokens } = useTheme();
   const { githubToken } = useApp();
   const [entries, setEntries] = useState<GitHubContent[] | null>(null);
@@ -263,12 +392,26 @@ function CodeBrowser({ owner, name, refName, path, onPath }: { owner: string; na
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, flexWrap: 'wrap', marginBottom: tokens.space3, fontSize: tokens.fontSizeSm }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.space1,
+          flexWrap: 'wrap',
+          marginBottom: tokens.space3,
+          fontSize: tokens.fontSizeSm,
+        }}
+      >
         {crumb.map((c, i) => (
           <span key={i} style={{ display: 'flex', alignItems: 'center', gap: tokens.space1 }}>
             {i > 0 && <span style={{ color: tokens.textMuted }}>/</span>}
             {i < crumb.length - 1 ? (
-              <button onClick={() => onPath(i === 0 ? '' : crumb.slice(1, i + 1).join('/'))} style={{ background: 'none', border: 'none', color: tokens.primary, cursor: 'pointer', fontFamily: tokens.fontMono }}>{c}</button>
+              <button
+                onClick={() => onPath(i === 0 ? '' : crumb.slice(1, i + 1).join('/'))}
+                style={{ background: 'none', border: 'none', color: tokens.primary, cursor: 'pointer', fontFamily: tokens.fontMono }}
+              >
+                {c}
+              </button>
             ) : (
               <span style={{ color: tokens.textSecondary, fontFamily: tokens.fontMono }}>{c}</span>
             )}
@@ -282,19 +425,49 @@ function CodeBrowser({ owner, name, refName, path, onPath }: { owner: string; na
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
             <div style={{ fontFamily: tokens.fontMono, fontWeight: 600, fontSize: tokens.fontSizeSm }}>{file.name}</div>
-            <Button variant="ghost" size="sm" onClick={() => setFile(null)}><Icon name="x" size={14} /> close</Button>
+            <Button variant="ghost" size="sm" onClick={() => setFile(null)}>
+              <Icon name="x" size={14} /> close
+            </Button>
           </div>
-          <pre style={{ background: 'var(--code-bg)', padding: tokens.space4, borderRadius: tokens.radiusMd, overflow: 'auto', fontSize: 13, lineHeight: 1.6, margin: 0 }}>{file.content}</pre>
+          <pre
+            style={{
+              background: 'var(--code-bg)',
+              padding: tokens.space4,
+              borderRadius: tokens.radiusMd,
+              overflow: 'auto',
+              fontSize: 13,
+              lineHeight: 1.6,
+              margin: 0,
+            }}
+          >
+            {file.content}
+          </pre>
         </div>
       ) : loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: tokens.space6 }}><Spinner /></div>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: tokens.space6 }}>
+          <Spinner />
+        </div>
       ) : (
         <div style={{ border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusMd, overflow: 'hidden' }}>
           {entries?.map((e, i) => (
             <button
               key={e.path}
-              onClick={() => e.type === 'dir' ? onPath(e.path) : openFile(owner, name, e.path, refName, githubToken, setFile)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: i % 2 ? tokens.bgSubtle : 'transparent', border: 'none', borderBottom: `1px solid ${tokens.border}`, color: tokens.text, cursor: 'pointer', fontFamily: tokens.fontSans, fontSize: tokens.fontSizeSm, textAlign: 'left' }}
+              onClick={() => (e.type === 'dir' ? onPath(e.path) : openFile(owner, name, e.path, refName, githubToken, setFile))}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.space2,
+                padding: `${tokens.space2}px ${tokens.space3}px`,
+                background: i % 2 ? tokens.bgSubtle : 'transparent',
+                border: 'none',
+                borderBottom: `1px solid ${tokens.border}`,
+                color: tokens.text,
+                cursor: 'pointer',
+                fontFamily: tokens.fontSans,
+                fontSize: tokens.fontSizeSm,
+                textAlign: 'left',
+              }}
             >
               <span style={{ color: tokens.textMuted }}>{e.type === 'dir' ? '📁' : '📄'}</span>
               <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm }}>{e.name}</span>
@@ -302,14 +475,23 @@ function CodeBrowser({ owner, name, refName, path, onPath }: { owner: string; na
               <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{e.type === 'dir' ? '' : `${compact(e.size)} B`}</span>
             </button>
           ))}
-          {entries?.length === 0 && <div style={{ padding: tokens.space4, color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>Empty directory</div>}
+          {entries?.length === 0 && (
+            <div style={{ padding: tokens.space4, color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>Empty directory</div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-async function openFile(owner: string, name: string, path: string, ref: string, token: string, setFile: (f: { content: string; name: string }) => void) {
+async function openFile(
+  owner: string,
+  name: string,
+  path: string,
+  ref: string,
+  token: string,
+  setFile: (f: { content: string; name: string }) => void,
+) {
   try {
     const f = await makeClient(token).fileContent(owner, name, path, ref);
     setFile({ content: f.content, name: path.split('/').pop() ?? path });
@@ -325,18 +507,43 @@ function CommitsPanel({ owner, name, branch }: { owner: string; name: string; br
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     setLoading(true);
-    makeClient(githubToken).commits(owner, name, branch, 50).then(setCommits).catch(() => {}).finally(() => setLoading(false));
+    makeClient(githubToken)
+      .commits(owner, name, branch, 50)
+      .then(setCommits)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [owner, name, branch, githubToken]);
-  if (loading) return <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
+  if (loading)
+    return (
+      <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}>
+        <Spinner />
+      </div>
+    );
   if (!commits.length) return <Empty text="No commits" />;
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {commits.map((c, i) => (
-        <div key={c.sha} style={{ display: 'flex', gap: tokens.space3, padding: `${tokens.space2}px 0`, borderBottom: i < commits.length - 1 ? `1px solid ${tokens.border}` : 'none' }}>
-          {c.authorAvatar ? <img src={c.authorAvatar} alt="" width={30} height={30} style={{ borderRadius: '50%' }} /> : <Avatar text={c.author[0]?.toUpperCase() ?? '?'} size={30} />}
+        <div
+          key={c.sha}
+          style={{
+            display: 'flex',
+            gap: tokens.space3,
+            padding: `${tokens.space2}px 0`,
+            borderBottom: i < commits.length - 1 ? `1px solid ${tokens.border}` : 'none',
+          }}
+        >
+          {c.authorAvatar ? (
+            <img src={c.authorAvatar} alt="" width={30} height={30} style={{ borderRadius: '50%' }} />
+          ) : (
+            <Avatar text={c.author[0]?.toUpperCase() ?? '?'} size={30} />
+          )}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.message.split('\n')[0]}</div>
-            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{c.author} · {timeAgo(c.date)}</div>
+            <div style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {c.message.split('\n')[0]}
+            </div>
+            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
+              {c.author} · {timeAgo(c.date)}
+            </div>
           </div>
           <code style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontFamily: tokens.fontMono }}>{trimSha(c.sha)}</code>
         </div>
@@ -352,21 +559,41 @@ function BranchesPanel({ owner, name }: { owner: string; name: string }) {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     setLoading(true);
-    makeClient(githubToken).branches(owner, name).then(setBranches).catch(() => {}).finally(() => setLoading(false));
+    makeClient(githubToken)
+      .branches(owner, name)
+      .then(setBranches)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [owner, name, githubToken]);
-  if (loading) return <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
+  if (loading)
+    return (
+      <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}>
+        <Spinner />
+      </div>
+    );
   if (!branches.length) return <Empty text="No branches" />;
   return (
     <div>
       {branches.map((b, i) => (
-        <div key={b.name} style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.space3, padding: `${tokens.space2}px 0`, borderBottom: i < branches.length - 1 ? `1px solid ${tokens.border}` : 'none' }}>
+        <div
+          key={b.name}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: tokens.space3,
+            padding: `${tokens.space2}px 0`,
+            borderBottom: i < branches.length - 1 ? `1px solid ${tokens.border}` : 'none',
+          }}
+        >
           <Icon name="gitBranch" size={18} color={tokens.textSecondary} strokeWidth={2} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2 }}>
               <span style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontMono }}>{b.name}</span>
               {b.protected && <Badge color={tokens.warning}>protected</Badge>}
             </div>
-            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{b.commitMessage.split('\n')[0] || '—'} · {timeAgo(b.commitDate)}</div>
+            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
+              {b.commitMessage.split('\n')[0] || '—'} · {timeAgo(b.commitDate)}
+            </div>
           </div>
         </div>
       ))}
@@ -381,14 +608,26 @@ function ReleasesPanel({ owner, name }: { owner: string; name: string }) {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     setLoading(true);
-    makeClient(githubToken).releases(owner, name).then((r) => setReleases(r.filter((x) => !x.draft))).catch(() => {}).finally(() => setLoading(false));
+    makeClient(githubToken)
+      .releases(owner, name)
+      .then((r) => setReleases(r.filter((x) => !x.draft)))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [owner, name, githubToken]);
-  if (loading) return <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
+  if (loading)
+    return (
+      <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}>
+        <Spinner />
+      </div>
+    );
   if (!releases.length) return <Empty text="No releases" />;
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {releases.map((r, i) => (
-        <div key={r.id} style={{ padding: `${tokens.space3}px 0`, borderBottom: i < releases.length - 1 ? `1px solid ${tokens.border}` : 'none' }}>
+        <div
+          key={r.id}
+          style={{ padding: `${tokens.space3}px 0`, borderBottom: i < releases.length - 1 ? `1px solid ${tokens.border}` : 'none' }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, flexWrap: 'wrap' }}>
             <b style={{ fontSize: tokens.fontSizeMd }}>{r.name ?? r.tag}</b>
             <code style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{r.tag}</code>
@@ -396,7 +635,18 @@ function ReleasesPanel({ owner, name }: { owner: string; name: string }) {
             <div style={{ flex: 1 }} />
             <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{timeAgo(r.publishedAt)}</span>
           </div>
-          <div style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary, marginTop: tokens.space1, lineHeight: 1.5, maxHeight: 120, overflow: 'hidden' }}>{renderMd(r.body)}</div>
+          <div
+            style={{
+              fontSize: tokens.fontSizeSm,
+              color: tokens.textSecondary,
+              marginTop: tokens.space1,
+              lineHeight: 1.5,
+              maxHeight: 120,
+              overflow: 'hidden',
+            }}
+          >
+            {renderMd(r.body)}
+          </div>
         </div>
       ))}
     </div>
@@ -410,18 +660,42 @@ function RepoPulls({ owner, name }: { owner: string; name: string }) {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     setLoading(true);
-    makeClient(githubToken).pullRequests(owner, name, 'all', 50).then(setPrs).catch(() => {}).finally(() => setLoading(false));
+    makeClient(githubToken)
+      .pullRequests(owner, name, 'all', 50)
+      .then(setPrs)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [owner, name, githubToken]);
-  if (loading) return <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
+  if (loading)
+    return (
+      <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}>
+        <Spinner />
+      </div>
+    );
   if (!prs.length) return <Empty text="No pull requests" />;
   return (
     <div>
       {prs.map((pr, i) => (
-        <div key={pr.number} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px 0`, borderBottom: i < prs.length - 1 ? `1px solid ${tokens.border}` : 'none' }}>
+        <div
+          key={pr.number}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.space2,
+            padding: `${tokens.space2}px 0`,
+            borderBottom: i < prs.length - 1 ? `1px solid ${tokens.border}` : 'none',
+          }}
+        >
           <PrState pr={pr} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{pr.number} {pr.title}</div>
-            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>by {pr.user} · {timeAgo(pr.updatedAt)}</div>
+            <div
+              style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              #{pr.number} {pr.title}
+            </div>
+            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
+              by {pr.user} · {timeAgo(pr.updatedAt)}
+            </div>
           </div>
           <span style={{ fontSize: tokens.fontSizeXs, color: tokens.success }}>+{pr.additions}</span>
           <span style={{ fontSize: tokens.fontSizeXs, color: tokens.danger }}>−{pr.deletions}</span>
@@ -438,21 +712,49 @@ function RepoIssues({ owner, name }: { owner: string; name: string }) {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     setLoading(true);
-    makeClient(githubToken).issues(owner, name, 'open', 50).then(setIssues).catch(() => {}).finally(() => setLoading(false));
+    makeClient(githubToken)
+      .issues(owner, name, 'open', 50)
+      .then(setIssues)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [owner, name, githubToken]);
-  if (loading) return <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
+  if (loading)
+    return (
+      <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}>
+        <Spinner />
+      </div>
+    );
   if (!issues.length) return <Empty text="No open issues" />;
   const color = (s: string) => (s === 'open' ? tokens.success : tokens.danger);
   return (
     <div>
       {issues.map((i, idx) => (
-        <div key={i.number} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px 0`, borderBottom: idx < issues.length - 1 ? `1px solid ${tokens.border}` : 'none' }}>
+        <div
+          key={i.number}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.space2,
+            padding: `${tokens.space2}px 0`,
+            borderBottom: idx < issues.length - 1 ? `1px solid ${tokens.border}` : 'none',
+          }}
+        >
           <Icon name="circle" size={16} color={color(i.state)} strokeWidth={2} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{i.number} {i.title}</div>
-            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>by {i.user} · {i.comments} comments</div>
+            <div
+              style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              #{i.number} {i.title}
+            </div>
+            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
+              by {i.user} · {i.comments} comments
+            </div>
           </div>
-          {i.labels.slice(0, 2).map((l) => <Badge key={l.name} color={`#${l.color}`}>{l.name}</Badge>)}
+          {i.labels.slice(0, 2).map((l) => (
+            <Badge key={l.name} color={`#${l.color}`}>
+              {l.name}
+            </Badge>
+          ))}
         </div>
       ))}
     </div>
@@ -466,19 +768,42 @@ function RepoActions({ owner, name }: { owner: string; name: string }) {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     setLoading(true);
-    makeClient(githubToken).workflowRuns(owner, name).then(setRuns).catch(() => {}).finally(() => setLoading(false));
+    makeClient(githubToken)
+      .workflowRuns(owner, name)
+      .then(setRuns)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [owner, name, githubToken]);
-  if (loading) return <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
+  if (loading)
+    return (
+      <div style={{ padding: tokens.space5, display: 'flex', justifyContent: 'center' }}>
+        <Spinner />
+      </div>
+    );
   if (!runs.length) return <Empty text="No workflow runs" />;
-  const c = (conclusion: string | null) => conclusion === 'success' ? tokens.success : conclusion === 'failure' || conclusion === 'cancelled' ? tokens.danger : tokens.warning;
+  const c = (conclusion: string | null) =>
+    conclusion === 'success' ? tokens.success : conclusion === 'failure' || conclusion === 'cancelled' ? tokens.danger : tokens.warning;
   return (
     <div>
       {runs.map((r, i) => (
-        <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px 0`, borderBottom: i < runs.length - 1 ? `1px solid ${tokens.border}` : 'none' }}>
+        <div
+          key={r.id}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.space2,
+            padding: `${tokens.space2}px 0`,
+            borderBottom: i < runs.length - 1 ? `1px solid ${tokens.border}` : 'none',
+          }}
+        >
           <span style={{ width: 10, height: 10, borderRadius: '50%', background: c(r.conclusion), flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm }}>{r.name} #{r.runNumber}</div>
-            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{r.event} · {r.headBranch} · {timeAgo(r.createdAt)}</div>
+            <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm }}>
+              {r.name} #{r.runNumber}
+            </div>
+            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
+              {r.event} · {r.headBranch} · {timeAgo(r.createdAt)}
+            </div>
           </div>
           <Badge color={c(r.conclusion)}>{r.conclusion ?? r.status}</Badge>
         </div>
@@ -523,8 +848,12 @@ function CreateRepoModal({ open, onClose, onCreated }: { open: boolean; onClose:
           <span style={{ fontSize: tokens.fontSizeSm }}>Initialize with a README</span>
         </label>
         <div style={{ display: 'flex', gap: tokens.space2, justifyContent: 'flex-end', marginTop: tokens.space2 }}>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} disabled={!name.trim() || busy}>{busy ? <Spinner size={16} color="#fff" /> : 'Create repository'}</Button>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={!name.trim() || busy}>
+            {busy ? <Spinner size={16} color="#fff" /> : 'Create repository'}
+          </Button>
         </div>
       </div>
     </Modal>
@@ -535,7 +864,11 @@ function PrState({ pr }: { pr: GitHubPullRequest }) {
   const { tokens } = useTheme();
   const color = pr.merged ? tokens.info : pr.state === 'closed' ? tokens.danger : tokens.success;
   const icon: IconName = pr.merged ? 'gitMerge' : pr.state === 'closed' ? 'gitPullRequestClosed' : 'gitPullRequest';
-  return <span style={{ color, width: 20, display: 'inline-flex', justifyContent: 'center', textAlign: 'center' }}><Icon name={icon} size={16} /></span>;
+  return (
+    <span style={{ color, width: 20, display: 'inline-flex', justifyContent: 'center', textAlign: 'center' }}>
+      <Icon name={icon} size={16} />
+    </span>
+  );
 }
 
 function Empty({ text }: { text: string }) {

@@ -1,9 +1,9 @@
 import { createProvider } from './provider';
-import { KeyVault } from '../keys/KeyVault';
-import { createKeyManager, type KeyManagerApi, type ManagedKey } from '../keys/KeyManager';
+import type { KeyVault } from '../keys/KeyVault';
+import { createKeyManager, type ManagedKey } from '../keys/KeyManager';
 import { getProxyBase } from '../proxy';
 import { getProvider } from '../models/catalog';
-import type { ChatMessage, ChatRequest, ChatResponse, ChatStreamChunk, CryptoAdapter, ProviderId } from '../types';
+import type { ChatMessage, ChatRequest, ChatResponse, ChatStreamChunk, ProviderId } from '../types';
 import { baseUrlFor } from '../models/catalog';
 
 export interface ChatEngineOpts {
@@ -93,7 +93,6 @@ export class ChatEngine {
         // For streaming, we can't retry after partial yields, so we catch
         // errors that occur before the first yield.
         let hasYielded = false;
-        const chunks: ChatStreamChunk[] = [];
         try {
           for await (const chunk of provider.stream(resolved)) {
             hasYielded = true;
@@ -140,7 +139,7 @@ export class ChatEngine {
 
     // List existing managed keys to clean up
     const existing = await manager.list();
-    
+
     // Create a new key
     const { key, value } = await manager.createWithSecret({
       name: `${provider}-auto-${Date.now()}`,
@@ -178,7 +177,7 @@ export class ChatEngine {
     // Optionally clean up old keys (keep the 5 most recent including the new one)
     const keysToKeep = [...existing].sort((a, b) => b.created - a.created).slice(0, 4);
     for (const oldKey of existing) {
-      if (!keysToKeep.some(k => k.id === oldKey.id)) {
+      if (!keysToKeep.some((k) => k.id === oldKey.id)) {
         try {
           await manager.delete(oldKey.id);
         } catch {

@@ -32,12 +32,15 @@ export function App() {
     if (code && state && window.opener) {
       console.log('[App] OAuth callback detected, sending to opener', { provider, codeLength: code.length, stateLength: state.length });
       // Send the OAuth code to the opener window
-      window.opener.postMessage({
-        type: 'oauth-callback',
-        provider,
-        code,
-        state,
-      }, window.location.origin);
+      window.opener.postMessage(
+        {
+          type: 'oauth-callback',
+          provider,
+          code,
+          state,
+        },
+        window.location.origin,
+      );
 
       // Clear the URL parameters and try to close the popup window
       const cleanUrl = `${window.location.pathname}${window.location.hash}`;
@@ -51,12 +54,15 @@ export function App() {
     const error = urlParams.get('error');
     const errorDescription = urlParams.get('error_description');
     if (error && window.opener) {
-      window.opener.postMessage({
-        type: 'oauth-error',
-        provider,
-        error,
-        error_description: errorDescription,
-      }, window.location.origin);
+      window.opener.postMessage(
+        {
+          type: 'oauth-error',
+          provider,
+          error,
+          error_description: errorDescription,
+        },
+        window.location.origin,
+      );
 
       window.close();
     }

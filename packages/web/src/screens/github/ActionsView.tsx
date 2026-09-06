@@ -44,13 +44,16 @@ export function ActionsView() {
       <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, marginBottom: tokens.space4, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 700, fontSize: tokens.fontSizeLg }}>Actions / CI</span>
         <div style={{ width: 240, minWidth: 180 }}>
-          <Select value={repoFilter} onChange={setRepoFilter} options={[
-            { value: 'all', label: 'All repositories' },
-            ...repos.map((r) => ({ value: r.fullName, label: r.name })),
-          ]} />
+          <Select
+            value={repoFilter}
+            onChange={setRepoFilter}
+            options={[{ value: 'all', label: 'All repositories' }, ...repos.map((r) => ({ value: r.fullName, label: r.name }))]}
+          />
         </div>
         <div style={{ flex: 1 }} />
-        <Button variant="secondary" onClick={() => void load()}>{loading ? <Spinner size={15} /> : 'Refresh'}</Button>
+        <Button variant="secondary" onClick={() => void load()}>
+          {loading ? <Spinner size={15} /> : 'Refresh'}
+        </Button>
       </div>
 
       {selected ? (
@@ -62,7 +65,13 @@ export function ActionsView() {
       ) : (
         <Card padded={false}>
           {filtered.slice(0, 40).map((r, i) => (
-            <RunRow key={`${(r as unknown as { repository: string }).repository}-${r.id}`} run={r} repo={(r as unknown as { repository: string }).repository} onClick={() => setSelected(r)} last={i === Math.min(filtered.length, 40) - 1} />
+            <RunRow
+              key={`${(r as unknown as { repository: string }).repository}-${r.id}`}
+              run={r}
+              repo={(r as unknown as { repository: string }).repository}
+              onClick={() => setSelected(r)}
+              last={i === Math.min(filtered.length, 40) - 1}
+            />
           ))}
         </Card>
       )}
@@ -74,11 +83,27 @@ function RunRow({ run, repo, onClick, last }: { run: GitHubWorkflowRun; repo: st
   const { tokens } = useTheme();
   const c = resultColor(run.conclusion ?? run.status, tokens);
   return (
-    <button onClick={onClick} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: tokens.space3, padding: tokens.space3, background: 'transparent', border: 'none', borderBottom: last ? 'none' : `1px solid ${tokens.border}`, cursor: 'pointer', textAlign: 'left' }}>
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.space3,
+        padding: tokens.space3,
+        background: 'transparent',
+        border: 'none',
+        borderBottom: last ? 'none' : `1px solid ${tokens.border}`,
+        cursor: 'pointer',
+        textAlign: 'left',
+      }}
+    >
       <span style={{ width: 12, height: 12, borderRadius: '50%', background: c, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          <span style={{ color: tokens.textMuted, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, marginRight: tokens.space1 }}>{repo}</span>
+          <span style={{ color: tokens.textMuted, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, marginRight: tokens.space1 }}>
+            {repo}
+          </span>
           {run.name} #{run.runNumber}
         </div>
         <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginTop: 2 }}>
@@ -122,12 +147,24 @@ function RunLogs({ run, onBack }: { run: GitHubWorkflowRun; onBack: () => void }
       <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, marginBottom: tokens.space3, flexWrap: 'wrap' }}>
         <span style={{ width: 12, height: 12, borderRadius: '50%', background: resultColor(run.conclusion ?? run.status, tokens) }} />
         <div>
-          <div style={{ fontWeight: 700, fontSize: tokens.fontSizeLg }}>{run.name} #{run.runNumber}</div>
-          <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{repository} · {run.event} · {run.headBranch} · {run.headSha.slice(0, 7)}</div>
+          <div style={{ fontWeight: 700, fontSize: tokens.fontSizeLg }}>
+            {run.name} #{run.runNumber}
+          </div>
+          <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
+            {repository} · {run.event} · {run.headBranch} · {run.headSha.slice(0, 7)}
+          </div>
         </div>
         <div style={{ flex: 1 }} />
         <Badge color={resultColor(run.conclusion ?? run.status, tokens)}>{run.conclusion ?? run.status}</Badge>
-        <Button variant="secondary" size="sm" onClick={() => void load()}>{loading ? <Spinner size={14} /> : <><Icon name="refresh" size={13} /> Retry</>}</Button>
+        <Button variant="secondary" size="sm" onClick={() => void load()}>
+          {loading ? (
+            <Spinner size={14} />
+          ) : (
+            <>
+              <Icon name="refresh" size={13} /> Retry
+            </>
+          )}
+        </Button>
       </div>
       <Card title={error ? 'Logs unavailable' : `Logs (${compact(logs.length)} chars)`}>
         {loading ? (
@@ -136,11 +173,27 @@ function RunLogs({ run, onBack }: { run: GitHubWorkflowRun; onBack: () => void }
           <div style={{ color: tokens.danger, fontSize: tokens.fontSizeSm, padding: tokens.space3 }}>
             {error}
             <div style={{ color: tokens.textMuted, fontSize: tokens.fontSizeXs, marginTop: tokens.space2 }}>
-              Make sure your token has the <b>repo</b> scope (includes Actions) and the run has produced logs. If a run is still in progress its logs may not be ready yet.
+              Make sure your token has the <b>repo</b> scope (includes Actions) and the run has produced logs. If a run is still in progress
+              its logs may not be ready yet.
             </div>
           </div>
         ) : (
-          <pre style={{ background: 'var(--code-bg)', padding: tokens.space4, borderRadius: tokens.radiusMd, overflow: 'auto', fontSize: 12, lineHeight: 1.55, maxHeight: '62vh', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{logs || 'No logs available.'}</pre>
+          <pre
+            style={{
+              background: 'var(--code-bg)',
+              padding: tokens.space4,
+              borderRadius: tokens.radiusMd,
+              overflow: 'auto',
+              fontSize: 12,
+              lineHeight: 1.55,
+              maxHeight: '62vh',
+              margin: 0,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {logs || 'No logs available.'}
+          </pre>
         )}
       </Card>
     </div>
@@ -149,7 +202,9 @@ function RunLogs({ run, onBack }: { run: GitHubWorkflowRun; onBack: () => void }
 
 function resultColor(conclusion: string, tokens: ReturnType<typeof useTheme>['tokens']): string {
   if (conclusion === 'success') return tokens.success;
-  if (conclusion === 'failure' || conclusion === 'cancelled' || conclusion === 'timed_out' || conclusion === 'action_required') return tokens.danger;
-  if (conclusion === 'in_progress' || conclusion === 'queued' || conclusion === 'pending' || conclusion === 'waiting') return tokens.warning;
+  if (conclusion === 'failure' || conclusion === 'cancelled' || conclusion === 'timed_out' || conclusion === 'action_required')
+    return tokens.danger;
+  if (conclusion === 'in_progress' || conclusion === 'queued' || conclusion === 'pending' || conclusion === 'waiting')
+    return tokens.warning;
   return tokens.textMuted;
 }

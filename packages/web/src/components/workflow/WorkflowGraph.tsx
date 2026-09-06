@@ -42,7 +42,7 @@ export interface WorkflowGraphProps {
   onDeleteNode: (id: string) => void;
 }
 
-const nodeTypes: NodeTypes = { workflow: WorkflowNodeCard };
+const nodeTypes: NodeTypes = { workflow: WorkflowNodeCard as unknown as NodeTypes['workflow'] };
 
 let edgeSeq = 0;
 

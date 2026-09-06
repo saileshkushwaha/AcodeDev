@@ -36,7 +36,7 @@ export function Button({
     secondary: { background: tokens.surface, color: tokens.text, border: `1px solid ${tokens.borderStrong}` },
     ghost: { background: 'transparent', color: tokens.textSecondary, border: '1px solid transparent' },
     danger: { background: tokens.danger, color: '#fff', border: `1px solid ${tokens.danger}` },
-    success: { background: tokens.success, color: '#062' , border: `1px solid ${tokens.success}`},
+    success: { background: tokens.success, color: '#062', border: `1px solid ${tokens.success}` },
   };
   return (
     <button

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../state/AppProvider';
-import { Button, Select, Input, Toggle, Spinner, useTheme, Badge, useIsMobile, Icon, GithubIcon, type IconName } from '@acode/ui';
+import { Button, Select, Input, Toggle, Spinner, useTheme, useIsMobile, Icon, type IconName } from '@acode/ui';
 import {
   listModels,
   listProviders,
@@ -8,42 +8,46 @@ import {
   getSkill,
   skillsByIds,
   getProxyBase,
-  inferCapabilities,
-  CAPABILITY_LABELS,
   readJSON,
   writeJSON,
   Toolbox,
-  ProjectStore,
   type ChatMessage,
   type ProviderId,
   type ChatAttachment,
   type AttachmentKind,
-  type ModelCapability,
   type Skill,
   type ToolDefinition,
   type ToolCall,
   type ProjectDoc,
 } from '@acode/core';
-import type { Conversation } from '@acode/core';
+import type { Conversation, ProjectStore } from '@acode/core';
 import { Markdown } from '../components/Markdown';
 
 const SYSTEM_PROMPT = 'You are AcodeDev assistant, a helpful AI. Be concise and accurate.';
-
-const SUGGESTIONS = [
-  'Explain how a workflow executes a DAG',
-  'Summarize what I should build next',
-  'Help me debug this code',
-  'Write a prompt for code review',
-];
-
-const CAP_ORDER: ModelCapability[] = ['text', 'tool', 'vision', 'image', 'file', 'folder', 'svg', 'drawio', 'link', 'code', 'reasoning'];
 
 let _seq = 0;
 function uid(): string {
   return `att_${Date.now().toString(36)}_${(_seq++).toString(36)}`;
 }
 
-const BINARY_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'pdf', 'zip', 'gz', 'tar', 'bin', 'exe', 'wasm', 'woff', 'woff2', 'ttf']);
+const BINARY_EXT = new Set([
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'bmp',
+  'pdf',
+  'zip',
+  'gz',
+  'tar',
+  'bin',
+  'exe',
+  'wasm',
+  'woff',
+  'woff2',
+  'ttf',
+]);
 
 function formatContext(n: number): string {
   if (n <= 0) return '?';
@@ -59,7 +63,10 @@ function extractChangedFiles(content: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = entry.exec(content)) !== null) {
     const raw = m[1].split(':')[0].trim();
-    const path = raw.replace(/^\.{1,2}\//, '').replace(/^[/\\]/, '').replace(/[`'""]/g, '');
+    const path = raw
+      .replace(/^\.{1,2}\//, '')
+      .replace(/^[/\\]/, '')
+      .replace(/[`'""]/g, '');
     if (
       path &&
       !path.startsWith('```') &&
@@ -128,7 +135,9 @@ async function fetchFileDiff(proxyBase: string, filePath: string): Promise<DiffH
 }
 
 /** Fetch real git working-tree status through the local relay proxy. */
-async function fetchGitStatus(proxyBase: string): Promise<{ git: boolean; files: { path: string; status: string }[]; error?: string } | null> {
+async function fetchGitStatus(
+  proxyBase: string,
+): Promise<{ git: boolean; files: { path: string; status: string }[]; error?: string } | null> {
   try {
     const res = await fetch(`${proxyBase}/git/status`);
     if (!res.ok) return null;
@@ -154,7 +163,8 @@ function fileToAttachment(f: File): Promise<ChatAttachment> {
   if (type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(name)) {
     return new Promise((resolve) => {
       const r = new FileReader();
-      r.onload = () => resolve({ id, kind: 'image', name, mimeType: type || undefined, src: (r.result as string) ?? undefined, size: f.size });
+      r.onload = () =>
+        resolve({ id, kind: 'image', name, mimeType: type || undefined, src: (r.result as string) ?? undefined, size: f.size });
       r.onerror = () => resolve({ id, kind: 'image', name, mimeType: type || undefined, src: URL.createObjectURL(f), size: f.size });
       r.readAsDataURL(f);
     });
@@ -167,7 +177,8 @@ function fileToAttachment(f: File): Promise<ChatAttachment> {
       const ext = name.split('.').pop()?.toLowerCase() ?? '';
       kind = 'file';
       if (type === 'image/svg+xml' || ext === 'svg') kind = 'svg';
-      else if (ext === 'drawio' || name.toLowerCase().includes('drawio') || (text.includes('<mxGraphModel') && ext === 'xml')) kind = 'drawio';
+      else if (ext === 'drawio' || name.toLowerCase().includes('drawio') || (text.includes('<mxGraphModel') && ext === 'xml'))
+        kind = 'drawio';
       else if (BINARY_EXT.has(ext) || text.includes('\u0000')) kind = 'file';
       resolve({ id, kind, name, mimeType: type || undefined, text, size: f.size });
     };
@@ -262,10 +273,6 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     return ws?.tabs?.find((t) => t.id === ws.activeTab)?.convId ?? null;
   });
   const [sessions, setSessions] = useState<Conversation[]>([]);
-  const [sessionsOpen, setSessionsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [renaming, setRenaming] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
   const [subtab, setSubtab] = useState<'session' | 'files'>('session');
   const [changesMode, setChangesMode] = useState<'git' | 'lastTurn'>('lastTurn');
   const [overflowOpen, setOverflowOpen] = useState(false);
@@ -295,22 +302,28 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const gatewayProviders = useMemo(() => allProviders.filter((p) => p.gateway), [allProviders]);
   const directProviders = useMemo(() => allProviders.filter((p) => !p.gateway && p.id !== 'local'), [allProviders]);
   const minCtx = useMemo(() => Number(minContext) || 0, [minContext]);
-  const providerModels = useMemo(() => listModels(provider).filter((m) => (freeOnly ? m.isFree : true)).filter((m) => (minCtx > 0 ? m.contextWindow >= minCtx : true)), [provider, freeOnly, minCtx]);
+  const providerModels = useMemo(
+    () =>
+      listModels(provider)
+        .filter((m) => (freeOnly ? m.isFree : true))
+        .filter((m) => (minCtx > 0 ? m.contextWindow >= minCtx : true)),
+    [provider, freeOnly, minCtx],
+  );
 
   const provDef = useMemo(() => allProviders.find((p) => p.id === provider), [allProviders, provider]);
   const needsKey = useMemo(() => !!(provDef && provDef.needsKey !== false && provDef.kind !== 'local'), [provDef]);
   const connected = useMemo(() => !needsKey || hasKey(provider), [needsKey, provider, hasKey]);
 
-  const modelDef = useMemo(() => providerModels.find((m) => m.id === model), [providerModels, model]);
-  const capabilities: ModelCapability[] = useMemo(() => modelDef?.capabilities ?? inferCapabilities(modelDef?.tags) ?? [], [modelDef]);
-
-  const currentSettings = useMemo(() => ({
-    temperature,
-    maxTokens,
-    freeOnly,
-    minContext: minContext && minContext !== '0' ? minContext : undefined,
-    skills: selectedSkills,
-  }), [temperature, maxTokens, freeOnly, minContext, selectedSkills]);
+  const currentSettings = useMemo(
+    () => ({
+      temperature,
+      maxTokens,
+      freeOnly,
+      minContext: minContext && minContext !== '0' ? minContext : undefined,
+      skills: selectedSkills,
+    }),
+    [temperature, maxTokens, freeOnly, minContext, selectedSkills],
+  );
 
   const refreshSessions = useCallback(() => {
     setSessions(projects.conversationsFor(currentProjectId ?? undefined));
@@ -352,13 +365,13 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     const conv = projects.getConversation(convId);
     setMessages(conv ? conv.messages.filter((m) => m.role !== 'system') : []);
     setProvider(conv?.provider ?? 'openrouter');
-    setModel(conv?.model ?? providerModels[0]?.id ?? '');
+    setModel(conv?.model ?? '');
     setTemperature(conv?.settings?.temperature ?? 0.7);
     setMaxTokens(conv?.settings?.maxTokens ?? 2048);
     setFreeOnly(conv?.settings?.freeOnly ?? true);
     setMinContext(conv?.settings?.minContext ?? '0');
     setSelectedSkills(conv?.settings?.skills ?? []);
-  }, [convId]);
+  }, [convId, projects]);
 
   // Persist composer settings to the active conversation so history restores
   // exactly how the session was configured (offline-first, no LLM round-trip).
@@ -393,15 +406,6 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     setPinnedToBottom(nearBottom);
   };
-
-  const syncTabFromConv = useCallback((tabId: string, cid: string | null) => {
-    setTabs((prev) => prev.map((t) => {
-      if (t.id !== tabId) return t;
-      if (!cid) return { ...t, title: 'New session', convId: null };
-      const conv = projects.getConversation(cid);
-      return { ...t, title: conv?.title ?? 'New session', convId: cid };
-    }));
-  }, [projects]);
 
   const selectTab = (tabId: string) => {
     setActiveTab(tabId);
@@ -480,7 +484,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const renameSession = (id: string, title: string) => {
     projects.renameConversation(id, title);
     refreshSessions();
-    setTabs((prev) => prev.map((t) => t.convId === id ? { ...t, title } : t));
+    setTabs((prev) => prev.map((t) => (t.convId === id ? { ...t, title } : t)));
   };
 
   const archiveSession = (id: string) => {
@@ -598,14 +602,21 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   const exportSession = () => {
     const conv = convId ? projects.getConversation(convId) : undefined;
     if (!conv) return;
-    const lines = ['# ' + (conv.title || 'Chat'), '', ...(conv.messages ?? [])
-      .filter((m) => m.role !== 'system')
-      .map((m) => `## ${m.role === 'user' ? 'User' : 'Assistant'}\n\n${m.content}`)];
+    const lines = [
+      '# ' + (conv.title || 'Chat'),
+      '',
+      ...(conv.messages ?? [])
+        .filter((m) => m.role !== 'system')
+        .map((m) => `## ${m.role === 'user' ? 'User' : 'Assistant'}\n\n${m.content}`),
+    ];
     const blob = new Blob([lines.join('\n\n')], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${(conv.title || 'chat').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-')}.md`;
+    a.download = `${(conv.title || 'chat')
+      .replace(/[^\w\- ]+/g, '')
+      .trim()
+      .replace(/\s+/g, '-')}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -644,7 +655,10 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   };
   const addLink = () => {
     if (!linkDraft.url.trim()) return;
-    setAttachments((prev) => [...prev, { id: uid(), kind: 'link', name: linkDraft.title.trim() || linkDraft.url.trim(), url: linkDraft.url.trim() }]);
+    setAttachments((prev) => [
+      ...prev,
+      { id: uid(), kind: 'link', name: linkDraft.title.trim() || linkDraft.url.trim(), url: linkDraft.url.trim() },
+    ]);
     setLinkDraft({ open: false, url: '', title: '' });
   };
   const removeAttachment = (id: string) => setAttachments((prev) => prev.filter((a) => a.id !== id));
@@ -661,7 +675,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   };
 
   const handleInsertToComposer = (text: string) => {
-    setInput((prev) => prev ? `${prev}\n\n${text}` : text);
+    setInput((prev) => (prev ? `${prev}\n\n${text}` : text));
   };
 
   const toggleSkill = (id: string) => {
@@ -687,7 +701,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       const tabId = activeTab ?? `tab-${Date.now()}`;
       setTabs((prev) => {
         const existing = prev.find((t) => t.id === tabId);
-        if (existing) return prev.map((t) => t.id === tabId ? { ...t, convId: cid, title: raw.slice(0, 40) || 'New session' } : t);
+        if (existing) return prev.map((t) => (t.id === tabId ? { ...t, convId: cid, title: raw.slice(0, 40) || 'New session' } : t));
         return [...prev, { id: tabId, title: raw.slice(0, 40) || 'New session', convId: cid }];
       });
       setActiveTab(tabId);
@@ -702,7 +716,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     if ((conv.title === 'New session' || conv.title === 'New chat') && raw) {
       projects.renameConversation(cid, raw.slice(0, 40));
       refreshSessions();
-      setTabs((prev) => prev.map((t) => t.convId === cid ? { ...t, title: raw.slice(0, 40) } : t));
+      setTabs((prev) => prev.map((t) => (t.convId === cid ? { ...t, title: raw.slice(0, 40) } : t)));
     }
 
     const userMsg: ChatMessage = { role: 'user', content: raw, attachments };
@@ -722,10 +736,14 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     // Tell the LLM about available tools when proxy is configured
     const proxyForTools = getProxyBase();
     if (proxyForTools) {
-      system += '\n\nYou have access to filesystem and shell tools via a local relay proxy. Use them when the user asks to read/write files, list directories, run commands, or check git status. Always use the tools rather than guessing file contents.';
+      system +=
+        '\n\nYou have access to filesystem and shell tools via a local relay proxy. Use them when the user asks to read/write files, list directories, run commands, or check git status. Always use the tools rather than guessing file contents.';
     }
 
-    const history: ChatMessage[] = [{ role: 'system', content: system }, ...prior.map((m) => m.role === 'system' ? { ...m, content: system } : m)];
+    const history: ChatMessage[] = [
+      { role: 'system', content: system },
+      ...prior.map((m) => (m.role === 'system' ? { ...m, content: system } : m)),
+    ];
 
     setStreaming(true);
     const assistantId = `assist_${Date.now()}`;
@@ -744,11 +762,17 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     let reasoning = '';
     let contentStreamed = false;
     const MAX_ITERATIONS = 6;
-    let conversationHistory: ChatMessage[] = [...history];
+    const conversationHistory: ChatMessage[] = [...history];
     const toolExecLog: { name: string; args: Record<string, unknown>; result: string }[] = [];
 
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-      const body = { provider, model, messages: conversationHistory, params: { temperature, maxTokens }, tools: tools.length ? tools : undefined };
+      const body = {
+        provider,
+        model,
+        messages: conversationHistory,
+        params: { temperature, maxTokens },
+        tools: tools.length ? tools : undefined,
+      };
       full = '';
       reasoning = '';
       contentStreamed = false;
@@ -797,11 +821,17 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           conversationHistory.push({ role: 'assistant', content: full, toolCalls });
 
           // Show tool calls in the bubble
-          const toolSummary = toolCalls.map((tc) => {
-            let argsStr = '';
-            try { argsStr = JSON.stringify(JSON.parse(tc.arguments)); } catch { argsStr = tc.arguments; }
-            return `🔧 ${tc.name}(${argsStr})`;
-          }).join('\n');
+          const toolSummary = toolCalls
+            .map((tc) => {
+              let argsStr = '';
+              try {
+                argsStr = JSON.stringify(JSON.parse(tc.arguments));
+              } catch {
+                argsStr = tc.arguments;
+              }
+              return `🔧 ${tc.name}(${argsStr})`;
+            })
+            .join('\n');
           const shownWithTools = full ? `${full}\n\n${toolSummary}` : toolSummary;
           setMessages((prev) => {
             const next = [...prev];
@@ -881,16 +911,9 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
     refreshChangedFiles();
   };
 
-  const filteredSessions = sessions.filter((s) =>
-    !search || s.title.toLowerCase().includes(search.toLowerCase()),
-  );
-
   const activeSession = convId ? projects.getConversation(convId) : undefined;
   const sessionTitle = activeSession?.title ?? 'New session';
-  const sessionLetter = (sessionTitle.replace(/\s+/g, ' ').trim().charAt(0) || 'N').toUpperCase();
   const fileCount = changedFiles.length;
-
-  const activeTabObj = tabs.find((t) => t.id === activeTab);
 
   useEffect(() => {
     if (!currentProjectId) return;
@@ -935,9 +958,24 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   }, [currentProjectId]);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: tokens.bg, overflow: 'hidden', position: 'relative' }}>
+    <div
+      style={{ height: '100%', display: 'flex', flexDirection: 'column', background: tokens.bg, overflow: 'hidden', position: 'relative' }}
+    >
       {/* Top app bar: grid button · session tabs · + button */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `0 ${tokens.space2}px`, height: 44, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated, overflowX: 'auto', overflowY: 'hidden' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.space1,
+          padding: `0 ${tokens.space2}px`,
+          height: 44,
+          flexShrink: 0,
+          borderBottom: `1px solid ${tokens.border}`,
+          background: tokens.bgElevated,
+          overflowX: 'auto',
+          overflowY: 'hidden',
+        }}
+      >
         <button
           title="Projects & Sessions"
           onClick={() => {
@@ -948,7 +986,19 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
               setSidebarOpen(true);
             }
           }}
-          style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: sidebarOpen ? `${tokens.primary}1a` : 'transparent', border: `1px solid ${sidebarOpen ? tokens.primary : 'transparent'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: sidebarOpen ? tokens.primary : tokens.textSecondary, flexShrink: 0 }}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: tokens.radiusMd,
+            background: sidebarOpen ? `${tokens.primary}1a` : 'transparent',
+            border: `1px solid ${sidebarOpen ? tokens.primary : 'transparent'}`,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: sidebarOpen ? tokens.primary : tokens.textSecondary,
+            flexShrink: 0,
+          }}
         >
           <Icon name="layoutGrid" size={16} />
         </button>
@@ -968,16 +1018,63 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                   return next;
                 });
               }}
-              style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusMd, background: isActive ? tokens.surface : 'transparent', border: `1px solid ${isActive ? tokens.borderStrong : 'transparent'}`, cursor: 'pointer', flexShrink: 0, maxWidth: 200, transition: 'background 0.1s ease', position: 'relative' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.space1,
+                padding: `4px ${tokens.space2}px`,
+                borderRadius: tokens.radiusMd,
+                background: isActive ? tokens.surface : 'transparent',
+                border: `1px solid ${isActive ? tokens.borderStrong : 'transparent'}`,
+                cursor: 'pointer',
+                flexShrink: 0,
+                maxWidth: 200,
+                transition: 'background 0.1s ease',
+                position: 'relative',
+              }}
             >
-              <span style={{ position: 'relative', width: 20, height: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span
+                style={{
+                  position: 'relative',
+                  width: 20,
+                  height: 20,
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
                 {isActive ? (
                   tab.convId ? (
-                    <span style={{ width: 20, height: 20, borderRadius: '50%', background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10 }}>
+                    <span
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        background: tokens.primary,
+                        color: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: 10,
+                      }}
+                    >
                       {tab.title.replace(/\s+/g, ' ').trim().charAt(0).toUpperCase() || 'P'}
                     </span>
                   ) : (
-                    <span style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: tokens.radiusSm,
+                        background: tokens.surface,
+                        border: `1px solid ${tokens.borderStrong}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
                       <Icon name="squarePen" size={12} color={tokens.text} />
                     </span>
                   )
@@ -985,18 +1082,56 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                   <Icon name="squarePen" size={14} color={tokens.textMuted} />
                 )}
                 {hasBadge && (
-                  <span style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', border: `2px solid ${tokens.bgElevated}` }} />
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: -2,
+                      right: -2,
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: '#3b82f6',
+                      border: `2px solid ${tokens.bgElevated}`,
+                    }}
+                  />
                 )}
               </span>
-              <span style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isActive ? tokens.text : tokens.textSecondary, maxWidth: 120 }}>
+              <span
+                style={{
+                  fontSize: tokens.fontSizeSm,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  color: isActive ? tokens.text : tokens.textSecondary,
+                  maxWidth: 120,
+                }}
+              >
                 {tab.title}
               </span>
               <button
                 title="Close tab"
                 aria-label="Close tab"
-                onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
-                style={{ width: 18, height: 18, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 12, flexShrink: 0 }}
-              ><Icon name="x" size={12} /></button>
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeTab(tab.id);
+                }}
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: tokens.textMuted,
+                  fontSize: 12,
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="x" size={12} />
+              </button>
             </div>
           );
         })}
@@ -1005,8 +1140,23 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         <button
           title="New session"
           onClick={newSession}
-          style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary, flexShrink: 0, fontSize: 18 }}
-        >+</button>
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: tokens.radiusMd,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: tokens.textSecondary,
+            flexShrink: 0,
+            fontSize: 18,
+          }}
+        >
+          +
+        </button>
       </div>
 
       {/* Sidebar panel */}
@@ -1025,13 +1175,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
             }
             setSidebarOpen(false);
           }}
-          onNewSession={() => {
-            newSession();
-            setSidebarOpen(false);
-          }}
-          onClose={() => setSidebarOpen(false)}
           projects={projects}
-          currentProjectId={currentProjectId}
           activeProjectId={currentProjectId}
           archived={archivedSessions}
           inactive={inactiveSessions}
@@ -1055,22 +1199,38 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
             }
           }}
           onCreate={(name, gitRepo) => {
-            const proj = createProject(name, gitRepo ? { gitRepo } : undefined);
+            createProject(name, gitRepo ? { gitRepo } : undefined);
             setProjectPickerOpen(false);
             if (pendingSessionAfterProject) {
               setTimeout(() => newSession(), 0);
               setPendingSessionAfterProject(false);
             }
           }}
-          onClose={() => { setProjectPickerOpen(false); setPendingSessionAfterProject(false); }}
+          onClose={() => {
+            setProjectPickerOpen(false);
+            setPendingSessionAfterProject(false);
+          }}
         />
       )}
 
       {/* Secondary tab bar: Session | Changes — only when messages exist */}
       {messages.length > 0 && (
-        <div style={{ display: 'flex', gap: tokens.space4, padding: `0 ${tokens.space3}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
-          <SubTab active={subtab === 'session'} onClick={() => setSubtab('session')}>Session</SubTab>
-          <SubTab active={subtab === 'files'} onClick={() => setSubtab('files')}>Changes{fileCount > 0 && subtab !== 'files' ? ` ${fileCount}` : ''}</SubTab>
+        <div
+          style={{
+            display: 'flex',
+            gap: tokens.space4,
+            padding: `0 ${tokens.space3}px`,
+            flexShrink: 0,
+            borderBottom: `1px solid ${tokens.border}`,
+            background: tokens.bgElevated,
+          }}
+        >
+          <SubTab active={subtab === 'session'} onClick={() => setSubtab('session')}>
+            Session
+          </SubTab>
+          <SubTab active={subtab === 'files'} onClick={() => setSubtab('files')}>
+            Changes{fileCount > 0 && subtab !== 'files' ? ` ${fileCount}` : ''}
+          </SubTab>
         </div>
       )}
 
@@ -1078,53 +1238,130 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', padding: 0 }}>
         {/* Content header: title · spinner · overflow menu — only when there are messages */}
         {messages.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space3}px ${tokens.space4}px`, flexShrink: 0, borderBottom: `1px solid ${tokens.border}` }}>
-          <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sessionTitle}</div>
-          {streaming && <Spinner size={16} color={tokens.primary} />}
-          <div style={{ position: 'relative', flexShrink: 0 }}>
-            <button
-              title="Session actions"
-              onClick={() => setOverflowOpen((v) => !v)}
-              style={{ background: 'transparent', border: 'none', color: tokens.textSecondary, cursor: 'pointer', padding: tokens.space1, fontSize: 18, lineHeight: 1 }}
-            >···</button>
-            {overflowOpen && (
-              <OverflowMenu
-                hasSession={!!convId}
-                onNewSession={() => { setOverflowOpen(false); newSession(); }}
-                onRename={() => {
-                  setOverflowOpen(false);
-                  if (convId) {
-                    const title = prompt('Rename session', sessionTitle);
-                    if (title !== null && title.trim()) renameSession(convId, title.trim());
-                  }
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space2,
+              padding: `${tokens.space3}px ${tokens.space4}px`,
+              flexShrink: 0,
+              borderBottom: `1px solid ${tokens.border}`,
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 700,
+                fontSize: tokens.fontSizeMd,
+                flex: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {sessionTitle}
+            </div>
+            {streaming && <Spinner size={16} color={tokens.primary} />}
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button
+                title="Session actions"
+                onClick={() => setOverflowOpen((v) => !v)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: tokens.textSecondary,
+                  cursor: 'pointer',
+                  padding: tokens.space1,
+                  fontSize: 18,
+                  lineHeight: 1,
                 }}
-                onShare={() => { setOverflowOpen(false); void shareSession(); }}
-                onExport={() => { setOverflowOpen(false); exportSession(); }}
-                onArchive={() => { setOverflowOpen(false); if (convId) archiveSession(convId); }}
-                onDelete={() => { setOverflowOpen(false); if (convId) deleteSession(convId); }}
-                onClose={() => setOverflowOpen(false)}
-              />
-            )}
+              >
+                ···
+              </button>
+              {overflowOpen && (
+                <OverflowMenu
+                  hasSession={!!convId}
+                  onRename={() => {
+                    setOverflowOpen(false);
+                    if (convId) {
+                      const title = prompt('Rename session', sessionTitle);
+                      if (title !== null && title.trim()) renameSession(convId, title.trim());
+                    }
+                  }}
+                  onShare={() => {
+                    setOverflowOpen(false);
+                    void shareSession();
+                  }}
+                  onExport={() => {
+                    setOverflowOpen(false);
+                    exportSession();
+                  }}
+                  onArchive={() => {
+                    setOverflowOpen(false);
+                    if (convId) archiveSession(convId);
+                  }}
+                  onDelete={() => {
+                    setOverflowOpen(false);
+                    if (convId) deleteSession(convId);
+                  }}
+                  onClose={() => setOverflowOpen(false)}
+                />
+              )}
+            </div>
           </div>
-        </div>
         )}
 
         {/* Body */}
-        {(subtab === 'session' || messages.length === 0) ? (
-          <div ref={messagesRef} onScroll={onScrollBody} style={{ flex: 1, overflowY: 'auto', padding: tokens.space4, position: 'relative', display: 'flex', flexDirection: 'column', gap: tokens.space4 }}>
+        {subtab === 'session' || messages.length === 0 ? (
+          <div
+            ref={messagesRef}
+            onScroll={onScrollBody}
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: tokens.space4,
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: tokens.space4,
+            }}
+          >
             {!connected && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, background: `linear-gradient(90deg, ${tokens.warning}1f, ${tokens.bgElevated})`, flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.space3,
+                  padding: `${tokens.space2}px ${tokens.space3}px`,
+                  borderRadius: tokens.radiusMd,
+                  border: `1px solid ${tokens.border}`,
+                  background: `linear-gradient(90deg, ${tokens.warning}1f, ${tokens.bgElevated})`,
+                  flexWrap: 'wrap',
+                }}
+              >
                 <Icon name="circleAlert" size={17} color={tokens.warning} style={{ flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600 }}>{provDef?.name ?? provider} isn't connected</div>
                   <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary }}>Add your API key to get real responses.</div>
                 </div>
-                <Button size="sm" onClick={() => onNavigate?.('keys')}>Connect provider</Button>
+                <Button size="sm" onClick={() => onNavigate?.('keys')}>
+                  Connect provider
+                </Button>
               </div>
             )}
 
             {messages.length === 0 ? (
-              <div style={{ margin: 'auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space6, padding: `${tokens.space6}px ${isMobile ? tokens.space2 : tokens.space4}px`, width: '100%' }}>
+              <div
+                style={{
+                  margin: 'auto',
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: tokens.space6,
+                  padding: `${tokens.space6}px ${isMobile ? tokens.space2 : tokens.space4}px`,
+                  width: '100%',
+                }}
+              >
                 <style>{`
                   @keyframes opencode-fadein { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
                   @keyframes opencode-glow { 0%, 100% { text-shadow: 0 0 20px ${tokens.primary}40, 0 0 40px ${tokens.primary}20; } 50% { text-shadow: 0 0 30px ${tokens.primary}60, 0 0 60px ${tokens.primary}30; } }
@@ -1135,13 +1372,45 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                   .bubble-action-btn:hover { background: ${tokens.surfaceHover} !important; color: ${tokens.text} !important; border-color: ${tokens.borderStrong} !important; }
                   .bubble-action-btn:focus { outline: 2px solid ${tokens.primary}; outline-offset: 1px; }
                 `}</style>
-                <div style={{ animation: 'opencode-fadein 0.8s ease-out', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space3 }}>
-                  <div style={{ fontSize: 'clamp(2.25rem, 9vw, 4.5rem)', fontWeight: 800, letterSpacing: '-0.03em', userSelect: 'none', lineHeight: 1, fontFamily: tokens.fontSans, background: `linear-gradient(135deg, ${tokens.textMuted}40, ${tokens.primary}80, ${tokens.textMuted}40)`, backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', animation: 'opencode-shimmer 4s linear infinite, opencode-glow 3s ease-in-out infinite' }}>
+                <div
+                  style={{
+                    animation: 'opencode-fadein 0.8s ease-out',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: tokens.space3,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 'clamp(2.25rem, 9vw, 4.5rem)',
+                      fontWeight: 800,
+                      letterSpacing: '-0.03em',
+                      userSelect: 'none',
+                      lineHeight: 1,
+                      fontFamily: tokens.fontSans,
+                      background: `linear-gradient(135deg, ${tokens.textMuted}40, ${tokens.primary}80, ${tokens.textMuted}40)`,
+                      backgroundSize: '200% auto',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      animation: 'opencode-shimmer 4s linear infinite, opencode-glow 3s ease-in-out infinite',
+                    }}
+                  >
                     AcodeDev
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: tokens.space1 }}>
                     {[0, 1, 2].map((i) => (
-                      <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: tokens.primary, animation: `opencode-dot-pulse 1.4s ease-in-out ${i * 0.2}s infinite` }} />
+                      <span
+                        key={i}
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: '50%',
+                          background: tokens.primary,
+                          animation: `opencode-dot-pulse 1.4s ease-in-out ${i * 0.2}s infinite`,
+                        }}
+                      />
                     ))}
                   </div>
                 </div>
@@ -1204,17 +1473,42 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
 
             {attachments.length > 0 && (
               <div style={{ display: 'flex', gap: tokens.space2, flexWrap: 'wrap' }}>
-                {attachments.map((a) => <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />)}
+                {attachments.map((a) => (
+                  <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />
+                ))}
               </div>
             )}
             <div ref={bottomRef} />
 
             {!pinnedToBottom && messages.length > 0 && (
               <button
-                onClick={() => { setPinnedToBottom(true); setSubtab('session'); requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })); }}
+                onClick={() => {
+                  setPinnedToBottom(true);
+                  setSubtab('session');
+                  requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }));
+                }}
                 title="Scroll to bottom"
                 aria-label="Scroll to bottom"
-                style={{ position: 'sticky', bottom: tokens.space2, left: '50%', transform: 'translateX(-50%)', width: 40, height: 40, borderRadius: '50%', border: `1px solid ${tokens.borderStrong}`, background: tokens.bgElevated, color: tokens.textSecondary, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: tokens.shadowMd, flexShrink: 0, marginLeft: 'auto', marginRight: 'auto' }}
+                style={{
+                  position: 'sticky',
+                  bottom: tokens.space2,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 40,
+                  height: 40,
+                  borderRadius: '50%',
+                  border: `1px solid ${tokens.borderStrong}`,
+                  background: tokens.bgElevated,
+                  color: tokens.textSecondary,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: tokens.shadowMd,
+                  flexShrink: 0,
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
+                }}
               >
                 <Icon name="arrowDown" size={18} strokeWidth={2} />
               </button>
@@ -1225,104 +1519,244 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
         )}
 
         {linkDraft.open && (
-          <div style={{ display: 'flex', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space4}px`, alignItems: 'center', flexWrap: 'wrap', borderTop: `1px solid ${tokens.border}` }}>
-            <div style={{ flex: 1, minWidth: 160 }}><Input value={linkDraft.url} onChange={(v) => setLinkDraft((d) => ({ ...d, url: v }))} placeholder="https://…" onEnter={addLink} /></div>
-            <div style={{ flex: 1, minWidth: 140 }}><Input value={linkDraft.title} onChange={(v) => setLinkDraft((d) => ({ ...d, title: v }))} placeholder="Label (optional)" /></div>
-            <Button size="sm" onClick={addLink} disabled={!linkDraft.url.trim()}>Add link</Button>
+          <div
+            style={{
+              display: 'flex',
+              gap: tokens.space2,
+              padding: `${tokens.space2}px ${tokens.space4}px`,
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              borderTop: `1px solid ${tokens.border}`,
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <Input
+                value={linkDraft.url}
+                onChange={(v) => setLinkDraft((d) => ({ ...d, url: v }))}
+                placeholder="https://…"
+                onEnter={addLink}
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 140 }}>
+              <Input value={linkDraft.title} onChange={(v) => setLinkDraft((d) => ({ ...d, title: v }))} placeholder="Label (optional)" />
+            </div>
+            <Button size="sm" onClick={addLink} disabled={!linkDraft.url.trim()}>
+              Add link
+            </Button>
           </div>
         )}
       </div>
 
       {/* Fixed bottom composer - only show when there are messages */}
       {messages.length > 0 && (
-      <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated, padding: `0 ${isMobile ? tokens.space2 : tokens.space4}px`, paddingBottom: isMobile ? 'env(safe-area-inset-bottom)' : undefined }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? tokens.space2 : tokens.space3, position: 'relative' }}>
-          <Composer
-            input={input}
-            setInput={setInput}
-            streaming={streaming}
-            onSend={() => void handleSend()}
-            sendDisabled={!input.trim() && attachments.length === 0}
-            onAddSkill={addSkill}
-            onToggleSkill={toggleSkill}
-            commands={COMMANDS}
-            onCommand={runCommand}
-            selectedSkills={selectedSkills}
-            skillsOpen={skillsOpen}
-            setSkillsOpen={setSkillsOpen}
-            provider={provider}
-            setProvider={setProvider}
-            model={model}
-            setModel={setModel}
-            models={providerModels}
-            freeOnly={freeOnly}
-            setFreeOnly={setFreeOnly}
-            minContext={minContext}
-            setMinContext={setMinContext}
-            temperature={temperature}
-            setTemperature={setTemperature}
-            maxTokens={maxTokens}
-            setMaxTokens={setMaxTokens}
-            gatewayProviders={gatewayProviders}
-            directProviders={directProviders}
-            onFileChange={onPickFiles}
-            onFolderChange={onPickFolder}
-            onLinkPick={() => setLinkDraft((d) => ({ ...d, open: !d.open }))}
-            currentProjectId={currentProjectId}
-            projects={projects.projectsList()}
-            onProjectChange={setCurrentProjectId}
-            onCreateProject={(name, gitRepo) => createProject(name, gitRepo ? { gitRepo } : undefined)}
-            onEditProject={setEditProjectId}
-            onDeleteProject={setDeleteProjectId}
-          />
-          <div style={{ marginTop: tokens.space1, fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center' }}>
-            Responses are generated by the selected model. AI can make mistakes — verify important output.
-          </div>
-        </div>
-      </div>
-      )}
-
-      {editProjectId && (() => {
-        const p = projects.getProject(editProjectId);
-        return p ? <EditProjectModal project={p} onClose={() => setEditProjectId(null)} onSave={editProject} /> : null;
-      })()}
-
-      {deleteProjectId && (() => {
-        const p = projects.getProject(deleteProjectId);
-        if (!p) return null;
-        return (
-          <div role="dialog" aria-modal="true" aria-label="Delete project" onClick={() => setDeleteProjectId(null)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: tokens.space4 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ width: 400, maxWidth: '90vw', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusLg, boxShadow: tokens.shadowLg, padding: tokens.space5 }}>
-              <h3 style={{ margin: `0 0 ${tokens.space2}px`, fontSize: tokens.fontSizeLg, fontWeight: 700, color: tokens.text }}>Delete project?</h3>
-              <p style={{ margin: `0 0 ${tokens.space4}px`, fontSize: tokens.fontSizeSm, color: tokens.textMuted, lineHeight: 1.5 }}>
-                <b style={{ color: tokens.text }}>{p.name}</b> will be removed. Conversations will be kept but unlinked from this project.
-              </p>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.space2 }}>
-                <button onClick={() => setDeleteProjectId(null)} style={{ padding: `6px ${tokens.space3}px`, borderRadius: tokens.radiusSm, border: `1px solid ${tokens.border}`, background: 'transparent', color: tokens.text, fontSize: tokens.fontSizeSm, cursor: 'pointer', fontFamily: tokens.fontSans }}>Cancel</button>
-                <button onClick={() => { deleteProject(p.id); setDeleteProjectId(null); }} style={{ padding: `6px ${tokens.space3}px`, borderRadius: tokens.radiusSm, border: 'none', background: tokens.danger, color: '#fff', fontSize: tokens.fontSizeSm, fontWeight: 600, cursor: 'pointer', fontFamily: tokens.fontSans }}>Delete</button>
-              </div>
+        <div
+          style={{
+            flexShrink: 0,
+            borderTop: `1px solid ${tokens.border}`,
+            background: tokens.bgElevated,
+            padding: `0 ${isMobile ? tokens.space2 : tokens.space4}px`,
+            paddingBottom: isMobile ? 'env(safe-area-inset-bottom)' : undefined,
+          }}
+        >
+          <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? tokens.space2 : tokens.space3, position: 'relative' }}>
+            <Composer
+              input={input}
+              setInput={setInput}
+              streaming={streaming}
+              onSend={() => void handleSend()}
+              sendDisabled={!input.trim() && attachments.length === 0}
+              onAddSkill={addSkill}
+              onToggleSkill={toggleSkill}
+              commands={COMMANDS}
+              onCommand={runCommand}
+              selectedSkills={selectedSkills}
+              skillsOpen={skillsOpen}
+              setSkillsOpen={setSkillsOpen}
+              provider={provider}
+              setProvider={setProvider}
+              model={model}
+              setModel={setModel}
+              models={providerModels}
+              freeOnly={freeOnly}
+              setFreeOnly={setFreeOnly}
+              minContext={minContext}
+              setMinContext={setMinContext}
+              temperature={temperature}
+              setTemperature={setTemperature}
+              maxTokens={maxTokens}
+              setMaxTokens={setMaxTokens}
+              gatewayProviders={gatewayProviders}
+              directProviders={directProviders}
+              onFileChange={onPickFiles}
+              onFolderChange={onPickFolder}
+              onLinkPick={() => setLinkDraft((d) => ({ ...d, open: !d.open }))}
+              currentProjectId={currentProjectId}
+              projects={projects.projectsList()}
+              onProjectChange={setCurrentProjectId}
+              onCreateProject={(name, gitRepo) => createProject(name, gitRepo ? { gitRepo } : undefined)}
+              onEditProject={setEditProjectId}
+              onDeleteProject={setDeleteProjectId}
+            />
+            <div style={{ marginTop: tokens.space1, fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center' }}>
+              Responses are generated by the selected model. AI can make mistakes — verify important output.
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
+
+      {editProjectId &&
+        (() => {
+          const p = projects.getProject(editProjectId);
+          return p ? <EditProjectModal project={p} onClose={() => setEditProjectId(null)} onSave={editProject} /> : null;
+        })()}
+
+      {deleteProjectId &&
+        (() => {
+          const p = projects.getProject(deleteProjectId);
+          if (!p) return null;
+          return (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Delete project"
+              onClick={() => setDeleteProjectId(null)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 200,
+                background: 'rgba(0,0,0,0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: tokens.space4,
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: 400,
+                  maxWidth: '90vw',
+                  background: tokens.surface,
+                  border: `1px solid ${tokens.borderStrong}`,
+                  borderRadius: tokens.radiusLg,
+                  boxShadow: tokens.shadowLg,
+                  padding: tokens.space5,
+                }}
+              >
+                <h3 style={{ margin: `0 0 ${tokens.space2}px`, fontSize: tokens.fontSizeLg, fontWeight: 700, color: tokens.text }}>
+                  Delete project?
+                </h3>
+                <p style={{ margin: `0 0 ${tokens.space4}px`, fontSize: tokens.fontSizeSm, color: tokens.textMuted, lineHeight: 1.5 }}>
+                  <b style={{ color: tokens.text }}>{p.name}</b> will be removed. Conversations will be kept but unlinked from this project.
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.space2 }}>
+                  <button
+                    onClick={() => setDeleteProjectId(null)}
+                    style={{
+                      padding: `6px ${tokens.space3}px`,
+                      borderRadius: tokens.radiusSm,
+                      border: `1px solid ${tokens.border}`,
+                      background: 'transparent',
+                      color: tokens.text,
+                      fontSize: tokens.fontSizeSm,
+                      cursor: 'pointer',
+                      fontFamily: tokens.fontSans,
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      deleteProject(p.id);
+                      setDeleteProjectId(null);
+                    }}
+                    style={{
+                      padding: `6px ${tokens.space3}px`,
+                      borderRadius: tokens.radiusSm,
+                      border: 'none',
+                      background: tokens.danger,
+                      color: '#fff',
+                      fontSize: tokens.fontSizeSm,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontFamily: tokens.fontSans,
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
     </div>
   );
 }
 
-const AttachmentChip = React.memo(function AttachmentChip({ attachment: a, onRemove }: { attachment: ChatAttachment; onRemove: () => void }) {
+const AttachmentChip = React.memo(function AttachmentChip({
+  attachment: a,
+  onRemove,
+}: {
+  attachment: ChatAttachment;
+  onRemove: () => void;
+}) {
   const { tokens } = useTheme();
-  const meta = a.kind === 'folder' ? `${a.children?.length ?? 0} files` : a.kind === 'image' ? 'image' : a.kind === 'link' ? 'link' : a.size ? `${(a.size / 1024).toFixed(0)}kb` : a.kind;
+  const meta =
+    a.kind === 'folder'
+      ? `${a.children?.length ?? 0} files`
+      : a.kind === 'image'
+        ? 'image'
+        : a.kind === 'link'
+          ? 'link'
+          : a.size
+            ? `${(a.size / 1024).toFixed(0)}kb`
+            : a.kind;
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusFull, border: `1px solid ${tokens.borderStrong}`, background: tokens.bgSubtle, fontSize: tokens.fontSizeXs }}>
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: tokens.space1,
+        padding: `4px ${tokens.space2}px`,
+        borderRadius: tokens.radiusFull,
+        border: `1px solid ${tokens.borderStrong}`,
+        background: tokens.bgSubtle,
+        fontSize: tokens.fontSizeXs,
+      }}
+    >
       <span>{kindIcon[a.kind]}</span>
       <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{a.name}</span>
       <span style={{ color: tokens.textMuted }}>{meta}</span>
-      <button onClick={onRemove} title="Remove" style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', padding: 0, lineHeight: 1, display: 'inline-flex' }}><Icon name="x" size={14} /></button>
+      <button
+        onClick={onRemove}
+        title="Remove"
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: tokens.textMuted,
+          cursor: 'pointer',
+          padding: 0,
+          lineHeight: 1,
+          display: 'inline-flex',
+        }}
+      >
+        <Icon name="x" size={14} />
+      </button>
     </div>
   );
 });
 
-function AddMenu({ onFile, onFolder, onLink, onClose }: { onFile: () => void; onFolder: () => void; onLink: () => void; onClose: () => void }) {
+function AddMenu({
+  onFile,
+  onFolder,
+  onLink,
+  onClose,
+}: {
+  onFile: () => void;
+  onFolder: () => void;
+  onLink: () => void;
+  onClose: () => void;
+}) {
   const { tokens } = useTheme();
   const items = [
     { icon: 'fileText', label: 'File', fn: onFile },
@@ -1335,12 +1769,54 @@ function AddMenu({ onFile, onFolder, onLink, onClose }: { onFile: () => void; on
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
-      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 71, width: 220, maxWidth: 'calc(100vw - 32px)', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
-        <div style={{ padding: `${tokens.space1}px ${tokens.space2}px`, fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontWeight: 600 }}>Add attachment</div>
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 'calc(100% + 8px)',
+          left: 0,
+          zIndex: 71,
+          width: 220,
+          maxWidth: 'calc(100vw - 32px)',
+          background: tokens.surface,
+          border: `1px solid ${tokens.borderStrong}`,
+          borderRadius: tokens.radiusMd,
+          boxShadow: tokens.shadowLg,
+          padding: tokens.space1,
+        }}
+      >
+        <div
+          style={{
+            padding: `${tokens.space1}px ${tokens.space2}px`,
+            fontSize: tokens.fontSizeXs,
+            color: tokens.textMuted,
+            fontWeight: 600,
+          }}
+        >
+          Add attachment
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.space1 }}>
           {items.map((it) => (
-            <button key={it.label} onClick={() => it.fn()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: `${tokens.space2}px 4px`, border: `1px dashed ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, background: tokens.bg, cursor: 'pointer', color: tokens.textSecondary, fontFamily: tokens.fontSans, fontSize: tokens.fontSizeXs }}>
-              <span style={{ display: 'inline-flex' }}><Icon name={it.icon as IconName} size={18} /></span>
+            <button
+              key={it.label}
+              onClick={() => it.fn()}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 2,
+                padding: `${tokens.space2}px 4px`,
+                border: `1px dashed ${tokens.borderStrong}`,
+                borderRadius: tokens.radiusMd,
+                background: tokens.bg,
+                cursor: 'pointer',
+                color: tokens.textSecondary,
+                fontFamily: tokens.fontSans,
+                fontSize: tokens.fontSizeXs,
+              }}
+            >
+              <span style={{ display: 'inline-flex' }}>
+                <Icon name={it.icon as IconName} size={18} />
+              </span>
               <span>{it.label}</span>
             </button>
           ))}
@@ -1473,7 +1949,20 @@ function Composer(props: {
             key={s.id}
             title={`Remove ${s.name}`}
             onClick={() => props.onToggleSkill(s.id)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: `2px ${tokens.space2}px`, borderRadius: tokens.radiusFull, border: `1px solid ${tokens.primary}66`, background: `${tokens.primary}14`, color: tokens.text, fontSize: tokens.fontSizeXs, cursor: 'pointer', fontFamily: tokens.fontSans, fontWeight: 600 }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: `2px ${tokens.space2}px`,
+              borderRadius: tokens.radiusFull,
+              border: `1px solid ${tokens.primary}66`,
+              background: `${tokens.primary}14`,
+              color: tokens.text,
+              fontSize: tokens.fontSizeXs,
+              cursor: 'pointer',
+              fontFamily: tokens.fontSans,
+              fontWeight: 600,
+            }}
           >
             <span>{s.icon}</span>
             <span>{s.name}</span>
@@ -1483,7 +1972,20 @@ function Composer(props: {
         <button
           onClick={() => props.setSkillsOpen(!props.skillsOpen)}
           title="Skills & context"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: `2px ${tokens.space2}px`, borderRadius: tokens.radiusFull, border: `1px solid ${props.skillsOpen ? tokens.primary : tokens.borderStrong}`, background: props.skillsOpen ? `${tokens.primary}14` : tokens.bgSubtle, color: props.skillsOpen ? tokens.primary : tokens.textSecondary, fontSize: tokens.fontSizeXs, cursor: 'pointer', fontFamily: tokens.fontSans, fontWeight: 600 }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: `2px ${tokens.space2}px`,
+            borderRadius: tokens.radiusFull,
+            border: `1px solid ${props.skillsOpen ? tokens.primary : tokens.borderStrong}`,
+            background: props.skillsOpen ? `${tokens.primary}14` : tokens.bgSubtle,
+            color: props.skillsOpen ? tokens.primary : tokens.textSecondary,
+            fontSize: tokens.fontSizeXs,
+            cursor: 'pointer',
+            fontFamily: tokens.fontSans,
+            fontWeight: 600,
+          }}
         >
           <span>◎</span>
           <span>Skills</span>
@@ -1498,7 +2000,18 @@ function Composer(props: {
         )}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, background: tokens.bg, border: `1.5px dashed ${paramsOpen ? tokens.primary : tokens.borderStrong}`, borderRadius: tokens.radiusLg, padding: tokens.space2, transition: 'border-color 0.12s ease' }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0,
+          background: tokens.bg,
+          border: `1.5px dashed ${paramsOpen ? tokens.primary : tokens.borderStrong}`,
+          borderRadius: tokens.radiusLg,
+          padding: tokens.space2,
+          transition: 'border-color 0.12s ease',
+        }}
+      >
         <textarea
           ref={textareaRef}
           rows={2}
@@ -1506,14 +2019,52 @@ function Composer(props: {
           value={props.input}
           onChange={(e) => props.setInput(e.target.value)}
           onKeyDown={onKey}
-          style={{ width: '100%', background: 'transparent', border: 'none', color: tokens.text, padding: `${tokens.space1}px ${tokens.space2}px`, fontSize: tokens.fontSizeMd, fontFamily: tokens.fontSans, outline: 'none', resize: 'none', boxSizing: 'border-box', lineHeight: 1.5, minHeight: 44, maxHeight: 220 }}
+          style={{
+            width: '100%',
+            background: 'transparent',
+            border: 'none',
+            color: tokens.text,
+            padding: `${tokens.space1}px ${tokens.space2}px`,
+            fontSize: tokens.fontSizeMd,
+            fontFamily: tokens.fontSans,
+            outline: 'none',
+            resize: 'none',
+            boxSizing: 'border-box',
+            lineHeight: 1.5,
+            minHeight: 44,
+            maxHeight: 220,
+          }}
         />
         {/* Slash / @ mention menu */}
         {menu && !menuDismissed && (cmdList.length > 0 || skillList.length > 0) && (
           <>
             <div onClick={() => setMenuDismissed(true)} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
-            <div style={{ position: 'absolute', bottom: 'calc(100% + 46px)', left: 0, right: 0, zIndex: 71, minWidth: 260, maxWidth: 'calc(100vw - 32px)', maxHeight: 280, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
-              <div style={{ padding: `${tokens.space1}px ${tokens.space2}px`, fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontWeight: 600 }}>
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 'calc(100% + 46px)',
+                left: 0,
+                right: 0,
+                zIndex: 71,
+                minWidth: 260,
+                maxWidth: 'calc(100vw - 32px)',
+                maxHeight: 280,
+                overflowY: 'auto',
+                background: tokens.surface,
+                border: `1px solid ${tokens.borderStrong}`,
+                borderRadius: tokens.radiusMd,
+                boxShadow: tokens.shadowLg,
+                padding: tokens.space1,
+              }}
+            >
+              <div
+                style={{
+                  padding: `${tokens.space1}px ${tokens.space2}px`,
+                  fontSize: tokens.fontSizeXs,
+                  color: tokens.textMuted,
+                  fontWeight: 600,
+                }}
+              >
                 {menu.kind === 'cmd' ? 'Commands' : 'Context — skills'}
               </div>
               {(menu.kind === 'cmd' ? cmdList : skillList).map((item: unknown, idx: number) => {
@@ -1529,12 +2080,39 @@ function Composer(props: {
                       else pickSkill(item as Skill);
                     }}
                     onMouseEnter={() => setMenuIdx(idx)}
-                    style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, width: '100%', textAlign: 'left', padding: `${tokens.space2}px ${tokens.space3}px`, background: idx === menuIdx ? tokens.surfaceHover : 'transparent', border: 'none', borderRadius: tokens.radiusSm, cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.text, fontSize: tokens.fontSizeSm }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.space2,
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: `${tokens.space2}px ${tokens.space3}px`,
+                      background: idx === menuIdx ? tokens.surfaceHover : 'transparent',
+                      border: 'none',
+                      borderRadius: tokens.radiusSm,
+                      cursor: 'pointer',
+                      fontFamily: tokens.fontSans,
+                      color: tokens.text,
+                      fontSize: tokens.fontSizeSm,
+                    }}
                   >
-                    <span style={{ width: 18, flexShrink: 0, textAlign: 'center', color: tokens.textSecondary }}>{isCmd ? <Icon name={icon as IconName} size={15} /> : icon}</span>
+                    <span style={{ width: 18, flexShrink: 0, textAlign: 'center', color: tokens.textSecondary }}>
+                      {isCmd ? <Icon name={icon as IconName} size={15} /> : icon}
+                    </span>
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontWeight: 600 }}>{label}</span>
-                      <span style={{ display: 'block', fontSize: tokens.fontSizeXs, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hint}</span>
+                      <span
+                        style={{
+                          display: 'block',
+                          fontSize: tokens.fontSizeXs,
+                          color: tokens.textMuted,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {hint}
+                      </span>
                     </span>
                   </button>
                 );
@@ -1547,13 +2125,36 @@ function Composer(props: {
             <button
               title="Add attachment"
               onClick={() => setAttachOpen((o) => !o)}
-              style={{ width: 34, height: 34, borderRadius: tokens.radiusMd, background: attachOpen ? `${tokens.primary}1a` : 'transparent', border: `1px solid ${attachOpen ? tokens.primary : 'transparent'}`, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: attachOpen ? tokens.primary : tokens.textSecondary }}
-            >+</button>
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: tokens.radiusMd,
+                background: attachOpen ? `${tokens.primary}1a` : 'transparent',
+                border: `1px solid ${attachOpen ? tokens.primary : 'transparent'}`,
+                cursor: 'pointer',
+                fontSize: 16,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: attachOpen ? tokens.primary : tokens.textSecondary,
+              }}
+            >
+              +
+            </button>
             {attachOpen && (
               <AddMenu
-                onFile={() => { setAttachOpen(false); fileRef.current?.click(); }}
-                onFolder={() => { setAttachOpen(false); folderRef.current?.click(); }}
-                onLink={() => { setAttachOpen(false); props.onLinkPick(); }}
+                onFile={() => {
+                  setAttachOpen(false);
+                  fileRef.current?.click();
+                }}
+                onFolder={() => {
+                  setAttachOpen(false);
+                  folderRef.current?.click();
+                }}
+                onLink={() => {
+                  setAttachOpen(false);
+                  props.onLinkPick();
+                }}
                 onClose={() => setAttachOpen(false)}
               />
             )}
@@ -1562,19 +2163,76 @@ function Composer(props: {
             <button
               onClick={() => setProjectOpen((o) => !o)}
               title="Project"
-              style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, maxWidth: 160, overflow: 'hidden', minWidth: 0 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.space1,
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: tokens.fontSans,
+                color: tokens.textSecondary,
+                fontSize: tokens.fontSizeSm,
+                padding: `${tokens.space1}px ${tokens.space2}px`,
+                borderRadius: tokens.radiusMd,
+                maxWidth: 160,
+                overflow: 'hidden',
+                minWidth: 0,
+              }}
             >
               {(() => {
                 const active = props.projects.find((p: ProjectDoc) => p.id === props.currentProjectId);
-                const repoName = active?.gitRepo?.split('/').pop()?.replace(/\.git$/, '') ?? null;
+                const repoName =
+                  active?.gitRepo
+                    ?.split('/')
+                    .pop()
+                    ?.replace(/\.git$/, '') ?? null;
                 return (
                   <>
-                    <span style={{ width: 18, height: 18, borderRadius: tokens.radiusSm, background: active?.color ?? tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 9, flexShrink: 0 }}>
+                    <span
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: tokens.radiusSm,
+                        background: active?.color ?? tokens.primary,
+                        color: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: 9,
+                        flexShrink: 0,
+                      }}
+                    >
                       {(active?.name?.charAt(0) || 'A').toUpperCase()}
                     </span>
-                    <span style={{ overflow: 'hidden', textAlign: 'left', minWidth: 0, flex: 1, display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                      <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{active?.name ?? 'All'}</span>
-                      {repoName && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/ {repoName}</span>}
+                    <span
+                      style={{
+                        overflow: 'hidden',
+                        textAlign: 'left',
+                        minWidth: 0,
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        gap: 4,
+                      }}
+                    >
+                      <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {active?.name ?? 'All'}
+                      </span>
+                      {repoName && (
+                        <span
+                          style={{
+                            fontSize: tokens.fontSizeXs,
+                            color: tokens.textMuted,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          / {repoName}
+                        </span>
+                      )}
                     </span>
                     <Icon name="chevronDown" size={12} strokeWidth={2} style={{ flexShrink: 0 }} />
                   </>
@@ -1585,8 +2243,14 @@ function Composer(props: {
               <ProjectDropdown
                 projects={props.projects}
                 activeId={props.currentProjectId}
-                onSelect={(id) => { props.onProjectChange(id); setProjectOpen(false); }}
-                onCreate={(name, gitRepo) => { props.onCreateProject(name, gitRepo); setProjectOpen(false); }}
+                onSelect={(id) => {
+                  props.onProjectChange(id);
+                  setProjectOpen(false);
+                }}
+                onCreate={(name, gitRepo) => {
+                  props.onCreateProject(name, gitRepo);
+                  setProjectOpen(false);
+                }}
                 onEdit={props.onEditProject}
                 onDelete={props.onDeleteProject}
                 onClose={() => setProjectOpen(false)}
@@ -1597,10 +2261,26 @@ function Composer(props: {
             <button
               onClick={() => setParamsOpen((o) => !o)}
               title="Model & settings"
-              style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, width: '100%', maxWidth: '100%', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, overflow: 'hidden' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.space2,
+                width: '100%',
+                maxWidth: '100%',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: tokens.fontSans,
+                color: tokens.textSecondary,
+                fontSize: tokens.fontSizeSm,
+                padding: `${tokens.space1}px ${tokens.space2}px`,
+                overflow: 'hidden',
+              }}
             >
               <Icon name="settings" size={14} color={tokens.textSecondary} style={{ flexShrink: 0 }} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{props.model.split('/').pop() || 'Select model'}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
+                {props.model.split('/').pop() || 'Select model'}
+              </span>
               <Icon name="chevronDown" size={14} color={tokens.textSecondary} style={{ flexShrink: 0 }} />
             </button>
             {paramsOpen && (
@@ -1630,17 +2310,34 @@ function Composer(props: {
               disabled={props.sendDisabled || props.streaming}
               title="Send"
               aria-label="Send"
-              style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: props.sendDisabled || props.streaming ? tokens.surfaceHover : tokens.primary, color: props.sendDisabled || props.streaming ? tokens.textMuted : '#fff', cursor: props.sendDisabled || props.streaming ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: '50%',
+                border: 'none',
+                background: props.sendDisabled || props.streaming ? tokens.surfaceHover : tokens.primary,
+                color: props.sendDisabled || props.streaming ? tokens.textMuted : '#fff',
+                cursor: props.sendDisabled || props.streaming ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
             >
-              {props.streaming ? <Spinner size={16} color="#fff" /> : (
-                <Icon name="send" size={18} strokeWidth={2} />
-              )}
+              {props.streaming ? <Spinner size={16} color="#fff" /> : <Icon name="send" size={18} strokeWidth={2} />}
             </button>
           </div>
         </div>
       </div>
       <input ref={fileRef} type="file" multiple style={{ display: 'none' }} onChange={props.onFileChange} />
-      <input ref={folderRef} type="file" multiple style={{ display: 'none' }} {...({ webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>)} onChange={props.onFolderChange} />
+      <input
+        ref={folderRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        {...({ webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+        onChange={props.onFolderChange}
+      />
     </div>
   );
 }
@@ -1658,35 +2355,116 @@ function SkillsPicker({ selected, onToggle, onClose }: { selected: Set<string>; 
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
-      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 71, width: 320, maxWidth: 'calc(100vw - 32px)', maxHeight: 340, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space2 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space1}px ${tokens.space2}px` }}>
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 'calc(100% + 8px)',
+          left: 0,
+          right: 0,
+          zIndex: 71,
+          width: 320,
+          maxWidth: 'calc(100vw - 32px)',
+          maxHeight: 340,
+          overflowY: 'auto',
+          background: tokens.surface,
+          border: `1px solid ${tokens.borderStrong}`,
+          borderRadius: tokens.radiusMd,
+          boxShadow: tokens.shadowLg,
+          padding: tokens.space2,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: `${tokens.space1}px ${tokens.space2}px`,
+          }}
+        >
           <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 700 }}>Skills & context</span>
-          <button onClick={onClose} title="Close" style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', fontSize: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}><Icon name="x" size={14} /></button>
+          <button
+            onClick={onClose}
+            title="Close"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: tokens.textMuted,
+              cursor: 'pointer',
+              fontSize: 14,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 2,
+            }}
+          >
+            <Icon name="x" size={14} />
+          </button>
         </div>
         <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, padding: `0 ${tokens.space2}px ${tokens.space2}px` }}>
-          Active skills are injected into the system prompt and steer how the model answers. Type <span style={{ fontFamily: tokens.fontMono }}>@</span> in the composer to quick-add.
+          Active skills are injected into the system prompt and steer how the model answers. Type{' '}
+          <span style={{ fontFamily: tokens.fontMono }}>@</span> in the composer to quick-add.
         </div>
         {groups.map((g) => {
           const skills = BUILTIN_SKILLS.filter((s) => s.group === g.id);
           if (!skills.length) return null;
           return (
             <div key={g.id} style={{ marginBottom: tokens.space2 }}>
-              <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, padding: `${tokens.space1}px ${tokens.space2}px` }}>{g.label}</div>
+              <div
+                style={{
+                  fontSize: tokens.fontSizeXs,
+                  fontWeight: 600,
+                  color: tokens.textMuted,
+                  padding: `${tokens.space1}px ${tokens.space2}px`,
+                }}
+              >
+                {g.label}
+              </div>
               {skills.map((s) => {
                 const active = selected.has(s.id);
                 return (
                   <button
                     key={s.id}
                     onClick={() => onToggle(s.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, width: '100%', textAlign: 'left', padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', background: active ? `${tokens.primary}14` : 'transparent', border: `1px solid ${active ? tokens.primary : 'transparent'}`, fontFamily: tokens.fontSans, color: tokens.text, fontSize: tokens.fontSizeSm, marginBottom: 2 }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.space2,
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: `${tokens.space2}px ${tokens.space2}px`,
+                      borderRadius: tokens.radiusMd,
+                      cursor: 'pointer',
+                      background: active ? `${tokens.primary}14` : 'transparent',
+                      border: `1px solid ${active ? tokens.primary : 'transparent'}`,
+                      fontFamily: tokens.fontSans,
+                      color: tokens.text,
+                      fontSize: tokens.fontSizeSm,
+                      marginBottom: 2,
+                    }}
                   >
                     <span style={{ width: 20, textAlign: 'center', flexShrink: 0 }}>{s.icon}</span>
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontWeight: 600 }}>{s.name}</span>
                       <span style={{ display: 'block', fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{s.description}</span>
                     </span>
-                    <span style={{ width: 16, height: 16, borderRadius: tokens.radiusSm, border: `1px solid ${active ? tokens.primary : tokens.borderStrong}`, background: active ? tokens.primary : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {active && <span style={{ color: '#fff', lineHeight: 1, display: 'inline-flex' }}><Icon name="check" size={12} /></span>}
+                    <span
+                      style={{
+                        width: 16,
+                        height: 16,
+                        borderRadius: tokens.radiusSm,
+                        border: `1px solid ${active ? tokens.primary : tokens.borderStrong}`,
+                        background: active ? tokens.primary : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {active && (
+                        <span style={{ color: '#fff', lineHeight: 1, display: 'inline-flex' }}>
+                          <Icon name="check" size={12} />
+                        </span>
+                      )}
                     </span>
                   </button>
                 );
@@ -1699,7 +2477,24 @@ function SkillsPicker({ selected, onToggle, onClose }: { selected: Set<string>; 
   );
 }
 
-function ParamsMenu({ provider, setProvider, gatewayProviders, directProviders, models, model, setModel, freeOnly, setFreeOnly, minContext, setMinContext, temperature, setTemperature, maxTokens, setMaxTokens, onClose }: {
+function ParamsMenu({
+  provider,
+  setProvider,
+  gatewayProviders,
+  directProviders,
+  models,
+  model,
+  setModel,
+  freeOnly,
+  setFreeOnly,
+  minContext,
+  setMinContext,
+  temperature,
+  setTemperature,
+  maxTokens,
+  setMaxTokens,
+  onClose,
+}: {
   provider: ProviderId;
   setProvider: (v: ProviderId) => void;
   gatewayProviders: { id: string; name: string }[];
@@ -1744,12 +2539,29 @@ function ParamsMenu({ provider, setProvider, gatewayProviders, directProviders, 
         }}
       >
         <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 700, marginBottom: tokens.space2 }}>Model</div>
-        <Select label="Provider" value={provider} onChange={(v) => { setProvider(v as ProviderId); const first = listModels(v as ProviderId).find((m) => (freeOnly ? m.isFree : true))?.id ?? ''; setModel(first); }} options={[
-          ...gatewayProviders.map((p) => ({ label: `${p.name} · gateway`, value: p.id })),
-          ...directProviders.map((p) => ({ label: p.name, value: p.id })),
-        ]} />
+        <Select
+          label="Provider"
+          value={provider}
+          onChange={(v) => {
+            setProvider(v as ProviderId);
+            const first = listModels(v as ProviderId).find((m) => (freeOnly ? m.isFree : true))?.id ?? '';
+            setModel(first);
+          }}
+          options={[
+            ...gatewayProviders.map((p) => ({ label: `${p.name} · gateway`, value: p.id })),
+            ...directProviders.map((p) => ({ label: p.name, value: p.id })),
+          ]}
+        />
         <div style={{ marginTop: tokens.space2 }}>
-          <Select label={`Model · ${context} ctx`} value={model} onChange={setModel} options={models.map((m) => ({ label: `${m.name}${m.isFree ? ' · free' : ''} · ${formatContext(m.contextWindow ?? 0)} ctx`, value: m.id }))} />
+          <Select
+            label={`Model · ${context} ctx`}
+            value={model}
+            onChange={setModel}
+            options={models.map((m) => ({
+              label: `${m.name}${m.isFree ? ' · free' : ''} · ${formatContext(m.contextWindow ?? 0)} ctx`,
+              value: m.id,
+            }))}
+          />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, marginTop: tokens.space3 }}>
           <Toggle checked={freeOnly} onChange={setFreeOnly} label="Free only" />
@@ -1759,15 +2571,27 @@ function ParamsMenu({ provider, setProvider, gatewayProviders, directProviders, 
         </div>
         <div style={{ height: 1, background: tokens.border, margin: `${tokens.space3}px 0` }} />
         <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 700, marginBottom: tokens.space2 }}>Generation</div>
-        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2, cursor: 'pointer' }}>
+        <label
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2, cursor: 'pointer' }}
+        >
           <span style={{ fontSize: tokens.fontSizeSm }}>Advanced</span>
           <input type="checkbox" checked={showAdvanced} onChange={(e) => setShowAdvanced(e.target.checked)} />
         </label>
         {showAdvanced && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>
-          <Input label={`Temperature: ${temperature}`} value={String(temperature)} onChange={(v) => setTemperature(Math.max(0, Math.min(2, Number(v) || 0)))} type="number" />
-          <Input label="Max tokens" value={String(maxTokens)} onChange={(v) => setMaxTokens(Math.max(1, Number(v) || 2048))} type="number" />
-        </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>
+            <Input
+              label={`Temperature: ${temperature}`}
+              value={String(temperature)}
+              onChange={(v) => setTemperature(Math.max(0, Math.min(2, Number(v) || 0)))}
+              type="number"
+            />
+            <Input
+              label="Max tokens"
+              value={String(maxTokens)}
+              onChange={(v) => setMaxTokens(Math.max(1, Number(v) || 2048))}
+              type="number"
+            />
+          </div>
         )}
       </div>
     </>
@@ -1792,14 +2616,33 @@ function SubTab({ active, onClick, children }: { active: boolean; onClick: () =>
       }}
     >
       {children}
-      {active && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: tokens.primary, borderRadius: tokens.radiusFull }} />}
+      {active && (
+        <span
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 2,
+            background: tokens.primary,
+            borderRadius: tokens.radiusFull,
+          }}
+        />
+      )}
     </button>
   );
 }
 
-function OverflowMenu({ hasSession, onNewSession, onRename, onShare, onExport, onArchive, onDelete, onClose }: {
+function OverflowMenu({
+  hasSession,
+  onRename,
+  onShare,
+  onExport,
+  onArchive,
+  onDelete,
+  onClose,
+}: {
   hasSession: boolean;
-  onNewSession: () => void;
   onRename: () => void;
   onShare: () => void;
   onExport: () => void;
@@ -1811,7 +2654,20 @@ function OverflowMenu({ hasSession, onNewSession, onRename, onShare, onExport, o
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
-      <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 71, minWidth: 180, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: 'calc(100% + 8px)',
+          right: 0,
+          zIndex: 71,
+          minWidth: 180,
+          background: tokens.surface,
+          border: `1px solid ${tokens.borderStrong}`,
+          borderRadius: tokens.radiusMd,
+          boxShadow: tokens.shadowLg,
+          padding: tokens.space1,
+        }}
+      >
         <MenuItem label="Rename" onClick={onRename} disabled={!hasSession} />
         <MenuItem label="Share..." onClick={onShare} disabled={!hasSession} />
         <MenuItem label="Export..." onClick={onExport} disabled={!hasSession} />
@@ -1829,22 +2685,53 @@ function MenuItem({ label, onClick, danger, disabled }: { label: string; onClick
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
-      style={{ width: '100%', textAlign: 'left', padding: `${tokens.space2}px ${tokens.space3}px`, background: 'transparent', border: 'none', borderRadius: tokens.radiusSm, color: disabled ? tokens.textMuted : danger ? tokens.danger : tokens.text, fontSize: tokens.fontSizeSm, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: tokens.fontSans, opacity: disabled ? 0.6 : 1 }}
-      onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover; }}
-      onMouseLeave={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+      style={{
+        width: '100%',
+        textAlign: 'left',
+        padding: `${tokens.space2}px ${tokens.space3}px`,
+        background: 'transparent',
+        border: 'none',
+        borderRadius: tokens.radiusSm,
+        color: disabled ? tokens.textMuted : danger ? tokens.danger : tokens.text,
+        fontSize: tokens.fontSizeSm,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontFamily: tokens.fontSans,
+        opacity: disabled ? 0.6 : 1,
+      }}
+      onMouseEnter={(e) => {
+        if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover;
+      }}
+      onMouseLeave={(e) => {
+        if (!disabled) (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+      }}
     >
       {label}
     </button>
   );
 }
 
-const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }: { msg: ChatMessage; streaming: boolean; onRetry?: () => void; onInsert?: (text: string) => void }) {
+const Bubble = React.memo(function Bubble({
+  msg,
+  streaming,
+  onRetry,
+  onInsert,
+}: {
+  msg: ChatMessage;
+  streaming: boolean;
+  onRetry?: () => void;
+  onInsert?: (text: string) => void;
+}) {
   const { tokens } = useTheme();
   const isUser = msg.role === 'user';
   const [copied, setCopied] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const copy = () => {
-    navigator.clipboard?.writeText(msg.content).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {});
+    navigator.clipboard
+      ?.writeText(msg.content)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
   };
 
   const renderToolCalls = (content: string) => {
@@ -1860,14 +2747,45 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
       if (toolCallMatch) {
         const [, toolName, argsRaw] = toolCallMatch;
         let argsDisplay = argsRaw;
-        try { argsDisplay = JSON.stringify(JSON.parse(argsRaw), null, 2); } catch { /* keep raw */ }
+        try {
+          argsDisplay = JSON.stringify(JSON.parse(argsRaw), null, 2);
+        } catch {
+          /* keep raw */
+        }
         elements.push(
-          <div key={`tool-${i}`} style={{ display: 'flex', flexDirection: 'column', gap: tokens.space1, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, marginBottom: tokens.space1 }}>
+          <div
+            key={`tool-${i}`}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: tokens.space1,
+              padding: `${tokens.space2}px ${tokens.space3}px`,
+              background: tokens.bgSubtle,
+              borderRadius: tokens.radiusMd,
+              border: `1px solid ${tokens.border}`,
+              marginBottom: tokens.space1,
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2 }}>
-              <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.accent, textTransform: 'uppercase' }}>🔧 {toolName}</span>
+              <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.accent, textTransform: 'uppercase' }}>
+                🔧 {toolName}
+              </span>
             </div>
-            <pre style={{ margin: 0, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, color: tokens.textMuted, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 120, overflow: 'auto' }}>{argsDisplay}</pre>
-          </div>
+            <pre
+              style={{
+                margin: 0,
+                fontFamily: tokens.fontMono,
+                fontSize: tokens.fontSizeXs,
+                color: tokens.textMuted,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                maxHeight: 120,
+                overflow: 'auto',
+              }}
+            >
+              {argsDisplay}
+            </pre>
+          </div>,
         );
         i++;
         continue;
@@ -1878,12 +2796,39 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
       if (toolResultMatch) {
         const [, toolName, result] = toolResultMatch;
         elements.push(
-          <div key={`tool-result-${i}`} style={{ display: 'flex', flexDirection: 'column', gap: tokens.space1, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, marginBottom: tokens.space1 }}>
+          <div
+            key={`tool-result-${i}`}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: tokens.space1,
+              padding: `${tokens.space2}px ${tokens.space3}px`,
+              background: tokens.bgSubtle,
+              borderRadius: tokens.radiusMd,
+              border: `1px solid ${tokens.border}`,
+              marginBottom: tokens.space1,
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2 }}>
-              <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.success, textTransform: 'uppercase' }}>✅ {toolName}</span>
+              <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.success, textTransform: 'uppercase' }}>
+                ✅ {toolName}
+              </span>
             </div>
-            <pre style={{ margin: 0, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, color: tokens.textMuted, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 120, overflow: 'auto' }}>{result}</pre>
-          </div>
+            <pre
+              style={{
+                margin: 0,
+                fontFamily: tokens.fontMono,
+                fontSize: tokens.fontSizeXs,
+                color: tokens.textMuted,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                maxHeight: 120,
+                overflow: 'auto',
+              }}
+            >
+              {result}
+            </pre>
+          </div>,
         );
         i++;
         continue;
@@ -1892,11 +2837,23 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
       const writeMatch = line.match(/^Write\s+([^\s]+)\s+(.+)$/i);
       if (writeMatch) {
         elements.push(
-          <div key={`tool-${i}`} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, marginBottom: tokens.space1 }}>
+          <div
+            key={`tool-${i}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space2,
+              padding: `${tokens.space2}px ${tokens.space3}px`,
+              background: tokens.bgSubtle,
+              borderRadius: tokens.radiusMd,
+              border: `1px solid ${tokens.border}`,
+              marginBottom: tokens.space1,
+            }}
+          >
             <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.success, textTransform: 'uppercase' }}>Write</span>
             <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, color: tokens.text }}>{writeMatch[1]}</span>
             <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{writeMatch[2]}</span>
-          </div>
+          </div>,
         );
         i++;
         continue;
@@ -1905,10 +2862,24 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
       const exploredMatch = line.match(/^Explored\s+(\d+)\s+read$/i);
       if (exploredMatch) {
         elements.push(
-          <div key={`tool-${i}`} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, marginBottom: tokens.space1 }}>
-            <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.primary, textTransform: 'uppercase' }}>Explored</span>
+          <div
+            key={`tool-${i}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space2,
+              padding: `${tokens.space2}px ${tokens.space3}px`,
+              background: tokens.bgSubtle,
+              borderRadius: tokens.radiusMd,
+              border: `1px solid ${tokens.border}`,
+              marginBottom: tokens.space1,
+            }}
+          >
+            <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.primary, textTransform: 'uppercase' }}>
+              Explored
+            </span>
             <span style={{ fontSize: tokens.fontSizeSm, color: tokens.text }}>{exploredMatch[1]} read</span>
-          </div>
+          </div>,
         );
         i++;
         continue;
@@ -1917,11 +2888,34 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
       const webfetchMatch = line.match(/^Webfetch\s+(.+)$/i);
       if (webfetchMatch) {
         elements.push(
-          <div key={`tool-${i}`} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, marginBottom: tokens.space1 }}>
+          <div
+            key={`tool-${i}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space2,
+              padding: `${tokens.space2}px ${tokens.space3}px`,
+              background: tokens.bgSubtle,
+              borderRadius: tokens.radiusMd,
+              border: `1px solid ${tokens.border}`,
+              marginBottom: tokens.space1,
+            }}
+          >
             <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.accent, textTransform: 'uppercase' }}>Webfetch</span>
-            <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, color: tokens.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{webfetchMatch[1]}</span>
+            <span
+              style={{
+                fontFamily: tokens.fontMono,
+                fontSize: tokens.fontSizeSm,
+                color: tokens.text,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {webfetchMatch[1]}
+            </span>
             <Icon name="externalLink" size={12} color={tokens.textMuted} strokeWidth={2} style={{ flexShrink: 0 }} />
-          </div>
+          </div>,
         );
         i++;
         continue;
@@ -1942,9 +2936,7 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
           output = outputLines.join('\n');
           j++;
         }
-        elements.push(
-          <ShellBlock key={`shell-${i}`} command={cmd} output={output} />
-        );
+        elements.push(<ShellBlock key={`shell-${i}`} command={cmd} output={output} />);
         i = j;
         continue;
       }
@@ -1952,7 +2944,7 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
       elements.push(
         <div key={`line-${i}`} style={{ marginBottom: tokens.space1 }}>
           <Markdown content={line} />
-        </div>
+        </div>,
       );
       i++;
     }
@@ -1963,13 +2955,39 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
   return (
     <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', gap: tokens.space2 }}>
       {!isUser && (
-        <div style={{ width: 30, height: 30, borderRadius: tokens.radiusMd, background: tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: tokens.fontSizeSm, alignSelf: 'flex-start', flexShrink: 0 }}>A</div>
+        <div
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: tokens.radiusMd,
+            background: tokens.primary,
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 700,
+            fontSize: tokens.fontSizeSm,
+            alignSelf: 'flex-start',
+            flexShrink: 0,
+          }}
+        >
+          A
+        </div>
       )}
       <div style={{ maxWidth: '82%', display: 'flex', flexDirection: 'column', gap: tokens.space1 }}>
         {isUser && msg.attachments && msg.attachments.length > 0 && (
           <div style={{ display: 'flex', gap: tokens.space1, flexWrap: 'wrap' }}>
             {msg.attachments.map((a) => (
-              <span key={a.id} style={{ padding: `2px ${tokens.space2}px`, borderRadius: tokens.radiusFull, background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, fontSize: tokens.fontSizeXs }}>
+              <span
+                key={a.id}
+                style={{
+                  padding: `2px ${tokens.space2}px`,
+                  borderRadius: tokens.radiusFull,
+                  background: tokens.bgSubtle,
+                  border: `1px solid ${tokens.border}`,
+                  fontSize: tokens.fontSizeXs,
+                }}
+              >
                 {kindIcon[a.kind]} {a.name}
               </span>
             ))}
@@ -1988,12 +3006,20 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
             lineHeight: 1.6,
           }}
         >
-          {isUser ? (
-            <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
-          ) : (
-            <div>{renderToolCalls(msg.content)}</div>
+          {isUser ? <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div> : <div>{renderToolCalls(msg.content)}</div>}
+          {streaming && (
+            <span
+              style={{
+                display: 'inline-block',
+                width: 8,
+                height: 16,
+                background: tokens.primary,
+                marginLeft: 2,
+                verticalAlign: 'text-bottom',
+                animation: 'acode-pulse 0.9s infinite',
+              }}
+            />
           )}
-          {streaming && <span style={{ display: 'inline-block', width: 8, height: 16, background: tokens.primary, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'acode-pulse 0.9s infinite' }} />}
         </div>
         {!isUser && (
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, alignSelf: 'flex-start' }}>
@@ -2001,20 +3027,40 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
               className="bubble-action-btn"
               onClick={copy}
               title="Copy"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, color: copied ? tokens.success : tokens.textMuted, cursor: 'pointer', transition: 'all 0.15s' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 28,
+                height: 28,
+                background: 'transparent',
+                border: `1px solid ${tokens.border}`,
+                borderRadius: tokens.radiusSm,
+                color: copied ? tokens.success : tokens.textMuted,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
             >
-              {copied ? (
-                <Icon name="check" size={14} strokeWidth={2} />
-              ) : (
-                <Icon name="copy" size={14} strokeWidth={2} />
-              )}
+              {copied ? <Icon name="check" size={14} strokeWidth={2} /> : <Icon name="copy" size={14} strokeWidth={2} />}
             </button>
             {onRetry && !streaming && (
               <button
                 className="bubble-action-btn"
                 onClick={onRetry}
                 title="Retry"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, color: tokens.textMuted, cursor: 'pointer', transition: 'all 0.15s' }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 28,
+                  height: 28,
+                  background: 'transparent',
+                  border: `1px solid ${tokens.border}`,
+                  borderRadius: tokens.radiusSm,
+                  color: tokens.textMuted,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
               >
                 <Icon name="rotateCcw" size={14} strokeWidth={2} />
               </button>
@@ -2024,7 +3070,19 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
                 className="bubble-action-btn"
                 onClick={() => onInsert(msg.content)}
                 title="Edit & resend"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, color: tokens.textMuted, cursor: 'pointer', transition: 'all 0.15s' }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 28,
+                  height: 28,
+                  background: 'transparent',
+                  border: `1px solid ${tokens.border}`,
+                  borderRadius: tokens.radiusSm,
+                  color: tokens.textMuted,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
               >
                 <Icon name="squarePen" size={14} strokeWidth={2} />
               </button>
@@ -2043,14 +3101,56 @@ const ShellBlock = React.memo(function ShellBlock({ command, output }: { command
     <div style={{ marginBottom: tokens.space2 }}>
       <div
         onClick={() => setOpen((v) => !v)}
-        style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, cursor: 'pointer' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.space2,
+          padding: `${tokens.space2}px ${tokens.space3}px`,
+          background: tokens.bgSubtle,
+          borderRadius: tokens.radiusMd,
+          border: `1px solid ${tokens.border}`,
+          cursor: 'pointer',
+        }}
       >
         <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.primary, textTransform: 'uppercase' }}>Shell</span>
-        <span style={{ flex: 1, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, color: tokens.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{command}</span>
-        <Icon name="chevronDown" size={14} strokeWidth={2} style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }} />
+        <span
+          style={{
+            flex: 1,
+            fontFamily: tokens.fontMono,
+            fontSize: tokens.fontSizeSm,
+            color: tokens.text,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {command}
+        </span>
+        <Icon
+          name="chevronDown"
+          size={14}
+          strokeWidth={2}
+          style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}
+        />
       </div>
       {open && output && (
-        <pre style={{ marginTop: tokens.space1, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bg, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, color: tokens.textSecondary, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 300, overflowY: 'auto' }}>
+        <pre
+          style={{
+            marginTop: tokens.space1,
+            padding: `${tokens.space2}px ${tokens.space3}px`,
+            background: tokens.bg,
+            borderRadius: tokens.radiusMd,
+            border: `1px solid ${tokens.border}`,
+            fontFamily: tokens.fontMono,
+            fontSize: tokens.fontSizeXs,
+            color: tokens.textSecondary,
+            overflowX: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+            maxHeight: 300,
+            overflowY: 'auto',
+          }}
+        >
           {output}
         </pre>
       )}
@@ -2058,103 +3158,139 @@ const ShellBlock = React.memo(function ShellBlock({ command, output }: { command
   );
 });
 
-const STATUS_LABEL: Record<string, string> = { added: 'Added', modified: 'Modified', deleted: 'Deleted', renamed: 'Renamed', untracked: 'Untracked' };
-const STATUS_COLOR: Record<string, string> = { added: '#2f9e44', modified: '#e6a23c', deleted: '#e03131' };
+const STATUS_LABEL: Record<string, string> = {
+  added: 'Added',
+  modified: 'Modified',
+  deleted: 'Deleted',
+  renamed: 'Renamed',
+  untracked: 'Untracked',
+};
 
 type DiffLine = { type: 'add' | 'remove' | 'context'; lineNum?: number; content: string };
 type DiffHunk = { label?: string; lines: DiffLine[] };
 
 function generateMockDiff(path: string, status: string): DiffHunk[] {
-  const ext = path.split('.').pop()?.toLowerCase() ?? '';
   if (status === 'added') {
     return [
-      { label: undefined, lines: [
-        { type: 'add', content: `import React, { useState, useRef, useEffect, useCallback } from 'react';` },
-        { type: 'add', content: `import { useApp } from '../state/AppProvider';` },
-        { type: 'add', content: `` },
-        { type: 'add', content: `export function ${path.split('/').pop()?.replace(/\.\w+$/, '') ?? 'Component'}() {` },
-        { type: 'add', content: `  const [value, setValue] = useState('');` },
-        { type: 'add', content: `  return <div>{value}</div>;` },
-        { type: 'add', content: `}` },
-      ]},
+      {
+        label: undefined,
+        lines: [
+          { type: 'add', content: `import React, { useState, useRef, useEffect, useCallback } from 'react';` },
+          { type: 'add', content: `import { useApp } from '../state/AppProvider';` },
+          { type: 'add', content: `` },
+          {
+            type: 'add',
+            content: `export function ${
+              path
+                .split('/')
+                .pop()
+                ?.replace(/\.\w+$/, '') ?? 'Component'
+            }() {`,
+          },
+          { type: 'add', content: `  const [value, setValue] = useState('');` },
+          { type: 'add', content: `  return <div>{value}</div>;` },
+          { type: 'add', content: `}` },
+        ],
+      },
     ];
   }
   if (status === 'deleted') {
     return [
-      { label: undefined, lines: [
-        { type: 'remove', content: `import React from 'react';` },
-        { type: 'remove', content: `` },
-        { type: 'remove', content: `export function DeletedComponent() {` },
-        { type: 'remove', content: `  return <div>deleted</div>;` },
-        { type: 'remove', content: `}` },
-      ]},
+      {
+        label: undefined,
+        lines: [
+          { type: 'remove', content: `import React from 'react';` },
+          { type: 'remove', content: `` },
+          { type: 'remove', content: `export function DeletedComponent() {` },
+          { type: 'remove', content: `  return <div>deleted</div>;` },
+          { type: 'remove', content: `}` },
+        ],
+      },
     ];
   }
   return [
-    { label: undefined, lines: [
-      { type: 'context', content: `import React, { useState, useRef, useEffect, useCallback } from 'react';` },
-      { type: 'context', content: `import { useApp } from '../state/AppProvider';` },
-      { type: 'context', content: `import { Button, Select, Input, Toggle, Spinner, useTheme, Badge, useIsMobile } from '@acode/ui';` },
-      { type: 'context', content: `` },
-      { type: 'context', content: `const SYSTEM_PROMPT = 'You are AcodeDev assistant, a helpful AI. Be concise and accurate.';` },
-      { type: 'remove', content: `const [sidebarOpen, setSidebarOpen] = useState(false);` },
-      { type: 'add', content: `const [sidebarOpen, setSidebarOpen] = useState(true);` },
-      { type: 'add', content: `const [completedTabs, setCompletedTabs] = useState<Set<string>>(new Set());` },
-      { type: 'context', content: `` },
-      { type: 'context', content: `const [contextOpen, setContextOpen] = useState(!isMobile);` },
-      { type: 'context', content: `const [selectedSkills, setSelectedSkills] = useState<string[]>([]);` },
-      { type: 'context', content: `const [attachments, setAttachments] = useState<ChatAttachment[]>([]);` },
-    ]},
+    {
+      label: undefined,
+      lines: [
+        { type: 'context', content: `import React, { useState, useRef, useEffect, useCallback } from 'react';` },
+        { type: 'context', content: `import { useApp } from '../state/AppProvider';` },
+        { type: 'context', content: `import { Button, Select, Input, Toggle, Spinner, useTheme, Badge, useIsMobile } from '@acode/ui';` },
+        { type: 'context', content: `` },
+        { type: 'context', content: `const SYSTEM_PROMPT = 'You are AcodeDev assistant, a helpful AI. Be concise and accurate.';` },
+        { type: 'remove', content: `const [sidebarOpen, setSidebarOpen] = useState(false);` },
+        { type: 'add', content: `const [sidebarOpen, setSidebarOpen] = useState(true);` },
+        { type: 'add', content: `const [completedTabs, setCompletedTabs] = useState<Set<string>>(new Set());` },
+        { type: 'context', content: `` },
+        { type: 'context', content: `const [contextOpen, setContextOpen] = useState(!isMobile);` },
+        { type: 'context', content: `const [selectedSkills, setSelectedSkills] = useState<string[]>([]);` },
+        { type: 'context', content: `const [attachments, setAttachments] = useState<ChatAttachment[]>([]);` },
+      ],
+    },
     { label: '320 unmodified lines', lines: [] },
-    { label: undefined, lines: [
-      { type: 'context', content: `  /* keep whatever the stream produced */` },
-      { type: 'context', content: `}` },
-      { type: 'context', content: `}` },
-      { type: 'context', content: `setStreaming(false);` },
-      { type: 'add', content: `if (cid && activeTab) {` },
-      { type: 'add', content: `  setCompletedTabs((prev) => {` },
-      { type: 'add', content: `    const next = new Set(prev);` },
-      { type: 'add', content: `    next.add(activeTab);` },
-      { type: 'add', content: `    return next;` },
-      { type: 'add', content: `  });` },
-      { type: 'add', content: `}` },
-      { type: 'context', content: `refreshSessions();` },
-      { type: 'context', content: `refreshChangedFiles();` },
-      { type: 'context', content: `};` },
-    ]},
+    {
+      label: undefined,
+      lines: [
+        { type: 'context', content: `  /* keep whatever the stream produced */` },
+        { type: 'context', content: `}` },
+        { type: 'context', content: `}` },
+        { type: 'context', content: `setStreaming(false);` },
+        { type: 'add', content: `if (cid && activeTab) {` },
+        { type: 'add', content: `  setCompletedTabs((prev) => {` },
+        { type: 'add', content: `    const next = new Set(prev);` },
+        { type: 'add', content: `    next.add(activeTab);` },
+        { type: 'add', content: `    return next;` },
+        { type: 'add', content: `  });` },
+        { type: 'add', content: `}` },
+        { type: 'context', content: `refreshSessions();` },
+        { type: 'context', content: `refreshChangedFiles();` },
+        { type: 'context', content: `};` },
+      ],
+    },
     { label: '18 unmodified lines', lines: [] },
-    { label: undefined, lines: [
-      { type: 'context', content: `<div style={{ height: '100%', display: 'flex', flexDirection: 'column',` },
-      { type: 'context', content: `  background: tokens.bg, overflow: 'hidden' }}>` },
-      { type: 'context', content: `  {/* Top app bar: grid button · session tabs · + button */}` },
-      { type: 'context', content: `  <div style={{ display: 'flex', alignItems: 'center', gap:` },
-      { type: 'context', content: `    tokens.space1, padding: \`0 \${tokens.space2}px\`, height: 44, flexShrink: 0,` },
-      { type: 'context', content: `    borderBottom: \`1px solid \${tokens.border}\`, background: tokens.bgElevated,` },
-      { type: 'context', content: `    overflowX: 'auto', overflowY: 'hidden' }}>` },
-      { type: 'remove', content: `    <button` },
-      { type: 'remove', content: `      title="Projects & Sessions"` },
-      { type: 'remove', content: `      onClick={() => {` },
-      { type: 'remove', content: `        if (sidebarOpen) {` },
-      { type: 'remove', content: `          setSidebarOpen(false);` },
-      { type: 'add', content: `    <button` },
-      { type: 'add', content: `      title="All screens"` },
-      { type: 'add', content: `      onClick={() => onNavigate?.('dashboard')}` },
-      { type: 'context', content: `      style={{ width: 32, height: 32, borderRadius: tokens.radiusMd,` },
-    ]},
+    {
+      label: undefined,
+      lines: [
+        { type: 'context', content: `<div style={{ height: '100%', display: 'flex', flexDirection: 'column',` },
+        { type: 'context', content: `  background: tokens.bg, overflow: 'hidden' }}>` },
+        { type: 'context', content: `  {/* Top app bar: grid button · session tabs · + button */}` },
+        { type: 'context', content: `  <div style={{ display: 'flex', alignItems: 'center', gap:` },
+        { type: 'context', content: `    tokens.space1, padding: \`0 \${tokens.space2}px\`, height: 44, flexShrink: 0,` },
+        { type: 'context', content: `    borderBottom: \`1px solid \${tokens.border}\`, background: tokens.bgElevated,` },
+        { type: 'context', content: `    overflowX: 'auto', overflowY: 'hidden' }}>` },
+        { type: 'remove', content: `    <button` },
+        { type: 'remove', content: `      title="Projects & Sessions"` },
+        { type: 'remove', content: `      onClick={() => {` },
+        { type: 'remove', content: `        if (sidebarOpen) {` },
+        { type: 'remove', content: `          setSidebarOpen(false);` },
+        { type: 'add', content: `    <button` },
+        { type: 'add', content: `      title="All screens"` },
+        { type: 'add', content: `      onClick={() => onNavigate?.('dashboard')}` },
+        { type: 'context', content: `      style={{ width: 32, height: 32, borderRadius: tokens.radiusMd,` },
+      ],
+    },
   ];
 }
 
-function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnarchive, onNewSession, onClose, projects, currentProjectId, activeProjectId, onOpenProject, onCreateProject, streaming }: {
+function SidebarPanel({
+  sessions,
+  activeId,
+  archived,
+  inactive,
+  onSelect,
+  onUnarchive,
+  projects,
+  activeProjectId,
+  onOpenProject,
+  onCreateProject,
+  streaming,
+}: {
   sessions: Conversation[];
   activeId: string | null;
   archived: Conversation[];
   inactive: Conversation[];
   onSelect: (id: string) => void;
   onUnarchive: (id: string) => void;
-  onNewSession: () => void;
-  onClose: () => void;
   projects: ProjectStore;
-  currentProjectId: string | null;
   activeProjectId: string | null;
   onOpenProject: (id: string | null) => void;
   onCreateProject: (name: string) => void;
@@ -2167,15 +3303,12 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
   const [newProjectName, setNewProjectName] = useState('');
 
   const allProjects = projects.projectsList?.() ?? [];
-  const filteredSessions = sessions.filter((s) =>
-    !(s.title === 'New session' || s.title === 'New chat') &&
-    (!search || s.title.toLowerCase().includes(search.toLowerCase())),
+  const filteredSessions = sessions.filter(
+    (s) => !(s.title === 'New session' || s.title === 'New chat') && (!search || s.title.toLowerCase().includes(search.toLowerCase())),
   );
-  const filteredArchived = archived.filter((s) =>
-    !search || s.title.toLowerCase().includes(search.toLowerCase()),
-  );
-  const filteredProjects = allProjects.filter((p: ProjectDoc) =>
-    !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase()),
+  const filteredArchived = archived.filter((s) => !search || s.title.toLowerCase().includes(search.toLowerCase()));
+  const filteredProjects = allProjects.filter(
+    (p: ProjectDoc) => !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase()),
   );
 
   const today = new Date();
@@ -2212,7 +3345,11 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
   };
 
   const projectRow = (p: ProjectDoc) => {
-    const rn = p.gitRepo?.split('/').pop()?.replace(/\.git$/, '') ?? null;
+    const rn =
+      p.gitRepo
+        ?.split('/')
+        .pop()
+        ?.replace(/\.git$/, '') ?? null;
     return (
       <div
         key={p.id}
@@ -2220,17 +3357,76 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
           onOpenProject(p.id);
           setProjectModalOpen(false);
         }}
-        style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2, background: activeProjectId === p.id ? `${tokens.primary}16` : 'transparent', borderLeft: activeProjectId === p.id ? `2px solid ${tokens.primary}` : '2px solid transparent' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.space2,
+          padding: `${tokens.space2}px ${tokens.space2}px`,
+          borderRadius: tokens.radiusMd,
+          cursor: 'pointer',
+          marginBottom: 2,
+          background: activeProjectId === p.id ? `${tokens.primary}16` : 'transparent',
+          borderLeft: activeProjectId === p.id ? `2px solid ${tokens.primary}` : '2px solid transparent',
+        }}
         onMouseEnter={(e) => (e.currentTarget.style.background = activeProjectId === p.id ? `${tokens.primary}16` : tokens.surfaceHover)}
         onMouseLeave={(e) => (e.currentTarget.style.background = activeProjectId === p.id ? `${tokens.primary}16` : 'transparent')}
       >
-        <span style={{ width: 24, height: 24, borderRadius: tokens.radiusSm, background: p.color ?? tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
+        <span
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: tokens.radiusSm,
+            background: p.color ?? tokens.primary,
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 700,
+            fontSize: 11,
+            flexShrink: 0,
+          }}
+        >
           {p.name?.charAt(0).toUpperCase() || 'P'}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: tokens.fontSizeSm, fontWeight: activeProjectId === p.id ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{p.name}</div>
-          {rn && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rn}</div>}
-          {!rn && p.description && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</div>}
+          <div
+            style={{
+              fontSize: tokens.fontSizeSm,
+              fontWeight: activeProjectId === p.id ? 600 : 400,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              color: tokens.text,
+            }}
+          >
+            {p.name}
+          </div>
+          {rn && (
+            <div
+              style={{
+                fontSize: tokens.fontSizeXs,
+                color: tokens.textMuted,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {rn}
+            </div>
+          )}
+          {!rn && p.description && (
+            <div
+              style={{
+                fontSize: tokens.fontSizeXs,
+                color: tokens.textMuted,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {p.description}
+            </div>
+          )}
         </div>
         {activeProjectId === p.id && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.primary, fontWeight: 600 }}>Active</span>}
       </div>
@@ -2238,7 +3434,25 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
   };
 
   return (
-    <div style={{ position: 'absolute', top: 44, left: tokens.space2, right: tokens.space2, width: 320, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 44px)', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: `0 0 ${tokens.radiusMd} ${tokens.radiusMd}`, zIndex: 50, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: tokens.shadowLg }}>
+    <div
+      style={{
+        position: 'absolute',
+        top: 44,
+        left: tokens.space2,
+        right: tokens.space2,
+        width: 320,
+        maxWidth: 'calc(100vw - 32px)',
+        maxHeight: 'calc(100vh - 44px)',
+        background: tokens.surface,
+        border: `1px solid ${tokens.borderStrong}`,
+        borderRadius: `0 0 ${tokens.radiusMd} ${tokens.radiusMd}`,
+        zIndex: 50,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        boxShadow: tokens.shadowLg,
+      }}
+    >
       {/* Projects section */}
       <div style={{ padding: tokens.space3, borderBottom: `1px solid ${tokens.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
@@ -2246,7 +3460,18 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
           <button
             title="Create project"
             onClick={() => setProjectModalOpen(true)}
-            style={{ width: 24, height: 24, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary }}
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: tokens.radiusSm,
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: tokens.textSecondary,
+            }}
           >
             <Icon name="plus" size={14} />
           </button>
@@ -2258,7 +3483,21 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
             </div>
             <button
               onClick={() => setProjectModalOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd, background: tokens.primary, color: '#fff', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, fontSize: tokens.fontSizeSm, fontWeight: 600 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                padding: `${tokens.space2}px ${tokens.space3}px`,
+                borderRadius: tokens.radiusMd,
+                background: tokens.primary,
+                color: '#fff',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: tokens.fontSans,
+                fontSize: tokens.fontSizeSm,
+                fontWeight: 600,
+              }}
             >
               <Icon name="plus" size={12} />
               Create your first project
@@ -2271,13 +3510,31 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
 
       {/* Search */}
       <div style={{ padding: `${tokens.space2}px ${tokens.space3}px` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}` }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.space2,
+            padding: `${tokens.space2}px ${tokens.space3}px`,
+            background: tokens.bgSubtle,
+            borderRadius: tokens.radiusMd,
+            border: `1px solid ${tokens.border}`,
+          }}
+        >
           <Icon name="search" size={14} color={tokens.textMuted} />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search sessions"
-            style={{ flex: 1, background: 'transparent', border: 'none', color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none' }}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              color: tokens.text,
+              fontSize: tokens.fontSizeSm,
+              fontFamily: tokens.fontSans,
+              outline: 'none',
+            }}
           />
         </div>
       </div>
@@ -2321,26 +3578,75 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
         )}
         {filteredArchived.length > 0 && (
           <div style={{ marginTop: tokens.space3, marginBottom: tokens.space3 }}>
-            <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, padding: `${tokens.space2}px 0` }}>Archived</div>
+            <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, padding: `${tokens.space2}px 0` }}>
+              Archived
+            </div>
             {filteredArchived.map((s) => {
               const projectName = getProjectName(s);
               return (
                 <div
                   key={s.id}
-                  style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2 }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.space2,
+                    padding: `${tokens.space2}px ${tokens.space2}px`,
+                    borderRadius: tokens.radiusMd,
+                    cursor: 'pointer',
+                    marginBottom: 2,
+                  }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = tokens.surfaceHover)}
                   onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                 >
-                  <span style={{ width: 24, height: 24, borderRadius: '50%', background: tokens.surface, color: tokens.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0, border: `1px solid ${tokens.border}` }}>🗄</span>
+                  <span
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: '50%',
+                      background: tokens.surface,
+                      color: tokens.textMuted,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: 11,
+                      flexShrink: 0,
+                      border: `1px solid ${tokens.border}`,
+                    }}
+                  >
+                    🗄
+                  </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.textSecondary }}>{s.title || 'New session'}</div>
+                    <div
+                      style={{
+                        fontSize: tokens.fontSizeSm,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: tokens.textSecondary,
+                      }}
+                    >
+                      {s.title || 'New session'}
+                    </div>
                     {projectName && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{projectName}</div>}
                   </div>
                   <button
                     title="Restore"
                     onClick={() => onUnarchive(s.id)}
-                    style={{ flexShrink: 0, background: 'transparent', border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusSm, color: tokens.textSecondary, fontSize: tokens.fontSizeXs, cursor: 'pointer', padding: `2px ${tokens.space2}px`, fontFamily: tokens.fontSans }}
-                  >Restore</button>
+                    style={{
+                      flexShrink: 0,
+                      background: 'transparent',
+                      border: `1px solid ${tokens.borderStrong}`,
+                      borderRadius: tokens.radiusSm,
+                      color: tokens.textSecondary,
+                      fontSize: tokens.fontSizeXs,
+                      cursor: 'pointer',
+                      padding: `2px ${tokens.space2}px`,
+                      fontFamily: tokens.fontSans,
+                    }}
+                  >
+                    Restore
+                  </button>
                 </div>
               );
             })}
@@ -2348,18 +3654,56 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
         )}
         {inactive.length > 0 && (
           <div style={{ marginTop: tokens.space3, marginBottom: tokens.space3 }}>
-            <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, padding: `${tokens.space2}px 0` }}>Inactive (project deleted)</div>
+            <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, padding: `${tokens.space2}px 0` }}>
+              Inactive (project deleted)
+            </div>
             {inactive.map((s) => {
               const projectName = getProjectName(s);
               return (
                 <div
                   key={s.id}
-                  style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, marginBottom: 2, opacity: 0.5, cursor: 'not-allowed' }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.space2,
+                    padding: `${tokens.space2}px ${tokens.space2}px`,
+                    borderRadius: tokens.radiusMd,
+                    marginBottom: 2,
+                    opacity: 0.5,
+                    cursor: 'not-allowed',
+                  }}
                   title="Session is inactive — its project was deleted"
                 >
-                  <span style={{ width: 24, height: 24, borderRadius: '50%', background: tokens.surface, color: tokens.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0, border: `1px solid ${tokens.border}` }}>⛔</span>
+                  <span
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: '50%',
+                      background: tokens.surface,
+                      color: tokens.textMuted,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: 11,
+                      flexShrink: 0,
+                      border: `1px solid ${tokens.border}`,
+                    }}
+                  >
+                    ⛔
+                  </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.textMuted }}>{s.title || 'New session'}</div>
+                    <div
+                      style={{
+                        fontSize: tokens.fontSizeSm,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: tokens.textMuted,
+                      }}
+                    >
+                      {s.title || 'New session'}
+                    </div>
                     {projectName && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{projectName}</div>}
                   </div>
                   <span style={{ fontSize: tokens.fontSizeXs, color: tokens.danger, fontWeight: 600 }}>Inactive</span>
@@ -2372,28 +3716,89 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
 
       {/* Open / create project modal */}
       {projectModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 80 }}>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            paddingTop: 80,
+          }}
+        >
           <div onClick={() => setProjectModalOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
-          <div style={{ position: 'relative', width: '90%', maxWidth: 400, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusLg, boxShadow: tokens.shadowLg, overflow: 'hidden' }}>
+          <div
+            style={{
+              position: 'relative',
+              width: '90%',
+              maxWidth: 400,
+              background: tokens.surface,
+              border: `1px solid ${tokens.borderStrong}`,
+              borderRadius: tokens.radiusLg,
+              boxShadow: tokens.shadowLg,
+              overflow: 'hidden',
+            }}
+          >
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space3}px ${tokens.space4}px`, borderBottom: `1px solid ${tokens.border}` }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: `${tokens.space3}px ${tokens.space4}px`,
+                borderBottom: `1px solid ${tokens.border}`,
+              }}
+            >
               <span style={{ fontSize: tokens.fontSizeMd, fontWeight: 600, color: tokens.text }}>Open project</span>
               <button
                 onClick={() => setProjectModalOpen(false)}
-                style={{ width: 28, height: 28, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 16 }}
-              ><Icon name="x" size={16} /></button>
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: tokens.radiusSm,
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: tokens.textMuted,
+                  fontSize: 16,
+                }}
+              >
+                <Icon name="x" size={16} />
+              </button>
             </div>
 
             {/* Search */}
             <div style={{ padding: `${tokens.space3}px ${tokens.space4}px 0` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}` }}>
-<Icon name="search" size={14} color={tokens.textMuted} />
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.space2,
+                  padding: `${tokens.space2}px ${tokens.space3}px`,
+                  background: tokens.bgSubtle,
+                  borderRadius: tokens.radiusMd,
+                  border: `1px solid ${tokens.border}`,
+                }}
+              >
+                <Icon name="search" size={14} color={tokens.textMuted} />
                 <input
                   value={projectSearch}
                   onChange={(e) => setProjectSearch(e.target.value)}
                   placeholder="Search projects"
                   autoFocus
-                  style={{ flex: 1, background: 'transparent', border: 'none', color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none' }}
+                  style={{
+                    flex: 1,
+                    background: 'transparent',
+                    border: 'none',
+                    color: tokens.text,
+                    fontSize: tokens.fontSizeSm,
+                    fontFamily: tokens.fontSans,
+                    outline: 'none',
+                  }}
                 />
               </div>
             </div>
@@ -2401,7 +3806,9 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
             {/* Project list */}
             <div style={{ padding: tokens.space3, maxHeight: 280, overflowY: 'auto' }}>
               {filteredProjects.length === 0 ? (
-                <div style={{ padding: tokens.space3, textAlign: 'center', color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>No projects yet</div>
+                <div style={{ padding: tokens.space3, textAlign: 'center', color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
+                  No projects yet
+                </div>
               ) : (
                 filteredProjects.map(projectRow)
               )}
@@ -2409,17 +3816,16 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
 
             {/* Create */}
             <div style={{ padding: `${tokens.space2}px ${tokens.space4}px ${tokens.space4}px`, borderTop: `1px solid ${tokens.border}` }}>
-              <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, marginBottom: tokens.space2 }}>New project</div>
+              <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, marginBottom: tokens.space2 }}>
+                New project
+              </div>
               <div style={{ display: 'flex', gap: tokens.space2 }}>
                 <div style={{ flex: 1 }}>
-                  <Input
-                    value={newProjectName}
-                    onChange={setNewProjectName}
-                    placeholder="Project name"
-                    onEnter={handleCreate}
-                  />
+                  <Input value={newProjectName} onChange={setNewProjectName} placeholder="Project name" onEnter={handleCreate} />
                 </div>
-                <Button size="sm" onClick={handleCreate} disabled={!newProjectName.trim()}>Create</Button>
+                <Button size="sm" onClick={handleCreate} disabled={!newProjectName.trim()}>
+                  Create
+                </Button>
               </div>
             </div>
           </div>
@@ -2429,7 +3835,15 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
   );
 }
 
-function ProjectDropdown({ projects, activeId, onSelect, onCreate, onEdit, onDelete, onClose }: {
+function ProjectDropdown({
+  projects,
+  activeId,
+  onSelect,
+  onCreate,
+  onEdit,
+  onDelete,
+  onClose,
+}: {
   projects: ProjectDoc[];
   activeId: string | null;
   onSelect: (id: string | null) => void;
@@ -2451,49 +3865,174 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onEdit, onDel
     setCreating(false);
   };
 
-  const repoName = (p: ProjectDoc) => p.gitRepo?.split('/').pop()?.replace(/\.git$/, '') ?? null;
+  const repoName = (p: ProjectDoc) =>
+    p.gitRepo
+      ?.split('/')
+      .pop()
+      ?.replace(/\.git$/, '') ?? null;
 
   return (
-    <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 80, minWidth: 260, maxHeight: 360, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
+    <div
+      style={{
+        position: 'absolute',
+        bottom: 'calc(100% + 6px)',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 80,
+        minWidth: 260,
+        maxHeight: 360,
+        overflowY: 'auto',
+        background: tokens.surface,
+        border: `1px solid ${tokens.borderStrong}`,
+        borderRadius: tokens.radiusMd,
+        boxShadow: tokens.shadowLg,
+        padding: tokens.space1,
+      }}
+    >
       {projects.length === 0 ? (
-        <div style={{ padding: `${tokens.space2}px ${tokens.space3}px`, fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center' }}>No projects yet</div>
+        <div
+          style={{
+            padding: `${tokens.space2}px ${tokens.space3}px`,
+            fontSize: tokens.fontSizeXs,
+            color: tokens.textMuted,
+            textAlign: 'center',
+          }}
+        >
+          No projects yet
+        </div>
       ) : (
         projects.map((p: ProjectDoc) => {
           const rn = repoName(p);
           return (
             <div
               key={p.id}
-              style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2, background: activeId === p.id ? `${tokens.primary}16` : 'transparent', borderLeft: activeId === p.id ? `2px solid ${tokens.primary}` : '2px solid transparent' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.space2,
+                padding: `${tokens.space2}px ${tokens.space2}px`,
+                borderRadius: tokens.radiusMd,
+                cursor: 'pointer',
+                marginBottom: 2,
+                background: activeId === p.id ? `${tokens.primary}16` : 'transparent',
+                borderLeft: activeId === p.id ? `2px solid ${tokens.primary}` : '2px solid transparent',
+              }}
               onMouseEnter={(e) => (e.currentTarget.style.background = activeId === p.id ? `${tokens.primary}16` : tokens.surfaceHover)}
               onMouseLeave={(e) => (e.currentTarget.style.background = activeId === p.id ? `${tokens.primary}16` : 'transparent')}
             >
               <span
-                onClick={() => { onSelect(p.id); onClose(); }}
-                style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, background: p.color ?? tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 10, flexShrink: 0 }}
+                onClick={() => {
+                  onSelect(p.id);
+                  onClose();
+                }}
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: tokens.radiusSm,
+                  background: p.color ?? tokens.primary,
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: 10,
+                  flexShrink: 0,
+                }}
               >
                 {p.name?.charAt(0).toUpperCase() || 'P'}
               </span>
-              <div onClick={() => { onSelect(p.id); onClose(); }} style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: tokens.fontSizeSm, fontWeight: activeId === p.id ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{p.name}</div>
-                {rn && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rn}</div>}
+              <div
+                onClick={() => {
+                  onSelect(p.id);
+                  onClose();
+                }}
+                style={{ flex: 1, minWidth: 0 }}
+              >
+                <div
+                  style={{
+                    fontSize: tokens.fontSizeSm,
+                    fontWeight: activeId === p.id ? 600 : 400,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    color: tokens.text,
+                  }}
+                >
+                  {p.name}
+                </div>
+                {rn && (
+                  <div
+                    style={{
+                      fontSize: tokens.fontSizeXs,
+                      color: tokens.textMuted,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {rn}
+                  </div>
+                )}
               </div>
               <button
-                onClick={(e) => { e.stopPropagation(); onEdit(p.id); onClose(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(p.id);
+                  onClose();
+                }}
                 aria-label={`Edit ${p.name}`}
                 title="Edit project"
-                style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: tokens.radiusSm }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = tokens.text; e.currentTarget.style.background = tokens.surfaceHover; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = tokens.textMuted; e.currentTarget.style.background = 'transparent'; }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: tokens.textMuted,
+                  cursor: 'pointer',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  borderRadius: tokens.radiusSm,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = tokens.text;
+                  e.currentTarget.style.background = tokens.surfaceHover;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = tokens.textMuted;
+                  e.currentTarget.style.background = 'transparent';
+                }}
               >
                 <Icon name="squarePen" size={12} strokeWidth={2} />
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); onDelete(p.id); onClose(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(p.id);
+                  onClose();
+                }}
                 aria-label={`Delete ${p.name}`}
                 title="Delete project"
-                style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: tokens.radiusSm }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = tokens.danger; e.currentTarget.style.background = tokens.surfaceHover; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = tokens.textMuted; e.currentTarget.style.background = 'transparent'; }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: tokens.textMuted,
+                  cursor: 'pointer',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  borderRadius: tokens.radiusSm,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = tokens.danger;
+                  e.currentTarget.style.background = tokens.surfaceHover;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = tokens.textMuted;
+                  e.currentTarget.style.background = 'transparent';
+                }}
               >
                 <Icon name="trash" size={12} strokeWidth={2} />
               </button>
@@ -2509,32 +4048,95 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onEdit, onDel
             <input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && newName.trim()) handleCreate(); if (e.key === 'Escape') setCreating(false); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newName.trim()) handleCreate();
+                if (e.key === 'Escape') setCreating(false);
+              }}
               placeholder="Project name"
               autoFocus
-              style={{ width: '100%', background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: `4px ${tokens.space2}px`, color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none', boxSizing: 'border-box' }}
+              style={{
+                width: '100%',
+                background: tokens.bgSubtle,
+                border: `1px solid ${tokens.border}`,
+                borderRadius: tokens.radiusSm,
+                padding: `4px ${tokens.space2}px`,
+                color: tokens.text,
+                fontSize: tokens.fontSizeSm,
+                fontFamily: tokens.fontSans,
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
             />
             <input
               value={newGitRepo}
               onChange={(e) => setNewGitRepo(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && newName.trim()) handleCreate(); if (e.key === 'Escape') setCreating(false); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newName.trim()) handleCreate();
+                if (e.key === 'Escape') setCreating(false);
+              }}
               placeholder="Git repo (optional)"
-              style={{ width: '100%', background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: `4px ${tokens.space2}px`, color: tokens.text, fontSize: tokens.fontSizeXs, fontFamily: tokens.fontSans, outline: 'none', boxSizing: 'border-box' }}
+              style={{
+                width: '100%',
+                background: tokens.bgSubtle,
+                border: `1px solid ${tokens.border}`,
+                borderRadius: tokens.radiusSm,
+                padding: `4px ${tokens.space2}px`,
+                color: tokens.text,
+                fontSize: tokens.fontSizeXs,
+                fontFamily: tokens.fontSans,
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
             />
             <button
               onClick={handleCreate}
               disabled={!newName.trim()}
-              style={{ width: '100%', padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusSm, border: 'none', background: newName.trim() ? tokens.primary : tokens.surfaceHover, color: newName.trim() ? '#fff' : tokens.textMuted, fontSize: tokens.fontSizeXs, cursor: newName.trim() ? 'pointer' : 'not-allowed', fontFamily: tokens.fontSans, fontWeight: 600 }}
-            >Create project</button>
+              style={{
+                width: '100%',
+                padding: `4px ${tokens.space2}px`,
+                borderRadius: tokens.radiusSm,
+                border: 'none',
+                background: newName.trim() ? tokens.primary : tokens.surfaceHover,
+                color: newName.trim() ? '#fff' : tokens.textMuted,
+                fontSize: tokens.fontSizeXs,
+                cursor: newName.trim() ? 'pointer' : 'not-allowed',
+                fontFamily: tokens.fontSans,
+                fontWeight: 600,
+              }}
+            >
+              Create project
+            </button>
           </div>
         ) : (
           <div
             onClick={() => setCreating(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer' }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space2,
+              padding: `${tokens.space2}px ${tokens.space2}px`,
+              borderRadius: tokens.radiusMd,
+              cursor: 'pointer',
+            }}
             onMouseEnter={(e) => (e.currentTarget.style.background = tokens.surfaceHover)}
             onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
           >
-            <span style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, border: `1px dashed ${tokens.borderStrong}`, color: tokens.textMuted, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>+</span>
+            <span
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: tokens.radiusSm,
+                border: `1px dashed ${tokens.borderStrong}`,
+                color: tokens.textMuted,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 14,
+                flexShrink: 0,
+              }}
+            >
+              +
+            </span>
             <span style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary }}>New project</span>
           </div>
         )}
@@ -2543,7 +4145,12 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onEdit, onDel
   );
 }
 
-function ProjectPicker({ projects, onSelect, onCreate, onClose }: {
+function ProjectPicker({
+  projects,
+  onSelect,
+  onCreate,
+  onClose,
+}: {
   projects: ProjectDoc[];
   onSelect: (id: string) => void;
   onCreate: (name: string, gitRepo?: string) => void;
@@ -2554,9 +4161,7 @@ function ProjectPicker({ projects, onSelect, onCreate, onClose }: {
   const [newName, setNewName] = useState('');
   const [newGitRepo, setNewGitRepo] = useState('');
 
-  const filtered = projects.filter((p) =>
-    !search || p.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = projects.filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase()));
 
   const handleCreate = () => {
     if (!newName.trim()) return;
@@ -2568,23 +4173,77 @@ function ProjectPicker({ projects, onSelect, onCreate, onClose }: {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
-      <div style={{ position: 'relative', width: '90%', maxWidth: 400, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusLg, boxShadow: tokens.shadowLg, overflow: 'hidden' }}>
+      <div
+        style={{
+          position: 'relative',
+          width: '90%',
+          maxWidth: 400,
+          background: tokens.surface,
+          border: `1px solid ${tokens.borderStrong}`,
+          borderRadius: tokens.radiusLg,
+          boxShadow: tokens.shadowLg,
+          overflow: 'hidden',
+        }}
+      >
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space3}px ${tokens.space4}px`, borderBottom: `1px solid ${tokens.border}` }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: `${tokens.space3}px ${tokens.space4}px`,
+            borderBottom: `1px solid ${tokens.border}`,
+          }}
+        >
           <span style={{ fontSize: tokens.fontSizeMd, fontWeight: 600, color: tokens.text }}>Select a project</span>
-          <button onClick={onClose} title="Close" style={{ width: 28, height: 28, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted }}><Icon name="x" size={16} /></button>
+          <button
+            onClick={onClose}
+            title="Close"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: tokens.radiusSm,
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: tokens.textMuted,
+            }}
+          >
+            <Icon name="x" size={16} />
+          </button>
         </div>
 
         {/* Search */}
         <div style={{ padding: `${tokens.space3}px ${tokens.space4}px 0` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}` }}>
-<Icon name="search" size={14} color={tokens.textMuted} />
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space2,
+              padding: `${tokens.space2}px ${tokens.space3}px`,
+              background: tokens.bgSubtle,
+              borderRadius: tokens.radiusMd,
+              border: `1px solid ${tokens.border}`,
+            }}
+          >
+            <Icon name="search" size={14} color={tokens.textMuted} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search projects"
               autoFocus
-              style={{ flex: 1, background: 'transparent', border: 'none', color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none' }}
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                color: tokens.text,
+                fontSize: tokens.fontSizeSm,
+                fontFamily: tokens.fontSans,
+                outline: 'none',
+              }}
             />
           </div>
         </div>
@@ -2597,39 +4256,90 @@ function ProjectPicker({ projects, onSelect, onCreate, onClose }: {
             </div>
           ) : (
             filtered.map((p: ProjectDoc) => {
-              const rn = p.gitRepo?.split('/').pop()?.replace(/\.git$/, '');
-              return <div key={p.id} onClick={() => onSelect(p.id)} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2 }} onMouseEnter={(e) => (e.currentTarget.style.background = tokens.surfaceHover)} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                <span style={{ width: 24, height: 24, borderRadius: tokens.radiusSm, background: p.color ?? tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>{p.name?.charAt(0).toUpperCase() || 'P'}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{p.name}</div>
-                  {rn && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rn}</div>}
+              const rn = p.gitRepo
+                ?.split('/')
+                .pop()
+                ?.replace(/\.git$/, '');
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => onSelect(p.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.space2,
+                    padding: `${tokens.space2}px ${tokens.space2}px`,
+                    borderRadius: tokens.radiusMd,
+                    cursor: 'pointer',
+                    marginBottom: 2,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = tokens.surfaceHover)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: tokens.radiusSm,
+                      background: p.color ?? tokens.primary,
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: 11,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {p.name?.charAt(0).toUpperCase() || 'P'}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: tokens.fontSizeSm,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: tokens.text,
+                      }}
+                    >
+                      {p.name}
+                    </div>
+                    {rn && (
+                      <div
+                        style={{
+                          fontSize: tokens.fontSizeXs,
+                          color: tokens.textMuted,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {rn}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>;
+              );
             })
           )}
         </div>
 
         {/* Create */}
         <div style={{ padding: `${tokens.space2}px ${tokens.space4}px ${tokens.space4}px`, borderTop: `1px solid ${tokens.border}` }}>
-          <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, marginBottom: tokens.space2 }}>Or create a new project</div>
+          <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, marginBottom: tokens.space2 }}>
+            Or create a new project
+          </div>
           <div style={{ display: 'flex', gap: tokens.space2, marginBottom: tokens.space2 }}>
             <div style={{ flex: 1 }}>
-              <Input
-                value={newName}
-                onChange={setNewName}
-                placeholder="Project name"
-                onEnter={handleCreate}
-              />
+              <Input value={newName} onChange={setNewName} placeholder="Project name" onEnter={handleCreate} />
             </div>
-            <Button size="sm" onClick={handleCreate} disabled={!newName.trim()}>Create</Button>
+            <Button size="sm" onClick={handleCreate} disabled={!newName.trim()}>
+              Create
+            </Button>
           </div>
           <div>
-            <Input
-              value={newGitRepo}
-              onChange={setNewGitRepo}
-              placeholder="Git repo URL (optional)"
-              onEnter={handleCreate}
-            />
+            <Input value={newGitRepo} onChange={setNewGitRepo} placeholder="Git repo URL (optional)" onEnter={handleCreate} />
           </div>
         </div>
       </div>
@@ -2637,7 +4347,11 @@ function ProjectPicker({ projects, onSelect, onCreate, onClose }: {
   );
 }
 
-function EditProjectModal({ project, onClose, onSave }: {
+function EditProjectModal({
+  project,
+  onClose,
+  onSave,
+}: {
   project: ProjectDoc;
   onClose: () => void;
   onSave: (id: string, updates: { name?: string; description?: string; color?: string; gitRepo?: string }) => void;
@@ -2662,40 +4376,110 @@ function EditProjectModal({ project, onClose, onSave }: {
   const swatches = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6'];
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Edit project" onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: tokens.space4 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: 420, maxWidth: '90vw', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusLg, boxShadow: tokens.shadowLg, padding: tokens.space5 }}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit project"
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 200,
+        background: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: tokens.space4,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 420,
+          maxWidth: '90vw',
+          background: tokens.surface,
+          border: `1px solid ${tokens.borderStrong}`,
+          borderRadius: tokens.radiusLg,
+          boxShadow: tokens.shadowLg,
+          padding: tokens.space5,
+        }}
+      >
         <h3 style={{ margin: `0 0 ${tokens.space4}px`, fontSize: tokens.fontSizeLg, fontWeight: 700, color: tokens.text }}>Edit project</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>
           <div>
-            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>Name</label>
+            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>
+              Name
+            </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose(); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSave();
+                if (e.key === 'Escape') onClose();
+              }}
               autoFocus
-              style={{ width: '100%', background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: `6px ${tokens.space2}px`, color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none', boxSizing: 'border-box' }}
+              style={{
+                width: '100%',
+                background: tokens.bgSubtle,
+                border: `1px solid ${tokens.border}`,
+                borderRadius: tokens.radiusSm,
+                padding: `6px ${tokens.space2}px`,
+                color: tokens.text,
+                fontSize: tokens.fontSizeSm,
+                fontFamily: tokens.fontSans,
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
             />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>Description</label>
+            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>
+              Description
+            </label>
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional"
-              style={{ width: '100%', background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: `6px ${tokens.space2}px`, color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, outline: 'none', boxSizing: 'border-box' }}
+              style={{
+                width: '100%',
+                background: tokens.bgSubtle,
+                border: `1px solid ${tokens.border}`,
+                borderRadius: tokens.radiusSm,
+                padding: `6px ${tokens.space2}px`,
+                color: tokens.text,
+                fontSize: tokens.fontSizeSm,
+                fontFamily: tokens.fontSans,
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
             />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>Git repo</label>
+            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>
+              Git repo
+            </label>
             <input
               value={gitRepo}
               onChange={(e) => setGitRepo(e.target.value)}
               placeholder="owner/name or full URL"
-              style={{ width: '100%', background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: `6px ${tokens.space2}px`, color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontMono, outline: 'none', boxSizing: 'border-box' }}
+              style={{
+                width: '100%',
+                background: tokens.bgSubtle,
+                border: `1px solid ${tokens.border}`,
+                borderRadius: tokens.radiusSm,
+                padding: `6px ${tokens.space2}px`,
+                color: tokens.text,
+                fontSize: tokens.fontSizeSm,
+                fontFamily: tokens.fontMono,
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
             />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>Color</label>
+            <label style={{ display: 'block', fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary, marginBottom: 4 }}>
+              Color
+            </label>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {swatches.map((c) => (
                 <button
@@ -2703,22 +4487,68 @@ function EditProjectModal({ project, onClose, onSave }: {
                   onClick={() => setColor(c)}
                   aria-label={`Color ${c}`}
                   aria-pressed={color === c}
-                  style={{ width: 24, height: 24, borderRadius: '50%', background: c, border: color === c ? `2px solid ${tokens.text}` : `2px solid transparent`, cursor: 'pointer', padding: 0 }}
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: c,
+                    border: color === c ? `2px solid ${tokens.text}` : `2px solid transparent`,
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
                 />
               ))}
             </div>
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.space2, marginTop: tokens.space5 }}>
-          <button onClick={onClose} style={{ padding: `6px ${tokens.space3}px`, borderRadius: tokens.radiusSm, border: `1px solid ${tokens.border}`, background: 'transparent', color: tokens.text, fontSize: tokens.fontSizeSm, cursor: 'pointer', fontFamily: tokens.fontSans }}>Cancel</button>
-          <button onClick={handleSave} disabled={!name.trim()} style={{ padding: `6px ${tokens.space3}px`, borderRadius: tokens.radiusSm, border: 'none', background: name.trim() ? tokens.primary : tokens.surfaceHover, color: name.trim() ? '#fff' : tokens.textMuted, fontSize: tokens.fontSizeSm, fontWeight: 600, cursor: name.trim() ? 'pointer' : 'not-allowed', fontFamily: tokens.fontSans }}>Save</button>
+          <button
+            onClick={onClose}
+            style={{
+              padding: `6px ${tokens.space3}px`,
+              borderRadius: tokens.radiusSm,
+              border: `1px solid ${tokens.border}`,
+              background: 'transparent',
+              color: tokens.text,
+              fontSize: tokens.fontSizeSm,
+              cursor: 'pointer',
+              fontFamily: tokens.fontSans,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!name.trim()}
+            style={{
+              padding: `6px ${tokens.space3}px`,
+              borderRadius: tokens.radiusSm,
+              border: 'none',
+              background: name.trim() ? tokens.primary : tokens.surfaceHover,
+              color: name.trim() ? '#fff' : tokens.textMuted,
+              fontSize: tokens.fontSizeSm,
+              fontWeight: 600,
+              cursor: name.trim() ? 'pointer' : 'not-allowed',
+              fontFamily: tokens.fontSans,
+            }}
+          >
+            Save
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getProjectName, streaming }: {
+function SessionGroup({
+  label,
+  sessions,
+  activeId,
+  onSelect,
+  onNewSession,
+  getProjectName,
+  streaming,
+}: {
   label: string;
   sessions: Conversation[];
   activeId: string | null;
@@ -2735,7 +4565,17 @@ function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getPr
         {onNewSession && (
           <button
             onClick={onNewSession}
-            style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, background: 'transparent', border: 'none', cursor: 'pointer', color: tokens.textSecondary, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space1,
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: tokens.textSecondary,
+              fontSize: tokens.fontSizeSm,
+              fontFamily: tokens.fontSans,
+            }}
           >
             <Icon name="squarePen" size={12} strokeWidth={2} />
             New session
@@ -2749,19 +4589,68 @@ function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getPr
           <div
             key={s.id}
             onClick={() => onSelect(s.id)}
-            style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, cursor: 'pointer', marginBottom: 2, background: isActive ? `${tokens.primary}1a` : 'transparent', borderLeft: isActive ? `2px solid ${tokens.primary}` : '2px solid transparent' }}
-            onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = tokens.surfaceHover; }}
-            onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space2,
+              padding: `${tokens.space2}px ${tokens.space2}px`,
+              borderRadius: tokens.radiusMd,
+              cursor: 'pointer',
+              marginBottom: 2,
+              background: isActive ? `${tokens.primary}1a` : 'transparent',
+              borderLeft: isActive ? `2px solid ${tokens.primary}` : '2px solid transparent',
+            }}
+            onMouseEnter={(e) => {
+              if (!isActive) e.currentTarget.style.background = tokens.surfaceHover;
+            }}
+            onMouseLeave={(e) => {
+              if (!isActive) e.currentTarget.style.background = 'transparent';
+            }}
           >
-            <span style={{ width: 24, height: 24, borderRadius: '50%', background: isActive ? tokens.primary : tokens.surface, color: isActive ? '#fff' : tokens.text, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
+            <span
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: '50%',
+                background: isActive ? tokens.primary : tokens.surface,
+                color: isActive ? '#fff' : tokens.text,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: 11,
+                flexShrink: 0,
+              }}
+            >
               {isActive && streaming ? (
-                <span style={{ width: 14, height: 14, border: '2px solid transparent', borderTopColor: '#fff', borderRadius: '50%', animation: 'acode-spin 0.8s linear infinite', display: 'inline-block' }} />
+                <span
+                  style={{
+                    width: 14,
+                    height: 14,
+                    border: '2px solid transparent',
+                    borderTopColor: '#fff',
+                    borderRadius: '50%',
+                    animation: 'acode-spin 0.8s linear infinite',
+                    display: 'inline-block',
+                  }}
+                />
               ) : (
                 s.title?.replace(/\s+/g, ' ').trim().charAt(0).toUpperCase() || 'P'
               )}
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: tokens.fontSizeSm, fontWeight: isActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{s.title || 'New session'}</div>
+              <div
+                style={{
+                  fontSize: tokens.fontSizeSm,
+                  fontWeight: isActive ? 600 : 400,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  color: tokens.text,
+                }}
+              >
+                {s.title || 'New session'}
+              </div>
               {projectName && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{projectName}</div>}
             </div>
           </div>
@@ -2771,7 +4660,12 @@ function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getPr
   );
 }
 
-function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
+function FilesPanel({
+  changedFiles,
+  mode,
+  onModeChange,
+  proxyBase,
+}: {
   changedFiles: { path: string; status: string }[];
   mode: 'git' | 'lastTurn';
   onModeChange: (m: 'git' | 'lastTurn') => void;
@@ -2789,7 +4683,11 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
 
   const loadGit = useCallback(async () => {
     if (!proxyBase || !isLocal) {
-      setGitError(isLocal ? 'No gateway proxy configured — set one in Connections → Gateways → Proxy URL to reach the local git repo.' : 'Git changes require the app to run locally. Deployed versions cannot access the local file system.');
+      setGitError(
+        isLocal
+          ? 'No gateway proxy configured — set one in Connections → Gateways → Proxy URL to reach the local git repo.'
+          : 'Git changes require the app to run locally. Deployed versions cannot access the local file system.',
+      );
       setGitFiles(null);
       return;
     }
@@ -2808,7 +4706,7 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
     }
     setGitFiles(res.files);
     setGitError('');
-  }, [proxyBase]);
+  }, [proxyBase, isLocal]);
 
   useEffect(() => {
     if (mode === 'git') void loadGit();
@@ -2838,33 +4736,116 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space2}px ${tokens.space3}px`, borderBottom: `1px solid ${tokens.border}`, flexShrink: 0 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: `${tokens.space2}px ${tokens.space3}px`,
+          borderBottom: `1px solid ${tokens.border}`,
+          flexShrink: 0,
+        }}
+      >
         <div style={{ position: 'relative' }}>
           <button
             onClick={() => setDropdownOpen((v) => !v)}
-            style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, background: 'transparent', cursor: 'pointer', color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, fontWeight: 500 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space2,
+              padding: `${tokens.space2}px ${tokens.space3}px`,
+              borderRadius: tokens.radiusMd,
+              border: `1px solid ${tokens.borderStrong}`,
+              background: 'transparent',
+              cursor: 'pointer',
+              color: tokens.text,
+              fontSize: tokens.fontSizeSm,
+              fontFamily: tokens.fontSans,
+              fontWeight: 500,
+            }}
           >
             {modeLabel}
-            <Icon name="chevronDown" size={14} color={tokens.textMuted} strokeWidth={2} style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }} />
+            <Icon
+              name="chevronDown"
+              size={14}
+              color={tokens.textMuted}
+              strokeWidth={2}
+              style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}
+            />
           </button>
           {dropdownOpen && (
             <>
               <div onClick={() => setDropdownOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
-              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 71, minWidth: 180, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 4px)',
+                  left: 0,
+                  zIndex: 71,
+                  minWidth: 180,
+                  background: tokens.surface,
+                  border: `1px solid ${tokens.borderStrong}`,
+                  borderRadius: tokens.radiusMd,
+                  boxShadow: tokens.shadowLg,
+                  padding: tokens.space1,
+                }}
+              >
                 <button
-                  onClick={() => { onModeChange('git'); setDropdownOpen(false); }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: `${tokens.space2}px ${tokens.space3}px`, background: 'transparent', border: 'none', borderRadius: tokens.radiusSm, color: mode === 'git' ? tokens.text : tokens.textSecondary, fontSize: tokens.fontSizeSm, cursor: 'pointer', fontFamily: tokens.fontSans }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                  onClick={() => {
+                    onModeChange('git');
+                    setDropdownOpen(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: `${tokens.space2}px ${tokens.space3}px`,
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: tokens.radiusSm,
+                    color: mode === 'git' ? tokens.text : tokens.textSecondary,
+                    fontSize: tokens.fontSizeSm,
+                    cursor: 'pointer',
+                    fontFamily: tokens.fontSans,
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover;
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                  }}
                 >
                   <span>Git changes</span>
                   {mode === 'git' && <Icon name="check" size={14} color={tokens.primary} strokeWidth={2.5} />}
                 </button>
                 <button
-                  onClick={() => { onModeChange('lastTurn'); setDropdownOpen(false); }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: `${tokens.space2}px ${tokens.space3}px`, background: 'transparent', border: 'none', borderRadius: tokens.radiusSm, color: mode === 'lastTurn' ? tokens.text : tokens.textSecondary, fontSize: tokens.fontSizeSm, cursor: 'pointer', fontFamily: tokens.fontSans }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                  onClick={() => {
+                    onModeChange('lastTurn');
+                    setDropdownOpen(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: `${tokens.space2}px ${tokens.space3}px`,
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: tokens.radiusSm,
+                    color: mode === 'lastTurn' ? tokens.text : tokens.textSecondary,
+                    fontSize: tokens.fontSizeSm,
+                    cursor: 'pointer',
+                    fontFamily: tokens.fontSans,
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = tokens.surfaceHover;
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                  }}
                 >
                   <span>Last turn changes</span>
                   {mode === 'lastTurn' && <Icon name="check" size={14} color={tokens.primary} strokeWidth={2.5} />}
@@ -2876,7 +4857,19 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
         {shown.length > 0 && (
           <button
             onClick={toggleAll}
-            style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, background: 'transparent', cursor: 'pointer', color: tokens.textSecondary, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space1,
+              padding: `4px ${tokens.space2}px`,
+              borderRadius: tokens.radiusMd,
+              border: `1px solid ${tokens.borderStrong}`,
+              background: 'transparent',
+              cursor: 'pointer',
+              color: tokens.textSecondary,
+              fontSize: tokens.fontSizeSm,
+              fontFamily: tokens.fontSans,
+            }}
           >
             <Icon name={allExpanded ? 'collapse' : 'expand'} size={14} strokeWidth={2} />
             {allExpanded ? 'Collapse all' : 'Expand all'}
@@ -2885,13 +4878,40 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: tokens.space3 }}>
         {mode === 'git' && gitLoading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.space2, padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: tokens.space2,
+              padding: tokens.space6,
+              color: tokens.textMuted,
+              fontSize: tokens.fontSizeSm,
+            }}
+          >
             <Spinner size={14} color={tokens.textMuted} /> Loading git status…
           </div>
         ) : mode === 'git' && gitError ? (
-          <div style={{ textAlign: 'center', padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space3 }}>
-            <div style={{ fontSize: tokens.fontSizeXs, display: 'flex', alignItems: 'center', gap: tokens.space1 }}><Icon name="circleAlert" size={13} color={tokens.warning} /> {gitError}</div>
-            {isLocal && <Button size="sm" onClick={() => void loadGit()}>Retry</Button>}
+          <div
+            style={{
+              textAlign: 'center',
+              padding: tokens.space6,
+              color: tokens.textMuted,
+              fontSize: tokens.fontSizeSm,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: tokens.space3,
+            }}
+          >
+            <div style={{ fontSize: tokens.fontSizeXs, display: 'flex', alignItems: 'center', gap: tokens.space1 }}>
+              <Icon name="circleAlert" size={13} color={tokens.warning} /> {gitError}
+            </div>
+            {isLocal && (
+              <Button size="sm" onClick={() => void loadGit()}>
+                Retry
+              </Button>
+            )}
           </div>
         ) : shown.length === 0 ? (
           <div style={{ textAlign: 'center', padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm }}>
@@ -2900,7 +4920,13 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2 }}>
             {shown.map((f) => (
-              <FileCard key={`${mode}-${f.path}`} file={f} expanded={expandedFiles.has(f.path)} onToggle={() => toggleFile(f.path)} proxyBase={proxyBase} />
+              <FileCard
+                key={`${mode}-${f.path}`}
+                file={f}
+                expanded={expandedFiles.has(f.path)}
+                onToggle={() => toggleFile(f.path)}
+                proxyBase={proxyBase}
+              />
             ))}
           </div>
         )}
@@ -2909,7 +4935,17 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
   );
 }
 
-function FileCard({ file, expanded, onToggle, proxyBase }: { file: { path: string; status: string }; expanded: boolean; onToggle: () => void; proxyBase: string }) {
+function FileCard({
+  file,
+  expanded,
+  onToggle,
+  proxyBase,
+}: {
+  file: { path: string; status: string };
+  expanded: boolean;
+  onToggle: () => void;
+  proxyBase: string;
+}) {
   const { tokens } = useTheme();
   const { path, status } = file;
   const [diff, setDiff] = useState<DiffHunk[] | null>(null);
@@ -2943,29 +4979,88 @@ function FileCard({ file, expanded, onToggle, proxyBase }: { file: { path: strin
   const shownDiff = proxyBase && diff ? diff : generateMockDiff(path, status);
   const addCount = shownDiff.reduce((acc, h) => acc + h.lines.filter((l) => l.type === 'add').length, 0);
   const removeCount = shownDiff.reduce((acc, h) => acc + h.lines.filter((l) => l.type === 'remove').length, 0);
-  const fileName = path.split('/').pop() ?? path;
 
   return (
     <div style={{ borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, overflow: 'hidden', background: tokens.bg }}>
       <div
         onClick={onToggle}
-        style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, cursor: 'pointer', background: expanded ? tokens.bgSubtle : 'transparent', transition: 'background 0.12s ease' }}
-        onMouseEnter={(e) => { if (!expanded) e.currentTarget.style.background = tokens.surfaceHover; }}
-        onMouseLeave={(e) => { if (!expanded) e.currentTarget.style.background = 'transparent'; }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.space2,
+          padding: `${tokens.space2}px ${tokens.space3}px`,
+          cursor: 'pointer',
+          background: expanded ? tokens.bgSubtle : 'transparent',
+          transition: 'background 0.12s ease',
+        }}
+        onMouseEnter={(e) => {
+          if (!expanded) e.currentTarget.style.background = tokens.surfaceHover;
+        }}
+        onMouseLeave={(e) => {
+          if (!expanded) e.currentTarget.style.background = 'transparent';
+        }}
       >
         <Icon name="fileText" size={16} color={tokens.textMuted} style={{ flexShrink: 0 }} />
-        <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{path}</span>
+        <span
+          style={{
+            fontFamily: tokens.fontMono,
+            fontSize: tokens.fontSizeSm,
+            flex: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            color: tokens.text,
+          }}
+        >
+          {path}
+        </span>
         {status && STATUS_LABEL[status] && (
-          <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: '0 6px', flexShrink: 0 }}>{STATUS_LABEL[status]}</span>
+          <span
+            style={{
+              fontSize: tokens.fontSizeXs,
+              color: tokens.textMuted,
+              background: tokens.bgSubtle,
+              border: `1px solid ${tokens.border}`,
+              borderRadius: tokens.radiusSm,
+              padding: '0 6px',
+              flexShrink: 0,
+            }}
+          >
+            {STATUS_LABEL[status]}
+          </span>
         )}
-        {addCount > 0 && <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.success, fontFamily: tokens.fontMono }}>+{addCount}</span>}
-        {removeCount > 0 && <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.danger, fontFamily: tokens.fontMono }}>-{removeCount}</span>}
-        <Icon name="chevronRight" size={14} color={tokens.textMuted} strokeWidth={2} style={{ flexShrink: 0, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }} />
+        {addCount > 0 && (
+          <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.success, fontFamily: tokens.fontMono }}>
+            +{addCount}
+          </span>
+        )}
+        {removeCount > 0 && (
+          <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.danger, fontFamily: tokens.fontMono }}>
+            -{removeCount}
+          </span>
+        )}
+        <Icon
+          name="chevronRight"
+          size={14}
+          color={tokens.textMuted}
+          strokeWidth={2}
+          style={{ flexShrink: 0, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}
+        />
       </div>
       {expanded && (
         <div style={{ borderTop: `1px solid ${tokens.border}` }}>
           {loading ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.space2, padding: tokens.space4, color: tokens.textMuted, fontSize: tokens.fontSizeXs }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: tokens.space2,
+                padding: tokens.space4,
+                color: tokens.textMuted,
+                fontSize: tokens.fontSizeXs,
+              }}
+            >
               <Spinner size={12} color={tokens.textMuted} /> Loading diff…
             </div>
           ) : (
@@ -2999,19 +5094,29 @@ function DiffViewer({ hunks }: { hunks: DiffHunk[] }) {
             <div
               key={hunkIdx}
               onClick={() => toggleSection(hunkIdx)}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.space2, padding: `6px ${tokens.space3}px`, background: tokens.bgSubtle, cursor: 'pointer', borderTop: hunkIdx > 0 ? `1px solid ${tokens.border}` : 'none', borderBottom: `1px solid ${tokens.border}` }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: tokens.space2,
+                padding: `6px ${tokens.space3}px`,
+                background: tokens.bgSubtle,
+                cursor: 'pointer',
+                borderTop: hunkIdx > 0 ? `1px solid ${tokens.border}` : 'none',
+                borderBottom: `1px solid ${tokens.border}`,
+              }}
             >
-              <Icon name="chevronRight" size={12} color={tokens.textMuted} strokeWidth={2} style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 0.15s ease' }} />
+              <Icon
+                name="chevronRight"
+                size={12}
+                color={tokens.textMuted}
+                strokeWidth={2}
+                style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 0.15s ease' }}
+              />
               <span style={{ color: tokens.textMuted, fontSize: tokens.fontSizeXs }}>{hunk.label}</span>
             </div>
           );
         }
-
-        let lineCounter = 0;
-        const contextLines: DiffLine[] = [];
-        hunk.lines.forEach((l) => {
-          if (l.type === 'context') lineCounter++;
-        });
 
         return (
           <div key={hunkIdx} style={{ borderTop: hunkIdx > 0 ? `1px solid ${tokens.border}` : 'none' }}>
@@ -3023,10 +5128,36 @@ function DiffViewer({ hunks }: { hunks: DiffHunk[] }) {
                   key={lineIdx}
                   style={{ display: 'flex', alignItems: 'stretch', background: bgColor, borderLeft: `3px solid ${borderColor}` }}
                 >
-                  <span style={{ width: 'clamp(24px, 5vw, 40px)', flexShrink: 0, textAlign: 'right', paddingRight: 8, color: tokens.textMuted, userSelect: 'none', fontSize: tokens.fontSizeXs, lineHeight: '1.6', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                  <span
+                    style={{
+                      width: 'clamp(24px, 5vw, 40px)',
+                      flexShrink: 0,
+                      textAlign: 'right',
+                      paddingRight: 8,
+                      color: tokens.textMuted,
+                      userSelect: 'none',
+                      fontSize: tokens.fontSizeXs,
+                      lineHeight: '1.6',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-end',
+                    }}
+                  >
                     {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
                   </span>
-                  <span style={{ flex: 1, paddingLeft: 8, paddingRight: 16, whiteSpace: 'pre', overflow: 'hidden', color: line.type === 'remove' ? '#ff8a8a' : line.type === 'add' ? '#8ae68a' : tokens.text, lineHeight: '1.6', display: 'flex', alignItems: 'center' }}>
+                  <span
+                    style={{
+                      flex: 1,
+                      paddingLeft: 8,
+                      paddingRight: 16,
+                      whiteSpace: 'pre',
+                      overflow: 'hidden',
+                      color: line.type === 'remove' ? '#ff8a8a' : line.type === 'add' ? '#8ae68a' : tokens.text,
+                      lineHeight: '1.6',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
                     {line.content}
                   </span>
                 </div>

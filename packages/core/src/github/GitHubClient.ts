@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 export interface GitHubRepo {
   name: string;
   fullName: string;
@@ -232,7 +230,9 @@ export class GitHubClient {
 
   // ---------- Repositories ----------
   async repos(opt?: { type?: string; perPage?: number; sort?: string }): Promise<GitHubRepo[]> {
-    const r = await this.request<AnyJson[]>(`/user/repos?per_page=${opt?.perPage ?? 100}&sort=${opt?.sort ?? 'updated'}${opt?.type ? `&type=${opt.type}` : ''}`);
+    const r = await this.request<AnyJson[]>(
+      `/user/repos?per_page=${opt?.perPage ?? 100}&sort=${opt?.sort ?? 'updated'}${opt?.type ? `&type=${opt.type}` : ''}`,
+    );
     return r.map((x) => ({
       name: x.name,
       fullName: x.full_name,
@@ -273,14 +273,36 @@ export class GitHubClient {
     };
   }
 
-  async createRepo(input: { name: string; description?: string; private?: boolean; autoInit?: boolean; initializeReadme?: boolean }): Promise<GitHubRepo> {
-    const body = { name: input.name, description: input.description ?? '', private: input.private ?? false, auto_init: input.autoInit ?? false };
+  async createRepo(input: {
+    name: string;
+    description?: string;
+    private?: boolean;
+    autoInit?: boolean;
+    initializeReadme?: boolean;
+  }): Promise<GitHubRepo> {
+    const body = {
+      name: input.name,
+      description: input.description ?? '',
+      private: input.private ?? false,
+      auto_init: input.autoInit ?? false,
+    };
     const x = await this.request<AnyJson>('/user/repos', 'POST', body);
     return {
-      name: x.name, fullName: x.full_name, description: x.description ?? null, language: x.language ?? null,
-      stars: x.stargazers_count ?? 0, forks: x.forks_count ?? 0, openIssues: x.open_issues_count ?? 0,
-      defaultBranch: x.default_branch, updatedAt: x.updated_at, private: x.private, htmlUrl: x.html_url, fork: x.fork,
-      topics: x.topics ?? [], watchers: x.subscribers_count ?? 0, archived: x.archived,
+      name: x.name,
+      fullName: x.full_name,
+      description: x.description ?? null,
+      language: x.language ?? null,
+      stars: x.stargazers_count ?? 0,
+      forks: x.forks_count ?? 0,
+      openIssues: x.open_issues_count ?? 0,
+      defaultBranch: x.default_branch,
+      updatedAt: x.updated_at,
+      private: x.private,
+      htmlUrl: x.html_url,
+      fork: x.fork,
+      topics: x.topics ?? [],
+      watchers: x.subscribers_count ?? 0,
+      archived: x.archived,
     };
   }
 
@@ -311,8 +333,13 @@ export class GitHubClient {
     const refQ = ref ? `?ref=${encodeURIComponent(ref)}` : '';
     const r = await this.request<AnyJson[]>(`/repos/${owner}/${repo}/contents/${path}${refQ}`);
     return r.map((x) => ({
-      name: x.name, path: x.path, type: x.type, size: x.size ?? 0, sha: x.sha,
-      downloadUrl: x.download_url ?? null, htmlUrl: x.html_url,
+      name: x.name,
+      path: x.path,
+      type: x.type,
+      size: x.size ?? 0,
+      sha: x.sha,
+      downloadUrl: x.download_url ?? null,
+      htmlUrl: x.html_url,
     }));
   }
 
@@ -354,8 +381,16 @@ export class GitHubClient {
   async releases(owner: string, repo: string): Promise<GitHubRelease[]> {
     const r = await this.request<AnyJson[]>(`/repos/${owner}/${repo}/releases?per_page=30`);
     return r.map((x) => ({
-      id: String(x.id), tag: x.tag_name, name: x.name ?? null, draft: x.draft, prerelease: x.prerelease,
-      author: x.author?.login ?? 'unknown', createdAt: x.created_at, publishedAt: x.published_at, body: x.body ?? null, htmlUrl: x.html_url,
+      id: String(x.id),
+      tag: x.tag_name,
+      name: x.name ?? null,
+      draft: x.draft,
+      prerelease: x.prerelease,
+      author: x.author?.login ?? 'unknown',
+      createdAt: x.created_at,
+      publishedAt: x.published_at,
+      body: x.body ?? null,
+      htmlUrl: x.html_url,
     }));
   }
 
@@ -372,36 +407,83 @@ export class GitHubClient {
   async pullRequests(owner: string, repo: string, state: 'open' | 'closed' | 'all' = 'all', perPage = 50): Promise<GitHubPullRequest[]> {
     const r = await this.request<AnyJson[]>(`/repos/${owner}/${repo}/pulls?state=${state}&per_page=${perPage}`);
     return r.map((x) => ({
-      number: x.number, title: x.title, state: x.state, user: x.user?.login ?? 'unknown', userAvatar: x.user?.avatar_url ?? '',
-      updatedAt: x.updated_at, createdAt: x.created_at, merged: !!x.merged_at, additions: x.additions ?? 0, deletions: x.deletions ?? 0,
-      htmlUrl: x.html_url, body: x.body ?? null, baseRef: x.base?.ref ?? '', headRef: x.head?.ref ?? '',
-      comments: x.comments ?? 0, reviewComments: x.review_comments ?? 0, draft: !!x.draft,
+      number: x.number,
+      title: x.title,
+      state: x.state,
+      user: x.user?.login ?? 'unknown',
+      userAvatar: x.user?.avatar_url ?? '',
+      updatedAt: x.updated_at,
+      createdAt: x.created_at,
+      merged: !!x.merged_at,
+      additions: x.additions ?? 0,
+      deletions: x.deletions ?? 0,
+      htmlUrl: x.html_url,
+      body: x.body ?? null,
+      baseRef: x.base?.ref ?? '',
+      headRef: x.head?.ref ?? '',
+      comments: x.comments ?? 0,
+      reviewComments: x.review_comments ?? 0,
+      draft: !!x.draft,
       labels: (x.labels ?? []).map((l: AnyJson) => ({ name: l.name, color: l.color })),
-      headSha: x.head?.sha ?? '', mergedAt: x.merged_at ?? null, mergedBy: x.merged_by?.login ?? null, authorAssociation: x.author_association,
+      headSha: x.head?.sha ?? '',
+      mergedAt: x.merged_at ?? null,
+      mergedBy: x.merged_by?.login ?? null,
+      authorAssociation: x.author_association,
     }));
   }
 
   async pullRequest(owner: string, repo: string, number: number): Promise<GitHubPullRequest> {
     const x = await this.request<AnyJson>(`/repos/${owner}/${repo}/pulls/${number}`);
     return {
-      number: x.number, title: x.title, state: x.state, user: x.user?.login ?? 'unknown', userAvatar: x.user?.avatar_url ?? '',
-      updatedAt: x.updated_at, createdAt: x.created_at, merged: !!x.merged_at, additions: x.additions ?? 0, deletions: x.deletions ?? 0,
-      htmlUrl: x.html_url, body: x.body ?? null, baseRef: x.base?.ref ?? '', headRef: x.head?.ref ?? '',
-      comments: x.comments ?? 0, reviewComments: x.review_comments ?? 0, draft: !!x.draft,
+      number: x.number,
+      title: x.title,
+      state: x.state,
+      user: x.user?.login ?? 'unknown',
+      userAvatar: x.user?.avatar_url ?? '',
+      updatedAt: x.updated_at,
+      createdAt: x.created_at,
+      merged: !!x.merged_at,
+      additions: x.additions ?? 0,
+      deletions: x.deletions ?? 0,
+      htmlUrl: x.html_url,
+      body: x.body ?? null,
+      baseRef: x.base?.ref ?? '',
+      headRef: x.head?.ref ?? '',
+      comments: x.comments ?? 0,
+      reviewComments: x.review_comments ?? 0,
+      draft: !!x.draft,
       labels: (x.labels ?? []).map((l: AnyJson) => ({ name: l.name, color: l.color })),
-      headSha: x.head?.sha ?? '', mergedAt: x.merged_at ?? null, mergedBy: x.merged_by?.login ?? null, authorAssociation: x.author_association,
+      headSha: x.head?.sha ?? '',
+      mergedAt: x.merged_at ?? null,
+      mergedBy: x.merged_by?.login ?? null,
+      authorAssociation: x.author_association,
     };
   }
 
-  async mergePullRequest(owner: string, repo: string, number: number, commitMessage?: string, mergeMethod: 'merge' | 'squash' | 'rebase' = 'merge'): Promise<void> {
-    await this.request(`/repos/${owner}/${repo}/pulls/${number}/merge`, 'PUT', { commit_message: commitMessage ?? '', merge_method: mergeMethod });
+  async mergePullRequest(
+    owner: string,
+    repo: string,
+    number: number,
+    commitMessage?: string,
+    mergeMethod: 'merge' | 'squash' | 'rebase' = 'merge',
+  ): Promise<void> {
+    await this.request(`/repos/${owner}/${repo}/pulls/${number}/merge`, 'PUT', {
+      commit_message: commitMessage ?? '',
+      merge_method: mergeMethod,
+    });
   }
 
   async createComment(owner: string, repo: string, number: number, body: string): Promise<void> {
     await this.request(`/repos/${owner}/${repo}/issues/${number}/comments`, 'POST', { body });
   }
 
-  async createReview(owner: string, repo: string, number: number, body: string, event: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT'): Promise<void> {
+  async createReview(
+    owner: string,
+    repo: string,
+    number: number,
+    body: string,
+    event: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT',
+  ): Promise<void> {
     await this.request(`/repos/${owner}/${repo}/pulls/${number}/reviews`, 'POST', { body, event });
   }
 
@@ -409,27 +491,49 @@ export class GitHubClient {
   async issues(owner: string, repo: string, state: 'open' | 'closed' | 'all' = 'open', perPage = 50): Promise<GitHubIssue[]> {
     const r = await this.request<AnyJson[]>(`/repos/${owner}/${repo}/issues?state=${state}&per_page=${perPage}`);
     return r.map((x) => ({
-      number: x.number, title: x.title, state: x.state,
+      number: x.number,
+      title: x.title,
+      state: x.state,
       labels: (x.labels ?? []).map((l: AnyJson) => ({ name: l.name, color: l.color })),
-      user: x.user?.login ?? 'unknown', userAvatar: x.user?.avatar_url ?? '', comments: x.comments ?? 0,
-      createdAt: x.created_at, updatedAt: x.updated_at, htmlUrl: x.html_url, body: x.body ?? null,
-      assignees: (x.assignees ?? []).map((a: AnyJson) => a.login), pullRequest: !!x.pull_request, authorAssociation: x.author_association,
+      user: x.user?.login ?? 'unknown',
+      userAvatar: x.user?.avatar_url ?? '',
+      comments: x.comments ?? 0,
+      createdAt: x.created_at,
+      updatedAt: x.updated_at,
+      htmlUrl: x.html_url,
+      body: x.body ?? null,
+      assignees: (x.assignees ?? []).map((a: AnyJson) => a.login),
+      pullRequest: !!x.pull_request,
+      authorAssociation: x.author_association,
     }));
   }
 
   async issue(owner: string, repo: string, number: number): Promise<GitHubIssue> {
     const x = await this.request<AnyJson>(`/repos/${owner}/${repo}/issues/${number}`);
     return {
-      number: x.number, title: x.title, state: x.state,
+      number: x.number,
+      title: x.title,
+      state: x.state,
       labels: (x.labels ?? []).map((l: AnyJson) => ({ name: l.name, color: l.color })),
-      user: x.user?.login ?? 'unknown', userAvatar: x.user?.avatar_url ?? '', comments: x.comments ?? 0,
-      createdAt: x.created_at, updatedAt: x.updated_at, htmlUrl: x.html_url, body: x.body ?? null,
-      assignees: (x.assignees ?? []).map((a: AnyJson) => a.login), pullRequest: !!x.pull_request, authorAssociation: x.author_association,
+      user: x.user?.login ?? 'unknown',
+      userAvatar: x.user?.avatar_url ?? '',
+      comments: x.comments ?? 0,
+      createdAt: x.created_at,
+      updatedAt: x.updated_at,
+      htmlUrl: x.html_url,
+      body: x.body ?? null,
+      assignees: (x.assignees ?? []).map((a: AnyJson) => a.login),
+      pullRequest: !!x.pull_request,
+      authorAssociation: x.author_association,
     };
   }
 
   async createIssue(owner: string, repo: string, input: { title: string; body?: string; labels?: string[] }): Promise<GitHubIssue> {
-    const x = await this.request<AnyJson>(`/repos/${owner}/${repo}/issues`, 'POST', { title: input.title, body: input.body ?? '', labels: input.labels ?? [] });
+    const x = await this.request<AnyJson>(`/repos/${owner}/${repo}/issues`, 'POST', {
+      title: input.title,
+      body: input.body ?? '',
+      labels: input.labels ?? [],
+    });
     return this.issue(owner, repo, x.number);
   }
 
@@ -437,7 +541,12 @@ export class GitHubClient {
     await this.request(`/repos/${owner}/${repo}/issues/${number}`, 'PATCH', { state });
   }
 
-  async updateIssue(owner: string, repo: string, number: number, input: { title?: string; body?: string; labels?: string[] }): Promise<void> {
+  async updateIssue(
+    owner: string,
+    repo: string,
+    number: number,
+    input: { title?: string; body?: string; labels?: string[] },
+  ): Promise<void> {
     await this.request(`/repos/${owner}/${repo}/issues/${number}`, 'PATCH', {
       ...(input.title ? { title: input.title } : {}),
       ...(input.body ? { body: input.body } : {}),
@@ -448,8 +557,12 @@ export class GitHubClient {
   async comments(owner: string, repo: string, number: number): Promise<GitHubComment[]> {
     const r = await this.request<AnyJson[]>(`/repos/${owner}/${repo}/issues/${number}/comments?per_page=50`);
     return r.map((x) => ({
-      id: String(x.id), user: x.user?.login ?? 'unknown', userAvatar: x.user?.avatar_url ?? '',
-      body: x.body ?? '', createdAt: x.created_at, updatedAt: x.updated_at,
+      id: String(x.id),
+      user: x.user?.login ?? 'unknown',
+      userAvatar: x.user?.avatar_url ?? '',
+      body: x.body ?? '',
+      createdAt: x.created_at,
+      updatedAt: x.updated_at,
     }));
   }
 
@@ -458,16 +571,36 @@ export class GitHubClient {
     try {
       const r = await this.request<{ workflow_runs: AnyJson[] }>(`/repos/${owner}/${repo}/actions/runs?per_page=${perPage}`);
       return r.workflow_runs.map((x) => ({
-        id: String(x.id), name: x.name, event: x.event, headBranch: x.head_branch, actor: x.actor?.login ?? '',
-        status: x.status, conclusion: x.conclusion, createdAt: x.created_at, updatedAt: x.updated_at,
-        headSha: x.head_sha, runNumber: x.run_number,
+        id: String(x.id),
+        name: x.name,
+        event: x.event,
+        headBranch: x.head_branch,
+        actor: x.actor?.login ?? '',
+        status: x.status,
+        conclusion: x.conclusion,
+        createdAt: x.created_at,
+        updatedAt: x.updated_at,
+        headSha: x.head_sha,
+        runNumber: x.run_number,
       }));
     } catch {
       return [];
     }
   }
 
-  async workflowRunJobs(owner: string, repo: string, runId: string): Promise<{ id: string; name: string; status: string; conclusion: string | null; steps: { name: string; status: string; conclusion: string | null }[] }[]> {
+  async workflowRunJobs(
+    owner: string,
+    repo: string,
+    runId: string,
+  ): Promise<
+    {
+      id: string;
+      name: string;
+      status: string;
+      conclusion: string | null;
+      steps: { name: string; status: string; conclusion: string | null }[];
+    }[]
+  > {
     try {
       const r = await this.request<{ jobs: AnyJson[] }>(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs?per_page=100`);
       return r.jobs.map((j) => ({
@@ -521,9 +654,13 @@ export class GitHubClient {
     const q = params.toString() ? `?${params.toString()}` : '';
     const r = await this.request<AnyJson[]>(`/notifications${q}`);
     return r.map((x) => ({
-      id: x.id, reason: x.reason, unread: x.unread, updatedAt: x.updated_at,
+      id: x.id,
+      reason: x.reason,
+      unread: x.unread,
+      updatedAt: x.updated_at,
       subject: { title: x.subject?.title ?? '', type: x.subject?.type ?? '', url: x.subject?.url ?? '', state: x.subject?.state },
-      repository: x.repository?.name ?? '', repositoryFullName: x.repository?.full_name ?? '',
+      repository: x.repository?.name ?? '',
+      repositoryFullName: x.repository?.full_name ?? '',
     }));
   }
 
@@ -544,29 +681,50 @@ export class GitHubClient {
     const path = user === 'user' ? '/user/events' : `/users/${user}/events`;
     const r = await this.request<AnyJson[]>(`${path}?per_page=${opt?.perPage ?? 20}`);
     return r.map((x) => ({
-      id: x.id, type: x.type, actor: x.actor?.login ?? '', actorAvatar: x.actor?.avatar_url ?? '',
-      repo: x.repo?.name ?? '', createdAt: x.created_at,
-      payloadType: x.payload?.action ?? '', action: x.payload?.action ?? null,
-      ref: x.payload?.ref ?? null, refType: x.payload?.ref_type ?? null,
+      id: x.id,
+      type: x.type,
+      actor: x.actor?.login ?? '',
+      actorAvatar: x.actor?.avatar_url ?? '',
+      repo: x.repo?.name ?? '',
+      createdAt: x.created_at,
+      payloadType: x.payload?.action ?? '',
+      action: x.payload?.action ?? null,
+      ref: x.payload?.ref ?? null,
+      refType: x.payload?.ref_type ?? null,
     }));
   }
 
   // ---------- Search ----------
   async searchRepos(query: string, perPage = 30): Promise<GitHubSearchResult<GitHubRepo>> {
-    const r = await this.request<{ total_count: number; items: AnyJson[] }>(`/search/repositories?q=${encodeURIComponent(query)}&per_page=${perPage}`);
+    const r = await this.request<{ total_count: number; items: AnyJson[] }>(
+      `/search/repositories?q=${encodeURIComponent(query)}&per_page=${perPage}`,
+    );
     return {
       total: r.total_count,
       items: r.items.map((x) => ({
-        name: x.name, fullName: x.full_name, description: x.description ?? null, language: x.language ?? null,
-        stars: x.stargazers_count ?? 0, forks: x.forks_count ?? 0, openIssues: x.open_issues_count ?? 0,
-        defaultBranch: x.default_branch ?? 'main', updatedAt: x.updated_at, private: x.private ?? false, htmlUrl: x.html_url,
-        fork: x.fork ?? false, topics: x.topics ?? [], watchers: x.watchers_count ?? 0, archived: x.archived ?? false,
+        name: x.name,
+        fullName: x.full_name,
+        description: x.description ?? null,
+        language: x.language ?? null,
+        stars: x.stargazers_count ?? 0,
+        forks: x.forks_count ?? 0,
+        openIssues: x.open_issues_count ?? 0,
+        defaultBranch: x.default_branch ?? 'main',
+        updatedAt: x.updated_at,
+        private: x.private ?? false,
+        htmlUrl: x.html_url,
+        fork: x.fork ?? false,
+        topics: x.topics ?? [],
+        watchers: x.watchers_count ?? 0,
+        archived: x.archived ?? false,
       })),
     };
   }
 
   async searchUsers(query: string, perPage = 30): Promise<GitHubSearchResult<{ login: string; avatarUrl: string; htmlUrl: string }>> {
-    const r = await this.request<{ total_count: number; items: AnyJson[] }>(`/search/users?q=${encodeURIComponent(query)}&per_page=${perPage}`);
+    const r = await this.request<{ total_count: number; items: AnyJson[] }>(
+      `/search/users?q=${encodeURIComponent(query)}&per_page=${perPage}`,
+    );
     return {
       total: r.total_count,
       items: r.items.map((x) => ({ login: x.login, avatarUrl: x.avatar_url, htmlUrl: x.html_url })),

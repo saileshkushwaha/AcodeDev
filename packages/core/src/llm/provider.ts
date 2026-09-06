@@ -1,12 +1,4 @@
-import type {
-  ChatAttachment,
-  ChatContentPart,
-  ChatMessage,
-  ChatRequest,
-  ChatResponse,
-  ChatStreamChunk,
-  ToolDefinition,
-} from '../types';
+import type { ChatAttachment, ChatContentPart, ChatMessage, ChatRequest, ChatResponse, ChatStreamChunk } from '../types';
 import { getProvider } from '../models/catalog';
 
 export interface AbstractProvider {
@@ -136,7 +128,10 @@ function buildOpenAIMessages(messages: ChatMessage[]) {
 }
 
 export class OpenAICompatibleProvider implements AbstractProvider {
-  constructor(public readonly providerId: string, public readonly apiBase: string) {}
+  constructor(
+    public readonly providerId: string,
+    public readonly apiBase: string,
+  ) {}
 
   private headers(apiKey?: string, upstream?: string) {
     const h: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -155,14 +150,15 @@ export class OpenAICompatibleProvider implements AbstractProvider {
     Object.entries(req.params ?? {}).forEach(([k, v]) => {
       if (v !== undefined && k !== 'stream') body[k] = v;
     });
-    if (req.tools?.length) body.tools = req.tools.map((t) => ({
-      type: 'function',
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      },
-    }));
+    if (req.tools?.length)
+      body.tools = req.tools.map((t) => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
 
     const base = req.baseUrl ?? this.apiBase;
     const res = await fetch(`${base}/chat/completions`, {
@@ -177,9 +173,7 @@ export class OpenAICompatibleProvider implements AbstractProvider {
       content: choice?.message?.content ?? '',
       toolCalls: choice?.message?.tool_calls,
       finishReason: choice?.finish_reason,
-      usage: data.usage
-        ? { promptTokens: data.usage.prompt_tokens, completionTokens: data.usage.completion_tokens }
-        : undefined,
+      usage: data.usage ? { promptTokens: data.usage.prompt_tokens, completionTokens: data.usage.completion_tokens } : undefined,
     };
   }
 
@@ -193,14 +187,15 @@ export class OpenAICompatibleProvider implements AbstractProvider {
     Object.entries(req.params ?? {}).forEach(([k, v]) => {
       if (v !== undefined && k !== 'stream') body[k] = v;
     });
-    if (req.tools?.length) body.tools = req.tools.map((t) => ({
-      type: 'function',
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      },
-    }));
+    if (req.tools?.length)
+      body.tools = req.tools.map((t) => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      }));
 
     const base = req.baseUrl ?? this.apiBase;
     const res = await fetch(`${base}/chat/completions`, {
@@ -275,9 +270,7 @@ export class GoogleProvider implements AbstractProvider {
           const json = line.slice(5).trim();
           try {
             const part = JSON.parse(json);
-            const t = part.candidates?.[0]?.content?.parts
-              ?.map((p: { text?: string }) => p.text ?? '')
-              .join('') ?? '';
+            const t = part.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ?? '';
             if (t) {
               text += t;
               yield { delta: t };
@@ -332,7 +325,11 @@ export class AnthropicProvider implements AbstractProvider {
   async chat(req: ChatRequest): Promise<ChatResponse> {
     const res = await this.callRaw(req, false);
     const data = await res.json();
-    return { content: data.content?.[0]?.text ?? '', finishReason: data.stop_reason, usage: data.usage ? { promptTokens: data.usage.input_tokens, completionTokens: data.usage.output_tokens } : undefined };
+    return {
+      content: data.content?.[0]?.text ?? '',
+      finishReason: data.stop_reason,
+      usage: data.usage ? { promptTokens: data.usage.input_tokens, completionTokens: data.usage.output_tokens } : undefined,
+    };
   }
 
   async *stream(req: ChatRequest): AsyncIterable<ChatStreamChunk> {

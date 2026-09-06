@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTheme } from './Theme';
 import { Badge } from './Badge';
-import { Button } from './Button';
 import { Icon } from './Icon';
 
 export interface NavItem {
@@ -104,9 +103,7 @@ export function Sidebar({
               {!collapsed && (
                 <>
                   <span style={{ flex: 1 }}>{item.label}</span>
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <Badge color={isActive ? '#fff' : tokens.primary}>{item.badge}</Badge>
-                  )}
+                  {item.badge !== undefined && item.badge > 0 && <Badge color={isActive ? '#fff' : tokens.primary}>{item.badge}</Badge>}
                 </>
               )}
               {collapsed && item.badge !== undefined && item.badge > 0 && (

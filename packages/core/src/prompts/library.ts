@@ -87,7 +87,7 @@ export const PROMPT_LIBRARY: LibraryPrompt[] = [
     systemPrompt:
       'You are a senior application security engineer familiar with OWASP ASVS, the MITRE ATT&CK framework and common cloud misconfigurations. You think adversarially — assume the attacker is skilled and persistent. You rank findings by severity with realistic exploitability and give concrete remediation.',
     content:
-      'Perform a security review with an attacker\'s mindset.\n\nScope (system, architecture, code, or config):\n{{scope}}\n\nDeliver:\n1. Threat model: assets, trust boundaries, likely attack paths\n2. Ranked vulnerabilities (Critical / High / Medium / Low) with exploit scenario\n3. Remediation steps for each\n4. Quick wins to apply first',
+      "Perform a security review with an attacker's mindset.\n\nScope (system, architecture, code, or config):\n{{scope}}\n\nDeliver:\n1. Threat model: assets, trust boundaries, likely attack paths\n2. Ranked vulnerabilities (Critical / High / Medium / Low) with exploit scenario\n3. Remediation steps for each\n4. Quick wins to apply first",
   },
   {
     id: 'persona_data_analyst',
@@ -185,7 +185,7 @@ export const PROMPT_LIBRARY: LibraryPrompt[] = [
     category: 'architecture',
     tags: ['microservices', 'architecture', 'bounded-context'],
     content:
-      'Help me decompose this into services with clear boundaries.\n\nCurrent system / monolith surface:\n{{surface}}\n\nGoals & drivers (scale, autonomy, compliance):\n{{goals}}\n\nDeliver: the proposed service decomposition with each service\'s responsibility and data ownership, the contracts/interfaces between them, how shared data and transactions are handled, and which pieces should stay together to avoid distributed-monolith pain.',
+      "Help me decompose this into services with clear boundaries.\n\nCurrent system / monolith surface:\n{{surface}}\n\nGoals & drivers (scale, autonomy, compliance):\n{{goals}}\n\nDeliver: the proposed service decomposition with each service's responsibility and data ownership, the contracts/interfaces between them, how shared data and transactions are handled, and which pieces should stay together to avoid distributed-monolith pain.",
   },
   {
     id: 'arch_event_driven',

@@ -1,5 +1,5 @@
 import { readJSON, writeJSON } from '../storage';
-import type { ModelCapability, ModelInfo, ProviderId } from '../types';
+import type { ModelCapability, ModelInfo } from '../types';
 import { routeThroughProxy, upstreamFromModelsUrl } from '../proxy';
 
 /**
@@ -7,20 +7,10 @@ import { routeThroughProxy, upstreamFromModelsUrl } from '../proxy';
  * multimodal hints carried by the live source. Models default to text + tool
  * + file + folder + link (universal); vision unlocks image/svg/drawio.
  */
-export function inferCapabilities(
-  tags: string[] = [],
-  inputModalities?: string[] | string,
-): ModelCapability[] {
+export function inferCapabilities(tags: string[] = [], inputModalities?: string[] | string): ModelCapability[] {
   const caps: ModelCapability[] = ['text', 'tool', 'file', 'folder', 'link'];
-  const list = Array.isArray(inputModalities)
-    ? inputModalities
-    : typeof inputModalities === 'string'
-      ? [inputModalities]
-      : [];
-  const hasVision =
-    list.length > 0
-      ? list.some((m) => m === 'image' || m === 'vision')
-      : tags.includes('vision');
+  const list = Array.isArray(inputModalities) ? inputModalities : typeof inputModalities === 'string' ? [inputModalities] : [];
+  const hasVision = list.length > 0 ? list.some((m) => m === 'image' || m === 'vision') : tags.includes('vision');
   if (hasVision) caps.push('vision', 'image', 'svg', 'drawio');
   if (tags.includes('reasoning') || tags.includes('thinking')) caps.push('reasoning');
   if (tags.includes('code') || tags.includes('coding')) caps.push('code');
@@ -79,85 +69,486 @@ export interface ModelRecord extends ModelInfo {
  * ------------------------------------------------------------------------- */
 
 const SEED_PROVIDERS: ProviderDef[] = [
-  { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', kind: 'gateway', auth: 'bearer', website: 'https://openrouter.ai', gateway: true, needsKey: true, description: '800+ models from every vendor, incl. free and huge-context options.' },
-  { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', kind: 'openai', auth: 'bearer', website: 'https://platform.openai.com', needsKey: true, description: 'GPT models directly from OpenAI.' },
-  { id: 'google', name: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', kind: 'google', auth: 'query', website: 'https://aistudio.google.com', needsKey: true, description: 'Gemini models with huge context (up to 2M).' },
-  { id: 'anthropic', name: 'Anthropic Claude', baseUrl: 'https://api.anthropic.com/v1', kind: 'anthropic', auth: 'x-api-key', website: 'https://console.anthropic.com', needsKey: true, description: 'Claude models directly from Anthropic.' },
-  { id: 'mistral', name: 'Mistral', baseUrl: 'https://api.mistral.ai/v1', kind: 'openai', auth: 'bearer', website: 'https://console.mistral.ai', needsKey: true, description: 'Open-weight Mistral models.' },
-  { id: 'groq', name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', kind: 'openai', auth: 'bearer', website: 'https://console.groq.com', needsKey: true, description: 'Ultra-fast inference (LPU) — Llama and others free.' },
-  { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', kind: 'openai', auth: 'bearer', website: 'https://platform.deepseek.com', needsKey: true, description: 'DeepSeek V3 / R1 at low cost.' },
-  { id: 'together', name: 'Together AI', baseUrl: 'https://api.together.xyz/v1', kind: 'openai', auth: 'bearer', website: 'https://api.together.ai', needsKey: true, description: 'Open models on rented GPUs.' },
-  { id: 'deepinfra', name: 'DeepInfra', baseUrl: 'https://api.deepinfra.com/v1/openai', kind: 'openai', auth: 'bearer', website: 'https://deepinfra.com', needsKey: true, description: 'Cheap open model inference gateway.' },
-  { id: 'fireworks', name: 'Fireworks AI', baseUrl: 'https://api.fireworks.ai/inference/v1', kind: 'openai', auth: 'bearer', website: 'https://fireworks.ai', needsKey: true, description: 'Fast open-model serving gateway.' },
-  { id: 'cerebras', name: 'Cerebras', baseUrl: 'https://api.cerebras.ai/v1', kind: 'openai', auth: 'bearer', website: 'https://cerebras.ai', needsKey: true, description: 'Wafer-scale, ultra-low latency models.' },
-  { id: 'novita', name: 'Novita AI', baseUrl: 'https://api.novita.ai/v3/openai', kind: 'openai', auth: 'bearer', website: 'https://novita.ai', needsKey: true, description: 'Open-model GPU cloud gateway.' },
-  { id: 'opencode', name: 'OpenCode Zen', baseUrl: 'https://opencode.ai/zen/v1', kind: 'gateway', auth: 'bearer', website: 'https://opencode.ai/zen', gateway: true, needsKey: false, description: 'OpenCode-curated models incl. the free Big Pickle and other free coding models. Works without an API key.' },
-  { id: 'kilocode', name: 'Kilo Gateway', baseUrl: 'https://api.kilo.ai/api/gateway', kind: 'gateway', auth: 'bearer', website: 'https://kilo.ai/gateway', gateway: true, needsKey: false, description: 'OpenRouter-compatible gateway to hundreds of models incl. free ones. Works without an API key.' },
-  { id: 'local', name: 'Local / Offline', baseUrl: 'http://localhost:11434/v1', kind: 'local', auth: 'bearer', needsKey: false, description: 'Local llama.cpp / Ollama-compatible server.' },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    kind: 'gateway',
+    auth: 'bearer',
+    website: 'https://openrouter.ai',
+    gateway: true,
+    needsKey: true,
+    description: '800+ models from every vendor, incl. free and huge-context options.',
+  },
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    kind: 'openai',
+    auth: 'bearer',
+    website: 'https://platform.openai.com',
+    needsKey: true,
+    description: 'GPT models directly from OpenAI.',
+  },
+  {
+    id: 'google',
+    name: 'Google Gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    kind: 'google',
+    auth: 'query',
+    website: 'https://aistudio.google.com',
+    needsKey: true,
+    description: 'Gemini models with huge context (up to 2M).',
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic Claude',
+    baseUrl: 'https://api.anthropic.com/v1',
+    kind: 'anthropic',
+    auth: 'x-api-key',
+    website: 'https://console.anthropic.com',
+    needsKey: true,
+    description: 'Claude models directly from Anthropic.',
+  },
+  {
+    id: 'mistral',
+    name: 'Mistral',
+    baseUrl: 'https://api.mistral.ai/v1',
+    kind: 'openai',
+    auth: 'bearer',
+    website: 'https://console.mistral.ai',
+    needsKey: true,
+    description: 'Open-weight Mistral models.',
+  },
+  {
+    id: 'groq',
+    name: 'Groq',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    kind: 'openai',
+    auth: 'bearer',
+    website: 'https://console.groq.com',
+    needsKey: true,
+    description: 'Ultra-fast inference (LPU) — Llama and others free.',
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    kind: 'openai',
+    auth: 'bearer',
+    website: 'https://platform.deepseek.com',
+    needsKey: true,
+    description: 'DeepSeek V3 / R1 at low cost.',
+  },
+  {
+    id: 'together',
+    name: 'Together AI',
+    baseUrl: 'https://api.together.xyz/v1',
+    kind: 'openai',
+    auth: 'bearer',
+    website: 'https://api.together.ai',
+    needsKey: true,
+    description: 'Open models on rented GPUs.',
+  },
+  {
+    id: 'deepinfra',
+    name: 'DeepInfra',
+    baseUrl: 'https://api.deepinfra.com/v1/openai',
+    kind: 'openai',
+    auth: 'bearer',
+    website: 'https://deepinfra.com',
+    needsKey: true,
+    description: 'Cheap open model inference gateway.',
+  },
+  {
+    id: 'fireworks',
+    name: 'Fireworks AI',
+    baseUrl: 'https://api.fireworks.ai/inference/v1',
+    kind: 'openai',
+    auth: 'bearer',
+    website: 'https://fireworks.ai',
+    needsKey: true,
+    description: 'Fast open-model serving gateway.',
+  },
+  {
+    id: 'cerebras',
+    name: 'Cerebras',
+    baseUrl: 'https://api.cerebras.ai/v1',
+    kind: 'openai',
+    auth: 'bearer',
+    website: 'https://cerebras.ai',
+    needsKey: true,
+    description: 'Wafer-scale, ultra-low latency models.',
+  },
+  {
+    id: 'novita',
+    name: 'Novita AI',
+    baseUrl: 'https://api.novita.ai/v3/openai',
+    kind: 'openai',
+    auth: 'bearer',
+    website: 'https://novita.ai',
+    needsKey: true,
+    description: 'Open-model GPU cloud gateway.',
+  },
+  {
+    id: 'opencode',
+    name: 'OpenCode Zen',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    kind: 'gateway',
+    auth: 'bearer',
+    website: 'https://opencode.ai/zen',
+    gateway: true,
+    needsKey: false,
+    description: 'OpenCode-curated models incl. the free Big Pickle and other free coding models. Works without an API key.',
+  },
+  {
+    id: 'kilocode',
+    name: 'Kilo Gateway',
+    baseUrl: 'https://api.kilo.ai/api/gateway',
+    kind: 'gateway',
+    auth: 'bearer',
+    website: 'https://kilo.ai/gateway',
+    gateway: true,
+    needsKey: false,
+    description: 'OpenRouter-compatible gateway to hundreds of models incl. free ones. Works without an API key.',
+  },
+  {
+    id: 'local',
+    name: 'Local / Offline',
+    baseUrl: 'http://localhost:11434/v1',
+    kind: 'local',
+    auth: 'bearer',
+    needsKey: false,
+    description: 'Local llama.cpp / Ollama-compatible server.',
+  },
 ];
 
 const FREE_MODELS: Record<string, ModelInfo[]> = {
   openrouter: [
-    { id: 'nvidia/nemotron-3.5-lightning:free', name: 'Nemotron 3.5 Lightning (free)', provider: 'openrouter', contextWindow: 1000000, maxOutput: 32768, isFree: true, tags: ['chat', 'fast', 'coding'] },
-    { id: 'poolside/laguna-s-2.1:free', name: 'Laguna S 2.1 (free)', provider: 'openrouter', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding'] },
-    { id: 'inclusionai/ling-3.0-flash-fin:free', name: 'Ling 3.0 Flash Fin (free)', provider: 'openrouter', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'fast'] },
-    { id: 'z-ai/glm-5.2:free', name: 'GLM 5.2 (free)', provider: 'openrouter', contextWindow: 256000, maxOutput: 32768, isFree: true, tags: ['chat', 'reasoning'] },
-    { id: 'thinkingmachines/inkling:free', name: 'Inkling (free)', provider: 'openrouter', contextWindow: 1048576, maxOutput: 32768, isFree: true, tags: ['chat', 'reasoning', 'long-context'] },
-    { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B (free)', provider: 'openrouter', contextWindow: 262144, maxOutput: 8192, isFree: true, tags: ['chat', 'fast'] },
+    {
+      id: 'nvidia/nemotron-3.5-lightning:free',
+      name: 'Nemotron 3.5 Lightning (free)',
+      provider: 'openrouter',
+      contextWindow: 1000000,
+      maxOutput: 32768,
+      isFree: true,
+      tags: ['chat', 'fast', 'coding'],
+    },
+    {
+      id: 'poolside/laguna-s-2.1:free',
+      name: 'Laguna S 2.1 (free)',
+      provider: 'openrouter',
+      contextWindow: 262144,
+      maxOutput: 32768,
+      isFree: true,
+      tags: ['chat', 'coding'],
+    },
+    {
+      id: 'inclusionai/ling-3.0-flash-fin:free',
+      name: 'Ling 3.0 Flash Fin (free)',
+      provider: 'openrouter',
+      contextWindow: 262144,
+      maxOutput: 32768,
+      isFree: true,
+      tags: ['chat', 'fast'],
+    },
+    {
+      id: 'z-ai/glm-5.2:free',
+      name: 'GLM 5.2 (free)',
+      provider: 'openrouter',
+      contextWindow: 256000,
+      maxOutput: 32768,
+      isFree: true,
+      tags: ['chat', 'reasoning'],
+    },
+    {
+      id: 'thinkingmachines/inkling:free',
+      name: 'Inkling (free)',
+      provider: 'openrouter',
+      contextWindow: 1048576,
+      maxOutput: 32768,
+      isFree: true,
+      tags: ['chat', 'reasoning', 'long-context'],
+    },
+    {
+      id: 'google/gemma-4-31b-it:free',
+      name: 'Gemma 4 31B (free)',
+      provider: 'openrouter',
+      contextWindow: 262144,
+      maxOutput: 8192,
+      isFree: true,
+      tags: ['chat', 'fast'],
+    },
   ],
   openai: [
-    { id: 'gpt-4o-mini', name: 'GPT-4o mini', provider: 'openai', contextWindow: 128000, maxOutput: 16384, isFree: false, costPer1kIn: 0.00015, costPer1kOut: 0.0006, tags: ['chat'] },
+    {
+      id: 'gpt-4o-mini',
+      name: 'GPT-4o mini',
+      provider: 'openai',
+      contextWindow: 128000,
+      maxOutput: 16384,
+      isFree: false,
+      costPer1kIn: 0.00015,
+      costPer1kOut: 0.0006,
+      tags: ['chat'],
+    },
   ],
   google: [
-    { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash (free tier)', provider: 'google', contextWindow: 1000000, maxOutput: 8192, isFree: true, tags: ['chat', 'fast', 'vision'] },
-    { id: 'gemini-2.5-pro-exp-03-25', name: 'Gemini 2.5 Pro', provider: 'google', contextWindow: 1000000, maxOutput: 65536, isFree: false, tags: ['chat', 'reasoning'] },
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (free tier)', provider: 'google', contextWindow: 2000000, maxOutput: 8192, isFree: true, tags: ['chat', 'vision'] },
+    {
+      id: 'gemini-2.0-flash-exp',
+      name: 'Gemini 2.0 Flash (free tier)',
+      provider: 'google',
+      contextWindow: 1000000,
+      maxOutput: 8192,
+      isFree: true,
+      tags: ['chat', 'fast', 'vision'],
+    },
+    {
+      id: 'gemini-2.5-pro-exp-03-25',
+      name: 'Gemini 2.5 Pro',
+      provider: 'google',
+      contextWindow: 1000000,
+      maxOutput: 65536,
+      isFree: false,
+      tags: ['chat', 'reasoning'],
+    },
+    {
+      id: 'gemini-1.5-pro',
+      name: 'Gemini 1.5 Pro (free tier)',
+      provider: 'google',
+      contextWindow: 2000000,
+      maxOutput: 8192,
+      isFree: true,
+      tags: ['chat', 'vision'],
+    },
   ],
   anthropic: [
-    { id: 'claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku', provider: 'anthropic', contextWindow: 200000, maxOutput: 8192, isFree: false, costPer1kIn: 0.0008, costPer1kOut: 0.004, tags: ['chat', 'fast'] },
+    {
+      id: 'claude-3-5-haiku-latest',
+      name: 'Claude 3.5 Haiku',
+      provider: 'anthropic',
+      contextWindow: 200000,
+      maxOutput: 8192,
+      isFree: false,
+      costPer1kIn: 0.0008,
+      costPer1kOut: 0.004,
+      tags: ['chat', 'fast'],
+    },
   ],
   mistral: [
-    { id: 'mistral-small-latest', name: 'Mistral Small', provider: 'mistral', contextWindow: 32000, maxOutput: 4096, isFree: true, tags: ['chat'] },
-    { id: 'mistral-medium-latest', name: 'Mistral Medium', provider: 'mistral', contextWindow: 32000, maxOutput: 4096, isFree: false, tags: ['chat'] },
+    {
+      id: 'mistral-small-latest',
+      name: 'Mistral Small',
+      provider: 'mistral',
+      contextWindow: 32000,
+      maxOutput: 4096,
+      isFree: true,
+      tags: ['chat'],
+    },
+    {
+      id: 'mistral-medium-latest',
+      name: 'Mistral Medium',
+      provider: 'mistral',
+      contextWindow: 32000,
+      maxOutput: 4096,
+      isFree: false,
+      tags: ['chat'],
+    },
   ],
   groq: [
-    { id: 'llama-3.1-70b-versatile', name: 'Llama 3.1 70B (Groq)', provider: 'groq', contextWindow: 131072, maxOutput: 32768, isFree: true, tags: ['chat', 'fast'] },
-    { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B (Groq)', provider: 'groq', contextWindow: 131072, maxOutput: 8192, isFree: true, tags: ['chat', 'fast', 'small'] },
-    { id: 'gemma2-9b-it', name: 'Gemma 2 9B (Groq)', provider: 'groq', contextWindow: 8192, maxOutput: 8192, isFree: true, tags: ['chat', 'small'] },
+    {
+      id: 'llama-3.1-70b-versatile',
+      name: 'Llama 3.1 70B (Groq)',
+      provider: 'groq',
+      contextWindow: 131072,
+      maxOutput: 32768,
+      isFree: true,
+      tags: ['chat', 'fast'],
+    },
+    {
+      id: 'llama-3.1-8b-instant',
+      name: 'Llama 3.1 8B (Groq)',
+      provider: 'groq',
+      contextWindow: 131072,
+      maxOutput: 8192,
+      isFree: true,
+      tags: ['chat', 'fast', 'small'],
+    },
+    {
+      id: 'gemma2-9b-it',
+      name: 'Gemma 2 9B (Groq)',
+      provider: 'groq',
+      contextWindow: 8192,
+      maxOutput: 8192,
+      isFree: true,
+      tags: ['chat', 'small'],
+    },
   ],
   deepseek: [
-    { id: 'deepseek-chat', name: 'DeepSeek V3', provider: 'deepseek', contextWindow: 128000, maxOutput: 8192, isFree: false, costPer1kIn: 0.00027, costPer1kOut: 0.0011, tags: ['chat', 'reasoning'] },
+    {
+      id: 'deepseek-chat',
+      name: 'DeepSeek V3',
+      provider: 'deepseek',
+      contextWindow: 128000,
+      maxOutput: 8192,
+      isFree: false,
+      costPer1kIn: 0.00027,
+      costPer1kOut: 0.0011,
+      tags: ['chat', 'reasoning'],
+    },
   ],
   together: [
-    { id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', name: 'Llama 3.3 70B (Together)', provider: 'together', contextWindow: 128000, maxOutput: 4096, isFree: false, costPer1kIn: 0.00088, costPer1kOut: 0.00088, tags: ['chat'] },
+    {
+      id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+      name: 'Llama 3.3 70B (Together)',
+      provider: 'together',
+      contextWindow: 128000,
+      maxOutput: 4096,
+      isFree: false,
+      costPer1kIn: 0.00088,
+      costPer1kOut: 0.00088,
+      tags: ['chat'],
+    },
   ],
   deepinfra: [
-    { id: 'meta-llama/Meta-Llama-3.1-70B-Instruct', name: 'Llama 3.1 70B (DeepInfra)', provider: 'deepinfra', contextWindow: 128000, maxOutput: 8192, isFree: false, tags: ['chat'] },
+    {
+      id: 'meta-llama/Meta-Llama-3.1-70B-Instruct',
+      name: 'Llama 3.1 70B (DeepInfra)',
+      provider: 'deepinfra',
+      contextWindow: 128000,
+      maxOutput: 8192,
+      isFree: false,
+      tags: ['chat'],
+    },
   ],
   fireworks: [
-    { id: 'accounts/fireworks/models/llama-v3p1-70b-instruct', name: 'Llama 3.1 70B (Fireworks)', provider: 'fireworks', contextWindow: 131072, maxOutput: 8192, isFree: false, tags: ['chat'] },
+    {
+      id: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
+      name: 'Llama 3.1 70B (Fireworks)',
+      provider: 'fireworks',
+      contextWindow: 131072,
+      maxOutput: 8192,
+      isFree: false,
+      tags: ['chat'],
+    },
   ],
   cerebras: [
-    { id: 'llama-3.3-70b', name: 'Llama 3.3 70B (Cerebras)', provider: 'cerebras', contextWindow: 131072, maxOutput: 8192, isFree: false, tags: ['chat', 'fast'] },
+    {
+      id: 'llama-3.3-70b',
+      name: 'Llama 3.3 70B (Cerebras)',
+      provider: 'cerebras',
+      contextWindow: 131072,
+      maxOutput: 8192,
+      isFree: false,
+      tags: ['chat', 'fast'],
+    },
   ],
   novita: [
-    { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B (Novita)', provider: 'novita', contextWindow: 131072, maxOutput: 8192, isFree: false, tags: ['chat'] },
+    {
+      id: 'meta-llama/llama-3.1-70b-instruct',
+      name: 'Llama 3.1 70B (Novita)',
+      provider: 'novita',
+      contextWindow: 131072,
+      maxOutput: 8192,
+      isFree: false,
+      tags: ['chat'],
+    },
   ],
   opencode: [
-    { id: 'nemotron-3.5-lightning-free', name: 'Nemotron 3.5 Lightning (free)', provider: 'opencode', contextWindow: 262144, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'fast', 'free'] },
-    { id: 'laguna-s-2.1-free', name: 'Laguna S 2.1 (free)', provider: 'opencode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding', 'free'] },
-    { id: 'ling-3.0-flash-fin-free', name: 'Ling 3.0 Flash (free)', provider: 'opencode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'fast', 'free'] },
-    { id: 'nemotron-3-ultra-free', name: 'Nemotron 3 Ultra (free)', provider: 'opencode', contextWindow: 524288, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'free'] },
-    { id: 'big-pickle', name: 'Big Pickle (free, high demand)', provider: 'opencode', contextWindow: 1048576, maxOutput: 65536, isFree: true, tags: ['chat', 'coding', 'long-context'] },
+    {
+      id: 'nemotron-3.5-lightning-free',
+      name: 'Nemotron 3.5 Lightning (free)',
+      provider: 'opencode',
+      contextWindow: 262144,
+      maxOutput: 65536,
+      isFree: true,
+      tags: ['chat', 'coding', 'fast', 'free'],
+    },
+    {
+      id: 'laguna-s-2.1-free',
+      name: 'Laguna S 2.1 (free)',
+      provider: 'opencode',
+      contextWindow: 262144,
+      maxOutput: 32768,
+      isFree: true,
+      tags: ['chat', 'coding', 'free'],
+    },
+    {
+      id: 'ling-3.0-flash-fin-free',
+      name: 'Ling 3.0 Flash (free)',
+      provider: 'opencode',
+      contextWindow: 262144,
+      maxOutput: 32768,
+      isFree: true,
+      tags: ['chat', 'fast', 'free'],
+    },
+    {
+      id: 'nemotron-3-ultra-free',
+      name: 'Nemotron 3 Ultra (free)',
+      provider: 'opencode',
+      contextWindow: 524288,
+      maxOutput: 65536,
+      isFree: true,
+      tags: ['chat', 'coding', 'free'],
+    },
+    {
+      id: 'big-pickle',
+      name: 'Big Pickle (free, high demand)',
+      provider: 'opencode',
+      contextWindow: 1048576,
+      maxOutput: 65536,
+      isFree: true,
+      tags: ['chat', 'coding', 'long-context'],
+    },
   ],
   kilocode: [
-    { id: 'nvidia/nemotron-3.5-lightning:free', name: 'Nemotron 3.5 Lightning (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding', 'fast', 'free'] },
-    { id: 'poolside/laguna-s-2.1:free', name: 'Poolside Laguna S 2.1 (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'coding', 'free'] },
-    { id: 'stepfun/step-3.7-flash:free', name: 'StepFun Step 3.7 Flash (free)', provider: 'kilocode', contextWindow: 262144, maxOutput: 32768, isFree: true, tags: ['chat', 'fast', 'free'] },
-    { id: 'kilo-auto/free', name: 'Kilo Auto Free', provider: 'kilocode', contextWindow: 1000000, maxOutput: 65536, isFree: true, tags: ['chat', 'auto', 'free'] },
+    {
+      id: 'nvidia/nemotron-3.5-lightning:free',
+      name: 'Nemotron 3.5 Lightning (free)',
+      provider: 'kilocode',
+      contextWindow: 262144,
+      maxOutput: 32768,
+      isFree: true,
+      tags: ['chat', 'coding', 'fast', 'free'],
+    },
+    {
+      id: 'poolside/laguna-s-2.1:free',
+      name: 'Poolside Laguna S 2.1 (free)',
+      provider: 'kilocode',
+      contextWindow: 262144,
+      maxOutput: 32768,
+      isFree: true,
+      tags: ['chat', 'coding', 'free'],
+    },
+    {
+      id: 'stepfun/step-3.7-flash:free',
+      name: 'StepFun Step 3.7 Flash (free)',
+      provider: 'kilocode',
+      contextWindow: 262144,
+      maxOutput: 32768,
+      isFree: true,
+      tags: ['chat', 'fast', 'free'],
+    },
+    {
+      id: 'kilo-auto/free',
+      name: 'Kilo Auto Free',
+      provider: 'kilocode',
+      contextWindow: 1000000,
+      maxOutput: 65536,
+      isFree: true,
+      tags: ['chat', 'auto', 'free'],
+    },
   ],
   local: [
-    { id: 'local/default', name: 'Local model (llama.cpp)', provider: 'local', contextWindow: 32768, maxOutput: 4096, isFree: true, tags: ['chat', 'offline'] },
+    {
+      id: 'local/default',
+      name: 'Local model (llama.cpp)',
+      provider: 'local',
+      contextWindow: 32768,
+      maxOutput: 4096,
+      isFree: true,
+      tags: ['chat', 'offline'],
+    },
   ],
 };
 
@@ -173,10 +564,10 @@ function seed() {
   SEED_PROVIDERS.forEach((p) => registryProviders.set(p.id, p));
   Object.values(FREE_MODELS).forEach((group) =>
     group.forEach((m) =>
-      registryModels.set(
-        `${m.provider}::${m.id}`,
-        { ...m, capabilities: (m as ModelRecord).capabilities ?? inferCapabilities(m.tags) } as ModelRecord,
-      ),
+      registryModels.set(`${m.provider}::${m.id}`, {
+        ...m,
+        capabilities: (m as ModelRecord).capabilities ?? inferCapabilities(m.tags),
+      } as ModelRecord),
     ),
   );
 }
@@ -248,12 +639,7 @@ export function listModels(provider?: string): ModelRecord[] {
     let ids = [...registryModels.values()].filter((m) => m.provider === provider);
     // Prioritize free then the biggest context windows; prevents every dropdown
     // from ballooning when a gateway (e.g. OpenRouter) has thousands of models.
-    ids.sort(
-      (a, b) =>
-        (b.isFree ? 1 : 0) - (a.isFree ? 1 : 0) ||
-        b.contextWindow - a.contextWindow ||
-        a.name.localeCompare(b.name),
-    );
+    ids.sort((a, b) => (b.isFree ? 1 : 0) - (a.isFree ? 1 : 0) || b.contextWindow - a.contextWindow || a.name.localeCompare(b.name));
     if (def?.gateway && ids.length > GATEWAY_MODEL_CAP) ids = ids.slice(0, GATEWAY_MODEL_CAP);
     return ids;
   }
@@ -275,13 +661,15 @@ export function getFreeModels(): ModelRecord[] {
 }
 
 /** Filtered, searchable model query for the Model Browser / selectors. */
-export function searchModels(opts: {
-  provider?: string;
-  free?: boolean;
-  minContext?: number;
-  q?: string;
-  limit?: number;
-} = {}): ModelRecord[] {
+export function searchModels(
+  opts: {
+    provider?: string;
+    free?: boolean;
+    minContext?: number;
+    q?: string;
+    limit?: number;
+  } = {},
+): ModelRecord[] {
   let res = [...registryModels.values()];
   if (opts.provider) res = res.filter((m) => m.provider === opts.provider);
   if (opts.free) res = res.filter((m) => m.isFree);
@@ -383,7 +771,11 @@ export async function syncGatewayData(source: GatewaySource): Promise<number> {
   } catch {
     return 0;
   }
-  const arr = Array.isArray(data.data) ? data.data : Array.isArray((data as { models?: unknown }).models) ? (data as { models: Array<Record<string, unknown>> }).models : [];
+  const arr = Array.isArray(data.data)
+    ? data.data
+    : Array.isArray((data as { models?: unknown }).models)
+      ? (data as { models: Array<Record<string, unknown>> }).models
+      : [];
   if (!Array.isArray(arr) || arr.length === 0) return -1;
 
   let added = 0;
@@ -398,8 +790,9 @@ export async function syncGatewayData(source: GatewaySource): Promise<number> {
       source.hasPricing === false
         ? isFreeModelId(id)
         : isFreeModelId(id) ||
-          (m.isFree === true) ||
-          (priceOf((m as { pricing?: unknown }).pricing, 'prompt') === 0 && priceOf((m as { pricing?: unknown }).pricing, 'completion') === 0);
+          m.isFree === true ||
+          (priceOf((m as { pricing?: unknown }).pricing, 'prompt') === 0 &&
+            priceOf((m as { pricing?: unknown }).pricing, 'completion') === 0);
 
     // Skip paid models with no context (junk); keep all free so the free catalog is rich.
     if (!isFree && ctx === 0) continue;
@@ -510,7 +903,9 @@ export function persistCatalog() {
 }
 
 export function loadCatalog() {
-  const data = readJSON<{ providers?: [string, ProviderDef][]; seedBaseUrls?: [string, string][]; models?: [string, ModelRecord][] }>(CATALOG_STORE);
+  const data = readJSON<{ providers?: [string, ProviderDef][]; seedBaseUrls?: [string, string][]; models?: [string, ModelRecord][] }>(
+    CATALOG_STORE,
+  );
   if (!data) return false;
   if (Array.isArray(data.providers)) {
     data.providers.forEach(([id, def]) => def && registryProviders.set(id, def));

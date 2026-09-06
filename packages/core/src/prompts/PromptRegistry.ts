@@ -154,7 +154,7 @@ export class PromptRegistry {
   }
 
   all(): PromptRecord[] {
-    return [...this.prompts.values()].sort((a, b) => b.favorite === a.favorite ? b.updatedAt - a.updatedAt : (a.favorite ? -1 : 1));
+    return [...this.prompts.values()].sort((a, b) => (b.favorite === a.favorite ? b.updatedAt - a.updatedAt : a.favorite ? -1 : 1));
   }
 
   currentVersion(id: string): PromptVersion | undefined {

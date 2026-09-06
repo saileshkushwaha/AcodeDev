@@ -1,15 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import {
-  loadFlags,
-  isOn,
-  enumOf,
-  toggleFlag,
-  setFlagOverride,
-  resetAllFlags,
-  onFlagsChange,
-  listFlags,
-  type FlagSpec,
-} from '@acode/core';
+import { loadFlags, isOn, enumOf, toggleFlag, setFlagOverride, resetAllFlags, onFlagsChange, listFlags, type FlagSpec } from '@acode/core';
 
 export interface FlagView {
   spec: FlagSpec;
@@ -54,7 +44,6 @@ export function FlagsProvider({ children }: { children: React.ReactNode }) {
     all: () => listFlags(),
     toggle: (key) => toggleFlag(key),
     set: (key, v) => {
-      const { setFlagOverride } = require('@acode/core') as typeof import('@acode/core');
       setFlagOverride(key, v);
     },
     resetAll: () => resetAllFlags(),

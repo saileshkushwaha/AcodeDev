@@ -144,35 +144,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const ragRef = useRef<RAGMemory | null>(null);
   if (!ragRef.current) ragRef.current = new RAGMemory();
 
-  const state: AppState = useMemo(() => ({
-    vault: vaultRef.current!,
-    vaultTick,
-    chat: engineRef.current!,
-    agents: agentsRef.current!,
-    agentStore: agentStoreRef.current!,
-    workflows: workflowsRef.current!,
-    workflowStore: workflowStoreRef.current!,
-    evals: evalsRef.current!,
-    prompts: promptsRef.current!,
-    projects,
-    rag: ragRef.current!,
-    githubToken,
-    setGithubToken: useCallback((t: string) => {
-      setGithubTokenState(t);
-      writeGithubToken(t);
-    }, []),
-    github: () => new GitHubClient({ token: githubToken }),
-    currentProjectId,
-    setCurrentProjectId: useCallback((id: string | null) => {
-      setCurrentProjectIdState(id);
-      if (id) writeRaw('acode.currentProject', id);
-      else removeKey('acode.currentProject');
-    }, []),
-    hasKey: (p: ProviderId) => vaultRef.current?.hasKey(p) ?? false,
-    catalogVersion,
-    refreshCatalog,
-    syncCatalog,
-  }), [vaultTick, projects, githubToken, currentProjectId, catalogVersion, refreshCatalog, syncCatalog]);
+  const setGithubToken = useCallback((t: string) => {
+    setGithubTokenState(t);
+    writeGithubToken(t);
+  }, []);
+
+  const setCurrentProjectId = useCallback((id: string | null) => {
+    setCurrentProjectIdState(id);
+    if (id) writeRaw('acode.currentProject', id);
+    else removeKey('acode.currentProject');
+  }, []);
+
+  const state: AppState = useMemo(
+    () => ({
+      vault: vaultRef.current!,
+      vaultTick,
+      chat: engineRef.current!,
+      agents: agentsRef.current!,
+      agentStore: agentStoreRef.current!,
+      workflows: workflowsRef.current!,
+      workflowStore: workflowStoreRef.current!,
+      evals: evalsRef.current!,
+      prompts: promptsRef.current!,
+      projects,
+      rag: ragRef.current!,
+      githubToken,
+      setGithubToken,
+      github: () => new GitHubClient({ token: githubToken }),
+      currentProjectId,
+      setCurrentProjectId,
+      hasKey: (p: ProviderId) => vaultRef.current?.hasKey(p) ?? false,
+      catalogVersion,
+      refreshCatalog,
+      syncCatalog,
+    }),
+    [vaultTick, projects, githubToken, currentProjectId, catalogVersion, refreshCatalog, syncCatalog, setGithubToken, setCurrentProjectId],
+  );
 
   return <AppContext.Provider value={state}>{children}</AppContext.Provider>;
 }

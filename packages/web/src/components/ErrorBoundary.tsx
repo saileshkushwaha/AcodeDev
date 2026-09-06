@@ -29,7 +29,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
           <h2 style={{ marginBottom: 12 }}>Something went wrong</h2>
           <p style={{ color: '#888', marginBottom: 16 }}>{this.state.error?.message}</p>
           <button
-            onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
             style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontSize: 14 }}
           >
             Reload page

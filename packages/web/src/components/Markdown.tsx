@@ -13,10 +13,23 @@ function inline(text: string, renderKey: () => number, tokens: ReturnType<typeof
   };
   while ((m = regex.exec(text)) !== null) {
     flush();
-    if (m[1]) nodes.push(<code key={renderKey()} style={{ background: tokens.codeBg, color: tokens.info, padding: '1px 5px', borderRadius: 4, fontSize: '0.92em' }}>{m[1].slice(1, -1)}</code>);
+    if (m[1])
+      nodes.push(
+        <code
+          key={renderKey()}
+          style={{ background: tokens.codeBg, color: tokens.info, padding: '1px 5px', borderRadius: 4, fontSize: '0.92em' }}
+        >
+          {m[1].slice(1, -1)}
+        </code>,
+      );
     else if (m[2]) nodes.push(<strong key={renderKey()}>{m[2].slice(2, -2)}</strong>);
     else if (m[3]) nodes.push(<em key={renderKey()}>{m[3].slice(1, -1)}</em>);
-    else if (m[4]) nodes.push(<a key={renderKey()} href={m[6]} target="_blank" rel="noreferrer" style={{ color: tokens.primary }}>{m[5]}</a>);
+    else if (m[4])
+      nodes.push(
+        <a key={renderKey()} href={m[6]} target="_blank" rel="noreferrer" style={{ color: tokens.primary }}>
+          {m[5]}
+        </a>,
+      );
     last = regex.lastIndex;
   }
   plain += text.slice(last);
@@ -29,16 +42,67 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div style={{ position: 'relative', margin: `${tokens.space2}px 0` }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space1}px ${tokens.space2}px`, background: tokens.bg, borderTopLeftRadius: tokens.radiusSm, borderTopRightRadius: tokens.radiusSm, border: `1px solid ${tokens.border}`, borderBottom: 'none', fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: `${tokens.space1}px ${tokens.space2}px`,
+          background: tokens.bg,
+          borderTopLeftRadius: tokens.radiusSm,
+          borderTopRightRadius: tokens.radiusSm,
+          border: `1px solid ${tokens.border}`,
+          borderBottom: 'none',
+          fontFamily: tokens.fontMono,
+          fontSize: tokens.fontSizeXs,
+          color: tokens.textMuted,
+        }}
+      >
         <span>{lang || 'code'}</span>
         <button
-          onClick={() => { navigator.clipboard?.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}
-          style={{ background: 'transparent', border: 'none', color: copied ? tokens.success : tokens.textSecondary, cursor: 'pointer', fontSize: tokens.fontSizeXs, fontWeight: 600 }}
+          onClick={() => {
+            navigator.clipboard
+              ?.writeText(code)
+              .then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              })
+              .catch(() => {});
+          }}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: copied ? tokens.success : tokens.textSecondary,
+            cursor: 'pointer',
+            fontSize: tokens.fontSizeXs,
+            fontWeight: 600,
+          }}
         >
-          {copied ? <><Icon name="check" size={13} /> Copied</> : <><Icon name="copy" size={13} /> Copy</>}
+          {copied ? (
+            <>
+              <Icon name="check" size={13} /> Copied
+            </>
+          ) : (
+            <>
+              <Icon name="copy" size={13} /> Copy
+            </>
+          )}
         </button>
       </div>
-      <pre style={{ margin: 0, padding: tokens.space3, background: tokens.codeBg, border: `1px solid ${tokens.border}`, borderBottomLeftRadius: tokens.radiusSm, borderBottomRightRadius: tokens.radiusSm, overflow: 'auto', fontSize: 12.5, lineHeight: 1.6, maxHeight: 'min(480px, 60vh)' }}>
+      <pre
+        style={{
+          margin: 0,
+          padding: tokens.space3,
+          background: tokens.codeBg,
+          border: `1px solid ${tokens.border}`,
+          borderBottomLeftRadius: tokens.radiusSm,
+          borderBottomRightRadius: tokens.radiusSm,
+          overflow: 'auto',
+          fontSize: 12.5,
+          lineHeight: 1.6,
+          maxHeight: 'min(480px, 60vh)',
+        }}
+      >
         <code>{code}</code>
       </pre>
     </div>
@@ -90,7 +154,11 @@ export function Markdown({ content }: { content: string }) {
     const h = t.match(/^(#{1,4})\s+(.*)/);
     if (h) {
       const size = h[1].length === 1 ? 18 : h[1].length === 2 ? 16 : 14.5;
-      out.push(<div key={nk()} style={{ fontWeight: 700, fontSize: size, margin: '10px 0 4px', lineHeight: 1.3 }}>{inline(h[2], nk, tokens)}</div>);
+      out.push(
+        <div key={nk()} style={{ fontWeight: 700, fontSize: size, margin: '10px 0 4px', lineHeight: 1.3 }}>
+          {inline(h[2], nk, tokens)}
+        </div>,
+      );
       i++;
       continue;
     }
@@ -104,7 +172,9 @@ export function Markdown({ content }: { content: string }) {
       }
       out.push(
         <ul key={nk()} style={{ margin: '4px 0', paddingLeft: 22, lineHeight: 1.6 }}>
-          {list.map((li, idx) => <li key={idx}>{inline(li, nk, tokens)}</li>)}
+          {list.map((li, idx) => (
+            <li key={idx}>{inline(li, nk, tokens)}</li>
+          ))}
         </ul>,
       );
       continue;
@@ -117,8 +187,20 @@ export function Markdown({ content }: { content: string }) {
         i++;
       }
       out.push(
-        <div key={nk()} style={{ borderLeft: `3px solid ${tokens.primary}`, background: tokens.bgSubtle, padding: `${tokens.space1}px ${tokens.space3}px`, margin: `${tokens.space1}px 0`, color: tokens.textSecondary, fontStyle: 'italic' }}>
-          {buf.map((b, idx) => <div key={idx}>{inline(b, nk, tokens)}</div>)}
+        <div
+          key={nk()}
+          style={{
+            borderLeft: `3px solid ${tokens.primary}`,
+            background: tokens.bgSubtle,
+            padding: `${tokens.space1}px ${tokens.space3}px`,
+            margin: `${tokens.space1}px 0`,
+            color: tokens.textSecondary,
+            fontStyle: 'italic',
+          }}
+        >
+          {buf.map((b, idx) => (
+            <div key={idx}>{inline(b, nk, tokens)}</div>
+          ))}
         </div>,
       );
       continue;
@@ -132,7 +214,8 @@ export function Markdown({ content }: { content: string }) {
       !/^```/.test(lines[i]) &&
       !/^(#{1,4})\s/.test(lines[i]) &&
       !/^(- |\* |\d+\. )/.test(lines[i].trim()) &&
-      !lines[i].trim().startsWith('> ')) {
+      !lines[i].trim().startsWith('> ')
+    ) {
       para.push(lines[i]);
       i++;
     }

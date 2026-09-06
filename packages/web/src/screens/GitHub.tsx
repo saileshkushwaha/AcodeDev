@@ -36,7 +36,10 @@ export function GitHubScreen() {
       const u = await client.user();
       setUser(u);
       setConnected(true);
-      client.notifications({ all: true }).then((n) => setUnread(n.filter((x) => x.unread).length)).catch(() => {});
+      client
+        .notifications({ all: true })
+        .then((n) => setUnread(n.filter((x) => x.unread).length))
+        .catch(() => {});
     } catch (e) {
       setConnected(false);
       alert(`GitHub connection failed: ${e instanceof Error ? e.message : e}`);
@@ -61,7 +64,18 @@ export function GitHubScreen() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 'clamp(24px, 6vw, 72px) 16px' }}>
         <div style={{ width: '100%', maxWidth: 460, animation: 'acode-rise 0.3s ease both' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 14, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 14,
+                background: tokens.surface,
+                border: `1px solid ${tokens.borderStrong}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               <GithubIcon size={24} color={tokens.text} />
             </div>
             <div>
@@ -70,7 +84,15 @@ export function GitHubScreen() {
             </div>
           </div>
 
-          <div style={{ background: tokens.surface, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusLg, padding: tokens.space5, boxShadow: tokens.shadowMd }}>
+          <div
+            style={{
+              background: tokens.surface,
+              border: `1px solid ${tokens.border}`,
+              borderRadius: tokens.radiusLg,
+              padding: tokens.space5,
+              boxShadow: tokens.shadowMd,
+            }}
+          >
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Connect your account</div>
             <div style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary, marginBottom: 16 }}>
               Browse repos and code, review pull requests, track issues and CI, read notifications — all from AcodeDev.
@@ -101,7 +123,19 @@ export function GitHubScreen() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Top nav bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space4}px`, borderBottom: `1px solid ${tokens.border}`, background: tokens.bgElevated, flexWrap: 'nowrap', overflowX: 'auto', flexShrink: 0 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.space2,
+          padding: `${tokens.space2}px ${tokens.space4}px`,
+          borderBottom: `1px solid ${tokens.border}`,
+          background: tokens.bgElevated,
+          flexWrap: 'nowrap',
+          overflowX: 'auto',
+          flexShrink: 0,
+        }}
+      >
         <span style={{ fontWeight: 700, marginRight: tokens.space2, whiteSpace: 'nowrap' }}>GitHub</span>
         {(
           [
@@ -137,7 +171,11 @@ export function GitHubScreen() {
             }}
           >
             {n.label}
-            {n.id === 'notifications' && unread > 0 && <Badge color={tokens.danger} style={{ padding: '0 6px' }}>{unread}</Badge>}
+            {n.id === 'notifications' && unread > 0 && (
+              <Badge color={tokens.danger} style={{ padding: '0 6px' }}>
+                {unread}
+              </Badge>
+            )}
           </button>
         ))}
         <div style={{ flex: 1 }} />
@@ -145,7 +183,16 @@ export function GitHubScreen() {
           <button
             onClick={disconnect}
             title="Disconnect"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: tokens.space2, background: 'transparent', border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusFull, padding: '3px 6px 3px 3px', cursor: 'pointer' }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: tokens.space2,
+              background: 'transparent',
+              border: `1px solid ${tokens.borderStrong}`,
+              borderRadius: tokens.radiusFull,
+              padding: '3px 6px 3px 3px',
+              cursor: 'pointer',
+            }}
           >
             {user.avatarUrl && <img src={user.avatarUrl} alt="" width={26} height={26} style={{ borderRadius: '50%' }} />}
             <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textSecondary }}>@{user.login}</span>
@@ -156,7 +203,9 @@ export function GitHubScreen() {
       {/* Content */}
       <div style={{ flex: 1, overflow: 'auto' }}>
         {nav === 'overview' && <OverviewView user={user} onNavigate={setNav} onUnread={setUnread} onOpenRepo={openRepo} />}
-        {nav === 'repositories' && <RepositoriesView initialRepo={pendingRepo ?? undefined} onInitialRepoConsumed={() => setPendingRepo(null)} />}
+        {nav === 'repositories' && (
+          <RepositoriesView initialRepo={pendingRepo ?? undefined} onInitialRepoConsumed={() => setPendingRepo(null)} />
+        )}
         {nav === 'pulls' && <PullRequestsView />}
         {nav === 'issues' && <IssuesView />}
         {nav === 'actions' && <ActionsView />}

@@ -185,15 +185,7 @@ export function Icon({
   className?: string;
 }) {
   const Cmp = ICONS[name];
-  return (
-    <Cmp
-      size={size}
-      color={color ?? 'currentColor'}
-      strokeWidth={strokeWidth}
-      style={style}
-      className={className}
-    />
-  );
+  return <Cmp size={size} color={color ?? 'currentColor'} strokeWidth={strokeWidth} style={style} className={className} />;
 }
 
 /**

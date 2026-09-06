@@ -1,5 +1,5 @@
 import type { ChatMessage, ChatRequest, ToolDefinition, ToolCall } from '../types';
-import { ChatEngine } from '../llm/ChatEngine';
+import type { ChatEngine } from '../llm/ChatEngine';
 
 export interface AgentTool {
   name: string;
@@ -46,18 +46,10 @@ export class AgentEngine {
     }));
   }
 
-  async run(
-    input: string,
-    config: AgentConfig,
-    history: ChatMessage[] = [],
-  ): Promise<{ conversation: ChatMessage[]; final: string }> {
+  async run(input: string, config: AgentConfig, history: ChatMessage[] = []): Promise<{ conversation: ChatMessage[]; final: string }> {
     const maxIter = config.maxIterations ?? 6;
     const tools = config.tools.length ? this.toToolDefs(config.tools) : undefined;
-    const conversation: ChatMessage[] = [
-      { role: 'system', content: config.systemPrompt },
-      ...history,
-      { role: 'user', content: input },
-    ];
+    const conversation: ChatMessage[] = [{ role: 'system', content: config.systemPrompt }, ...history, { role: 'user', content: input }];
 
     for (let i = 0; i < maxIter; i++) {
       const req: ChatRequest = {

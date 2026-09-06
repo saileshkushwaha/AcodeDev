@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { ColorMode, ThemeTokens, getTokens } from './tokens';
+import type { ColorMode, ThemeTokens } from './tokens';
+import { getTokens } from './tokens';
 
 const ThemeContext = createContext<{
   mode: ColorMode;

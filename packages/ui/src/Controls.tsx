@@ -56,7 +56,15 @@ export function Spinner({ size = 20, color }: { size?: number; color?: string })
   );
 }
 
-export function TabBar({ tabs, active, onChange }: { tabs: { id: string; label: string; icon?: React.ReactNode }[]; active: string; onChange: (id: string) => void }) {
+export function TabBar({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: { id: string; label: string; icon?: React.ReactNode }[];
+  active: string;
+  onChange: (id: string) => void;
+}) {
   const { tokens } = useTheme();
   return (
     <div style={{ display: 'flex', gap: tokens.space1, borderBottom: `1px solid ${tokens.border}`, overflowX: 'auto' }}>
@@ -91,7 +99,19 @@ export function TabBar({ tabs, active, onChange }: { tabs: { id: string; label: 
   );
 }
 
-export function Modal({ open, onClose, title, children, width = 560 }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; width?: number }) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  width = 560,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+  width?: number;
+}) {
   const { tokens } = useTheme();
   const [visible, setVisible] = useState(open);
   useEffect(() => {
@@ -129,9 +149,30 @@ export function Modal({ open, onClose, title, children, width = 560 }: { open: b
           boxShadow: tokens.shadowLg,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space3}px ${tokens.space4}px`, borderBottom: `1px solid ${tokens.border}` }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: `${tokens.space3}px ${tokens.space4}px`,
+            borderBottom: `1px solid ${tokens.border}`,
+          }}
+        >
           <div style={{ fontSize: tokens.fontSizeMd, fontWeight: 600, color: tokens.text }}>{title}</div>
-          <button onClick={onClose} title="Close" style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+          <button
+            onClick={onClose}
+            title="Close"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: tokens.textMuted,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 2,
+            }}
+          >
             <Icon name="x" size={16} />
           </button>
         </div>
@@ -146,7 +187,15 @@ export function ProgressBar({ value, max = 100, color }: { value: number; max?: 
   const pct = Math.min(100, (value / max) * 100);
   return (
     <div style={{ width: '100%', height: 8, background: tokens.surfaceHover, borderRadius: tokens.radiusFull, overflow: 'hidden' }}>
-      <div style={{ width: `${pct}%`, height: '100%', background: color ?? tokens.primary, borderRadius: tokens.radiusFull, transition: 'width 0.3s ease' }} />
+      <div
+        style={{
+          width: `${pct}%`,
+          height: '100%',
+          background: color ?? tokens.primary,
+          borderRadius: tokens.radiusFull,
+          transition: 'width 0.3s ease',
+        }}
+      />
     </div>
   );
 }

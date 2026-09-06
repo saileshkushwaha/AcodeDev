@@ -15,13 +15,23 @@
     "build": "npm run build -w @acode/core && npm run build -w @acode/ui && npm run build -w @acode/web",
     "typecheck": "npm run typecheck -w @acode/core && npm run typecheck -w @acode/ui && npm run typecheck -w @acode/web",
     "test": "npm run test -w @acode/core",
-    "ci": "npm run typecheck && npm run test && npm run web:build",
+    "lint": "eslint packages",
+    "format": "prettier --write \"packages/**/*.{ts,tsx,json,css,html}\"",
+    "format:check": "prettier --check \"packages/**/*.{ts,tsx,json,css,html}\"",
+    "ci": "npm run typecheck && npm run test && npm run lint && npm run web:build",
     "deploy": "gh-pages -d packages/web/dist"
   },
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
-    "gh-pages": "^6.3.0"
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "gh-pages": "^6.3.0",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.69.0"
   }
 }

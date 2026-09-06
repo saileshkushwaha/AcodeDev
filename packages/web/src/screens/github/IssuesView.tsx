@@ -4,7 +4,7 @@ import { useTheme, Card, Button, Input, Badge, Spinner, Select, Modal, Icon } fr
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubIssue, GitHubComment } from '@acode/core';
 import { makeClient, timeAgo, splitRef, renderMd } from './shared';
-import { EmptyState, LoadingSpinner, BackButton, FilterChips, FormModal } from '../../components/SharedComponents';
+import { EmptyState, LoadingSpinner, BackButton, FilterChips } from '../../components/SharedComponents';
 
 interface IssueWithRepo extends GitHubIssue {
   repository: string;
@@ -46,11 +46,15 @@ export function IssuesView() {
     void load();
   }, [load]);
 
-  const filtered = useMemo(() => issues.filter((i) => {
-    if (stateFilter !== 'all' && i.state !== stateFilter) return false;
-    if (repoFilter !== 'all' && i.repository !== repoFilter) return false;
-    return true;
-  }), [issues, stateFilter, repoFilter]);
+  const filtered = useMemo(
+    () =>
+      issues.filter((i) => {
+        if (stateFilter !== 'all' && i.state !== stateFilter) return false;
+        if (repoFilter !== 'all' && i.repository !== repoFilter) return false;
+        return true;
+      }),
+    [issues, stateFilter, repoFilter],
+  );
 
   return (
     <div style={{ padding: 'clamp(12px, 2.5vw, 28px)', maxWidth: 1200, margin: '0 auto' }}>
@@ -61,15 +65,21 @@ export function IssuesView() {
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, marginBottom: tokens.space4, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700, fontSize: tokens.fontSizeLg }}>Issues</span>
             <div style={{ width: 180, minWidth: 150 }}>
-              <Select value={stateFilter} onChange={(v) => setStateFilter(v as 'open' | 'closed' | 'all')} options={[
-                { value: 'open', label: 'Open' },
-                { value: 'closed', label: 'Closed' },
-                { value: 'all', label: 'All' },
-              ]} />
+              <Select
+                value={stateFilter}
+                onChange={(v) => setStateFilter(v as 'open' | 'closed' | 'all')}
+                options={[
+                  { value: 'open', label: 'Open' },
+                  { value: 'closed', label: 'Closed' },
+                  { value: 'all', label: 'All' },
+                ]}
+              />
             </div>
             <div style={{ flex: 1 }} />
             <Button onClick={() => setCreateOpen(true)}>+ New issue</Button>
-            <Button variant="secondary" onClick={() => void load()}>{loading ? <Spinner size={15} /> : 'Refresh'}</Button>
+            <Button variant="secondary" onClick={() => void load()}>
+              {loading ? <Spinner size={15} /> : 'Refresh'}
+            </Button>
           </div>
 
           {repos.length > 0 && <FilterChips repos={repos} value={repoFilter} onChange={setRepoFilter} />}
@@ -80,11 +90,22 @@ export function IssuesView() {
             <EmptyState>No issues matched</EmptyState>
           ) : (
             <Card padded={false}>
-              {filtered.map((i, idx) => <IssueRow key={`${i.number}-${i.repository}`} issue={i} onClick={() => setSelected(i)} last={idx === filtered.length - 1} />)}
+              {filtered.map((i, idx) => (
+                <IssueRow key={`${i.number}-${i.repository}`} issue={i} onClick={() => setSelected(i)} last={idx === filtered.length - 1} />
+              ))}
             </Card>
           )}
 
-          <CreateIssueModal open={createOpen} onClose={() => setCreateOpen(false)} repos={repos} myLogin={myLogin} onCreated={() => { setCreateOpen(false); void load(); }} />
+          <CreateIssueModal
+            open={createOpen}
+            onClose={() => setCreateOpen(false)}
+            repos={repos}
+            myLogin={myLogin}
+            onCreated={() => {
+              setCreateOpen(false);
+              void load();
+            }}
+          />
         </>
       )}
     </div>
@@ -95,11 +116,27 @@ const IssueRow = React.memo(function IssueRow({ issue, onClick, last }: { issue:
   const { tokens } = useTheme();
   const color = issue.state === 'open' ? tokens.success : tokens.danger;
   return (
-    <button onClick={onClick} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: tokens.space3, padding: tokens.space3, background: 'transparent', border: 'none', borderBottom: last ? 'none' : `1px solid ${tokens.border}`, cursor: 'pointer', textAlign: 'left' }}>
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.space3,
+        padding: tokens.space3,
+        background: 'transparent',
+        border: 'none',
+        borderBottom: last ? 'none' : `1px solid ${tokens.border}`,
+        cursor: 'pointer',
+        textAlign: 'left',
+      }}
+    >
       <Icon name="circle" size={16} color={color} strokeWidth={2} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          <span style={{ color: tokens.textMuted, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, marginRight: tokens.space1 }}>{issue.repository}</span>
+          <span style={{ color: tokens.textMuted, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, marginRight: tokens.space1 }}>
+            {issue.repository}
+          </span>
           <span style={{ color: tokens.textMuted, fontSize: tokens.fontSizeXs, marginRight: tokens.space1 }}>#{issue.number}</span>
           {issue.title}
         </div>
@@ -108,7 +145,11 @@ const IssueRow = React.memo(function IssueRow({ issue, onClick, last }: { issue:
         </div>
       </div>
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        {issue.labels.slice(0, 3).map((l) => <Badge key={l.name} color={`#${l.color}`}>{l.name}</Badge>)}
+        {issue.labels.slice(0, 3).map((l) => (
+          <Badge key={l.name} color={`#${l.color}`}>
+            {l.name}
+          </Badge>
+        ))}
       </div>
     </button>
   );
@@ -132,7 +173,9 @@ function IssueDetail({ issue, onBack, onChanged }: { issue: IssueWithRepo; onBac
       ]);
       setDetail(d);
       setComments(cm);
-    } catch { /* keep */ }
+    } catch {
+      /* keep */
+    }
   }, [owner, name, issue.number, githubToken]);
 
   useEffect(() => {
@@ -181,14 +224,24 @@ function IssueDetail({ issue, onBack, onChanged }: { issue: IssueWithRepo; onBac
           </div>
         </div>
         <div style={{ display: 'flex', gap: tokens.space2 }}>
-          {detail.state === 'open'
-            ? <Button variant="danger" size="sm" onClick={() => void setState('closed')} disabled={busy}>Close issue</Button>
-            : <Button variant="success" size="sm" onClick={() => void setState('open')} disabled={busy}>Reopen</Button>}
+          {detail.state === 'open' ? (
+            <Button variant="danger" size="sm" onClick={() => void setState('closed')} disabled={busy}>
+              Close issue
+            </Button>
+          ) : (
+            <Button variant="success" size="sm" onClick={() => void setState('open')} disabled={busy}>
+              Reopen
+            </Button>
+          )}
         </div>
       </div>
 
       <div style={{ display: 'flex', gap: tokens.space1, flexWrap: 'wrap', marginBottom: tokens.space4 }}>
-        {detail.labels.map((l) => <Badge key={l.name} color={`#${l.color}`}>{l.name}</Badge>)}
+        {detail.labels.map((l) => (
+          <Badge key={l.name} color={`#${l.color}`}>
+            {l.name}
+          </Badge>
+        ))}
         {detail.assignees.length > 0 && <Badge color={tokens.info}>👤 {detail.assignees.join(', ')}</Badge>}
       </div>
 
@@ -221,7 +274,9 @@ function IssueDetail({ issue, onBack, onChanged }: { issue: IssueWithRepo; onBac
           <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, marginBottom: tokens.space2 }}>Add a comment</div>
           <Input textarea rows={3} value={comment} onChange={setComment} placeholder="Write a comment (markdown supported)" />
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: tokens.space2 }}>
-            <Button onClick={submitComment} disabled={!comment.trim() || busy}>Comment</Button>
+            <Button onClick={submitComment} disabled={!comment.trim() || busy}>
+              Comment
+            </Button>
           </div>
         </Card>
       </div>
@@ -229,7 +284,19 @@ function IssueDetail({ issue, onBack, onChanged }: { issue: IssueWithRepo; onBac
   );
 }
 
-function CreateIssueModal({ open, onClose, repos, myLogin, onCreated }: { open: boolean; onClose: () => void; repos: GitHubRepo[]; myLogin: string; onCreated: () => void }) {
+function CreateIssueModal({
+  open,
+  onClose,
+  repos,
+  myLogin,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  repos: GitHubRepo[];
+  myLogin: string;
+  onCreated: () => void;
+}) {
   const { tokens } = useTheme();
   const { githubToken } = useApp();
   const [title, setTitle] = useState('');
@@ -268,8 +335,12 @@ function CreateIssueModal({ open, onClose, repos, myLogin, onCreated }: { open: 
         <Input label="Title" value={title} onChange={setTitle} placeholder="Issue title" />
         <Input label="Description (markdown)" textarea rows={5} value={body} onChange={setBody} placeholder="Describe the issue..." />
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.space2 }}>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} disabled={!title.trim() || busy}>{busy ? <Spinner size={16} color="#fff" /> : 'Submit new issue'}</Button>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={!title.trim() || busy}>
+            {busy ? <Spinner size={16} color="#fff" /> : 'Submit new issue'}
+          </Button>
         </div>
       </div>
     </Modal>

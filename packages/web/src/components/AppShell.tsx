@@ -61,7 +61,23 @@ export function AppShell({
         overflow: 'hidden',
       }}
     >
-      <div style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: tokens.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: tokens.fontSizeMd, flexShrink: 0 }}>A</div>
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: tokens.radiusMd,
+          background: tokens.primary,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: tokens.fontSizeMd,
+          flexShrink: 0,
+        }}
+      >
+        A
+      </div>
       {!collapsed && (
         <div style={{ whiteSpace: 'nowrap' }}>
           <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, lineHeight: 1.1 }}>AcodeDev</div>
@@ -82,7 +98,13 @@ export function AppShell({
       }}
       items={items}
       header={logo}
-      footer={!isMobile && !collapsed ? <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center', paddingBottom: tokens.space1 }}>v0.1 · all-in-one</div> : undefined}
+      footer={
+        !isMobile && !collapsed ? (
+          <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, textAlign: 'center', paddingBottom: tokens.space1 }}>
+            v0.1 · all-in-one
+          </div>
+        ) : undefined
+      }
     />
   );
 
@@ -130,11 +152,37 @@ export function AppShell({
               <button
                 onClick={() => setDrawerOpen(true)}
                 aria-label="Open menu"
-                style={{ background: 'transparent', border: 'none', color: tokens.text, width: 36, height: 36, borderRadius: tokens.radiusMd, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: tokens.text,
+                  width: 36,
+                  height: 36,
+                  borderRadius: tokens.radiusMd,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
               >
                 <Icon name="menu" size={22} />
               </button>
-              <div style={{ width: 28, height: 28, borderRadius: tokens.radiusMd, background: tokens.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: tokens.fontSizeSm }}>A</div>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: tokens.radiusMd,
+                  background: tokens.primary,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: tokens.fontSizeSm,
+                }}
+              >
+                A
+              </div>
               <span style={{ fontWeight: 700, fontSize: tokens.fontSizeMd }}>AcodeDev</span>
               <div style={{ flex: 1 }} />
             </div>

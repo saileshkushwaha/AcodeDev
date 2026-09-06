@@ -1,4 +1,4 @@
-import { ChatEngine } from '../llm/ChatEngine';
+import type { ChatEngine } from '../llm/ChatEngine';
 import type { ChatMessage, ChatRequest, ProviderId } from '../types';
 
 export type EvalType = 'exact' | 'contains' | 'regex' | 'llm_judge' | 'length' | 'custom';
@@ -74,7 +74,16 @@ export class EvalEngine {
         const judge = await this.judge(c.input, actual, c.reference, def.criteria, provider);
         pass = judge.pass;
         score = judge.score;
-        results.push({ caseId: c.id, input: c.input, expected: c.expected, actual, pass, score, llmJudge: judge.explanation, latencyMs: Date.now() - caseStart });
+        results.push({
+          caseId: c.id,
+          input: c.input,
+          expected: c.expected,
+          actual,
+          pass,
+          score,
+          llmJudge: judge.explanation,
+          latencyMs: Date.now() - caseStart,
+        });
         continue;
       }
 
@@ -124,7 +133,11 @@ export class EvalEngine {
     ]
       .filter(Boolean)
       .join('\n');
-    const res = await this.engine.chat({ provider, model: 'nvidia/nemotron-3.5-lightning:free', messages: [{ role: 'user', content: prompt }] });
+    const res = await this.engine.chat({
+      provider,
+      model: 'nvidia/nemotron-3.5-lightning:free',
+      messages: [{ role: 'user', content: prompt }],
+    });
     try {
       const m = res.content.match(/\{[\s\S]*\}/);
       if (!m) return { pass: false, score: 0, explanation: res.content };

@@ -85,8 +85,12 @@ describe('storage layer', () => {
 });
 
 describe('ProjectStore settings persistence', () => {
-  beforeEach(() => { vi.stubGlobal('localStorage', createMemoryStorage()); });
-  afterEach(() => { vi.unstubAllGlobals(); });
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', createMemoryStorage());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it('restores composer settings onto a reloaded conversation', () => {
     const first = new ProjectStore();
@@ -113,8 +117,12 @@ describe('ProjectStore settings persistence', () => {
 });
 
 describe('AgentRegistry persistence', () => {
-  beforeEach(() => { vi.stubGlobal('localStorage', createMemoryStorage()); });
-  afterEach(() => { vi.unstubAllGlobals(); });
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', createMemoryStorage());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it('round-trips an agent definition and transcript', () => {
     const first = new AgentRegistry();
@@ -147,7 +155,18 @@ describe('AgentRegistry persistence', () => {
 
   it('remove deletes persisted agents', () => {
     const first = new AgentRegistry();
-    first.save({ id: 'x', name: 'X', systemPrompt: '', provider: 'openrouter', model: 'm', tools: [], enableRAG: false, maxIter: 1, conversation: [], updatedAt: Date.now() } satisfies AgentDefinition);
+    first.save({
+      id: 'x',
+      name: 'X',
+      systemPrompt: '',
+      provider: 'openrouter',
+      model: 'm',
+      tools: [],
+      enableRAG: false,
+      maxIter: 1,
+      conversation: [],
+      updatedAt: Date.now(),
+    } satisfies AgentDefinition);
     expect(first.remove('x')).toBe(true);
 
     const second = new AgentRegistry();
@@ -156,8 +175,12 @@ describe('AgentRegistry persistence', () => {
 });
 
 describe('EvalStore', () => {
-  beforeEach(() => { vi.stubGlobal('localStorage', createMemoryStorage()); });
-  afterEach(() => { vi.unstubAllGlobals(); });
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', createMemoryStorage());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it('round-trips an eval snapshot with cases and last result', () => {
     writeEvalSnapshot({
@@ -181,8 +204,12 @@ describe('EvalStore', () => {
 });
 
 describe('catalog seed base-URL overrides', () => {
-  beforeEach(() => { vi.stubGlobal('localStorage', createMemoryStorage()); });
-  afterEach(() => { vi.unstubAllGlobals(); });
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', createMemoryStorage());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   it('reapplies overridden seed gateway base URLs after reload', () => {
     const seed = getProvider('openrouter');

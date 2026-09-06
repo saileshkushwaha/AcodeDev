@@ -1,7 +1,6 @@
-
-import { readJSON, writeJSON } from "../storage";
-import type { ChatMessage, ProviderId } from "../types";
-import { isOn } from "@acode/core";
+import { readJSON, writeJSON } from '../storage';
+import type { ChatMessage, ProviderId } from '../types';
+import { isOn } from '@acode/core';
 export type FileChangeStatus = 'added' | 'modified' | 'deleted';
 
 export interface ChangedFile {
@@ -156,7 +155,13 @@ export class ProjectStore {
     return deactivated;
   }
 
-  createConversation(input: { title: string; projectId?: string; provider: ProviderId; model: string; settings?: ConversationSettings }): Conversation {
+  createConversation(input: {
+    title: string;
+    projectId?: string;
+    provider: ProviderId;
+    model: string;
+    settings?: ConversationSettings;
+  }): Conversation {
     const id = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     const conv: Conversation = {
       id,
@@ -222,9 +227,7 @@ export class ProjectStore {
   /** Files changed in a conversation, most recent first. */
   changedFilesFor(convId: string | null): ChangedFile[] {
     const c = convId ? this.conversations.get(convId) : undefined;
-    return (c?.changedFiles ?? [])
-      .slice()
-      .sort((a, b) => b.changedAt - a.changedAt);
+    return (c?.changedFiles ?? []).slice().sort((a, b) => b.changedAt - a.changedAt);
   }
 
   /** Rename a conversation. */
@@ -285,24 +288,18 @@ export class ProjectStore {
 
   conversationsFor(projectId?: string): Conversation[] {
     const all = [...this.conversations.values()].filter((c) => !c.archived && !c.inactive);
-    return (projectId ? all.filter((c) => c.projectId === projectId) : all).sort(
-      (a, b) => b.updatedAt - a.updatedAt,
-    );
+    return (projectId ? all.filter((c) => c.projectId === projectId) : all).sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   /** Archived conversations for the restore view (most recently archived first). */
   archivedConversationsFor(projectId?: string): Conversation[] {
     const all = [...this.conversations.values()].filter((c) => c.archived);
-    return (projectId ? all.filter((c) => c.projectId === projectId) : all).sort(
-      (a, b) => b.updatedAt - a.updatedAt,
-    );
+    return (projectId ? all.filter((c) => c.projectId === projectId) : all).sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   /** Inactive conversations (belonged to a deleted project). Viewable but not usable. */
   inactiveConversationsFor(projectId?: string): Conversation[] {
     const all = [...this.conversations.values()].filter((c) => c.inactive);
-    return (projectId ? all.filter((c) => c.projectId === projectId) : all).sort(
-      (a, b) => b.updatedAt - a.updatedAt,
-    );
+    return (projectId ? all.filter((c) => c.projectId === projectId) : all).sort((a, b) => b.updatedAt - a.updatedAt);
   }
 }

@@ -10,7 +10,6 @@ import {
   WORKFLOW_CATEGORIES,
   listModels,
   getFreeModels,
-  GitHubClient,
   maskKey,
   extractVariables,
   renderPrompt,
@@ -125,7 +124,22 @@ describe('prompt helpers', () => {
 });
 
 describe('workflow library', () => {
-  const validNodeTypes = ['input', 'llm', 'transform', 'condition', 'prompt_template', 'output', 'trigger', 'http', 'fetch', 'kv', 'variables', 'secret', 'parallel', 'loop'];
+  const validNodeTypes = [
+    'input',
+    'llm',
+    'transform',
+    'condition',
+    'prompt_template',
+    'output',
+    'trigger',
+    'http',
+    'fetch',
+    'kv',
+    'variables',
+    'secret',
+    'parallel',
+    'loop',
+  ];
 
   it('presets are structurally valid: entry + terminal nodes, wired edges, unique ids', () => {
     expect(WORKFLOW_LIBRARY.length).toBeGreaterThanOrEqual(8);
@@ -146,9 +160,7 @@ describe('workflow library', () => {
         expect(ids).toContain(e.target);
       });
       // graph is connected end to end (every node except input has an inbound edge)
-      w.nodes
-        .filter((n) => n.type !== 'input')
-        .forEach((n) => expect(w.edges.some((e) => e.target === n.id)).toBe(true));
+      w.nodes.filter((n) => n.type !== 'input').forEach((n) => expect(w.edges.some((e) => e.target === n.id)).toBe(true));
     });
   });
 
@@ -170,13 +182,7 @@ describe('workflow library', () => {
   });
 
   it('new presets are structurally valid', () => {
-    const newPresets = [
-      'wf_webhook_alert',
-      'wf_kv_cache_demo',
-      'wf_batch_processor',
-      'wf_secret_llm',
-      'wf_variable_chain',
-    ];
+    const newPresets = ['wf_webhook_alert', 'wf_kv_cache_demo', 'wf_batch_processor', 'wf_secret_llm', 'wf_variable_chain'];
     newPresets.forEach((id) => {
       const w = WORKFLOW_LIBRARY.find((x) => x.id === id);
       expect(w).toBeTruthy();
@@ -196,15 +202,13 @@ describe('workflow library', () => {
         expect(ids).toContain(e.target);
       });
       // graph is connected end to end (every node except input has an inbound edge)
-      w.nodes
-        .filter((n) => n.type !== 'input')
-        .forEach((n) => expect(w.edges.some((e) => e.target === n.id)).toBe(true));
+      w.nodes.filter((n) => n.type !== 'input').forEach((n) => expect(w.edges.some((e) => e.target === n.id)).toBe(true));
     });
   });
 });
 
 describe('WorkflowEngine', () => {
-  const fakeEngine = ({ chat: async () => ({ content: 'ok', usage: { promptTokens: 7, completionTokens: 2 } }) }) as any;
+  const fakeEngine = { chat: async () => ({ content: 'ok', usage: { promptTokens: 7, completionTokens: 2 } }) } as any;
 
   it('records outputs for every step in chain order', async () => {
     const engine = new WorkflowEngine(fakeEngine);
@@ -219,7 +223,10 @@ describe('WorkflowEngine', () => {
       { id: 'e2', source: 'a', target: 'b', sourceHandle: 'out', targetHandle: 'in' },
       { id: 'e3', source: 'b', target: 'out', sourceHandle: 'out', targetHandle: 'in' },
     ];
-    const r = await engine.run({ id: 't', name: 't', nodes: nodes as any, edges: edges as any, variables: {}, updatedAt: 0 }, { input: '  Hi  ' });
+    const r = await engine.run(
+      { id: 't', name: 't', nodes: nodes as any, edges: edges as any, variables: {}, updatedAt: 0 },
+      { input: '  Hi  ' },
+    );
     expect(r.final).toBe('ok');
     expect(r.results).toHaveLength(4);
     expect(r.results.every((x) => x.status === 'ok')).toBe(true);
@@ -237,14 +244,21 @@ describe('WorkflowEngine', () => {
       { id: 'a', type: 'llm', name: 'LLM A', config: {}, position: { x: 1, y: 0 } },
     ];
     const edges = [{ id: 'e1', source: 'in', target: 'a', sourceHandle: 'out', targetHandle: 'in' }];
-    const r = await engine.run({ id: 't', name: 't', nodes: nodes as any, edges: edges as any, variables: {}, updatedAt: 0 }, { input: 'x' });
+    const r = await engine.run(
+      { id: 't', name: 't', nodes: nodes as any, edges: edges as any, variables: {}, updatedAt: 0 },
+      { input: 'x' },
+    );
     const llm = r.results.find((x) => x.nodeId === 'a')!;
     expect(llm.tokens?.prompt).toBeGreaterThan(0);
     expect(llm.tokens?.completion).toBe(1);
   });
 
   it('attributes a failing step to its node instead of aborting the run', async () => {
-    const engine = new WorkflowEngine({ chat: async () => { throw new Error('rate limited'); } } as any);
+    const engine = new WorkflowEngine({
+      chat: async () => {
+        throw new Error('rate limited');
+      },
+    } as any);
     const nodes = [
       { id: 'in', type: 'input', name: 'Input', config: { value: '{{input}}' }, position: { x: 0, y: 0 } },
       { id: 'a', type: 'llm', name: 'LLM A', config: {}, position: { x: 1, y: 0 } },
@@ -254,7 +268,10 @@ describe('WorkflowEngine', () => {
       { id: 'e1', source: 'in', target: 'a', sourceHandle: 'out', targetHandle: 'in' },
       { id: 'e2', source: 'a', target: 'out', sourceHandle: 'out', targetHandle: 'in' },
     ];
-    const r = await engine.run({ id: 't', name: 't', nodes: nodes as any, edges: edges as any, variables: {}, updatedAt: 0 }, { input: 'x' });
+    const r = await engine.run(
+      { id: 't', name: 't', nodes: nodes as any, edges: edges as any, variables: {}, updatedAt: 0 },
+      { input: 'x' },
+    );
     const failed = r.results.find((x) => x.nodeId === 'a')!;
     expect(failed?.status).toBe('error');
     expect(failed?.output).toContain('rate limited');
@@ -265,7 +282,7 @@ describe('WorkflowEngine', () => {
 describe('WorkflowRegistry', () => {
   it('seeds the full built-in library and marks presets as builtin', () => {
     const reg = new WorkflowRegistry();
-    const seedCount = reg.ensureSeeded();
+    reg.ensureSeeded();
     const builtins = reg.all().filter((d) => d.builtin);
     expect(builtins.length).toBeGreaterThanOrEqual(WORKFLOW_LIBRARY.length);
     expect(builtins.every((d) => d.builtin)).toBe(true);
@@ -304,7 +321,7 @@ describe('WorkflowRegistry', () => {
   it('resetBuiltin restores the curated definition untouched', () => {
     const reg = new WorkflowRegistry();
     const blank = reg.get('wf_blank')!;
-    const tampered = reg.save({ ...blank, nodes: [] });
+    reg.save({ ...blank, nodes: [] });
     expect(reg.get('wf_blank')!.nodes).toHaveLength(0);
     const restored = reg.resetBuiltin('wf_blank');
     const pristine = WORKFLOW_LIBRARY.find((x) => x.id === 'wf_blank')!;

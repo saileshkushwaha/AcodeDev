@@ -1,5 +1,5 @@
 import { readJSON, writeJSON } from '../storage';
-import { AgentTool } from './AgentEngine';
+import type { AgentTool } from './AgentEngine';
 import { Toolbox } from './Toolbox';
 
 const STORAGE_KEY = 'acode.rag.v1';
@@ -46,7 +46,10 @@ export class RAGMemory {
   }
 
   retrieve(query: string, topK = 5): string {
-    const tokens = query.toLowerCase().split(/\W+/).filter((t) => t.length > 2);
+    const tokens = query
+      .toLowerCase()
+      .split(/\W+/)
+      .filter((t) => t.length > 2);
     const scored = this.chunks
       .map((c) => {
         const lower = c.text.toLowerCase();

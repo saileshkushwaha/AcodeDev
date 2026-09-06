@@ -1,4 +1,4 @@
-import { ChatEngine } from '../llm/ChatEngine';
+import type { ChatEngine } from '../llm/ChatEngine';
 import { estimateTokens } from '../prompts/PromptRegistry';
 import { listModels } from '../models/catalog';
 import type { ChatMessage, ChatRequest, ProviderId } from '../types';
@@ -81,15 +81,20 @@ export class WorkflowEngine {
     const entry = def.nodes.find((n) => n.type === 'input') ?? def.nodes[0];
     if (!entry) throw new Error('Workflow has no entry node');
 
-    const outputsOf = (nodeId?: string) => (nodeId ? results.get(nodeId)?.output ?? '' : '');
+    const outputsOf = (nodeId?: string) => (nodeId ? (results.get(nodeId)?.output ?? '') : '');
 
     const execute = async (node: WorkflowNode) => {
       if (visited.has(node.id)) return;
       visited.add(node.id);
-      const start = Date.now();
 
       if (node.type === 'input') {
-        results.set(node.id, { nodeId: node.id, nodeType: node.type, output: this.render(String(node.config.value ?? ''), def.variables, input, outputsOf), durationMs: 0, status: 'ok' });
+        results.set(node.id, {
+          nodeId: node.id,
+          nodeType: node.type,
+          output: this.render(String(node.config.value ?? ''), def.variables, input, outputsOf),
+          durationMs: 0,
+          status: 'ok',
+        });
       } else {
         // Gather upstream inputs first (depth-first)
         const incoming = def.edges.filter((e) => e.target === node.id);
@@ -168,8 +173,6 @@ export class WorkflowEngine {
           case 'trigger': {
             const type = String(node.config.type ?? 'cron');
             const expr = String(node.config.expression ?? 'true');
-            const intervalMs = Number(node.config.interval ?? 60000);
-            let once = false;
             if (type === 'cron') {
               // Simple cron-like: schedule once per run, evaluate condition
               // For in-DAG execution, we just evaluate the condition once
@@ -180,7 +183,6 @@ export class WorkflowEngine {
                 output = '';
               }
             } else if (type === 'once') {
-              once = true;
               if (this.evalCondition(expr, { input, upstream: upstreamText })) {
                 output = 'triggered';
               } else {
@@ -208,7 +210,9 @@ export class WorkflowEngine {
               const resp = await fetch(url, fetchOptions);
               const text = await resp.text();
               const headersOut: Record<string, string> = {};
-              resp.headers.forEach((v, k) => { headersOut[k] = v; });
+              resp.headers.forEach((v, k) => {
+                headersOut[k] = v;
+              });
               output = `Status: ${resp.status}\nHeaders: ${JSON.stringify(headersOut)}\nBody: ${text}`;
             } catch (e: any) {
               output = `⚠️ HTTP Request failed: ${e.message ?? String(e)}`;
@@ -351,7 +355,7 @@ export class WorkflowEngine {
             output = items.join(separator);
             break;
           }
-        case 'output':
+          case 'output':
           default:
             output = upstreamText;
         }
@@ -363,17 +367,12 @@ export class WorkflowEngine {
     };
 
     await execute(entry);
-    const finalNode = def.nodes.find((n) => n.type === 'output')
-      ?? def.nodes[def.nodes.length - 1]
-      ?? entry;
+    const finalNode = def.nodes.find((n) => n.type === 'output') ?? def.nodes[def.nodes.length - 1] ?? entry;
     return { results: [...results.values()], final: results.get(finalNode.id)?.output ?? '' };
   }
 
-
   private evalCondition(expr: string, ctx: Record<string, unknown>): boolean {
-    const body = expr
-      .replace(/\bupstream\b/g, JSON.stringify(ctx.upstream))
-      .replace(/\binput\b/g, JSON.stringify(ctx.input));
+    const body = expr.replace(/\bupstream\b/g, JSON.stringify(ctx.upstream)).replace(/\binput\b/g, JSON.stringify(ctx.input));
     try {
       const fn = new Function(`"use strict"; return (${body});`);
       return Boolean(fn());

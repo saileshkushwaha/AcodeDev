@@ -19,7 +19,6 @@ import { readJSON, writeJSON } from '../storage';
 
 export const FLAGS_STORAGE_KEY = 'acode.flags.v1';
 
-
 export type FlagKind = 'boolean' | 'string' | 'number' | 'enum';
 
 export interface BaseFlagSpec {
@@ -229,7 +228,7 @@ export function isOn(key: string): boolean {
 export function enumOf<T extends string>(key: string): T {
   const spec = FLAG_MAP.get(key);
   if (spec?.kind === 'enum' || spec?.kind === 'string') return valueOf<T>(key);
-  return ((spec?.default ?? '') as T);
+  return (spec?.default ?? '') as T;
 }
 
 /** Get the current effective value for display in the Flags screen. */
@@ -282,4 +281,3 @@ export function hiddenFlagsVisible(): boolean {
   const data = readJSON<Record<string, unknown>>(FLAGS_STORAGE_KEY);
   return data?.__hidden === true;
 }
-

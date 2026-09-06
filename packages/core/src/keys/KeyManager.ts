@@ -6,11 +6,7 @@
 // Browser-compatible crypto helpers using Web Crypto API
 function base64URLEncode(buffer: ArrayBuffer): string {
   if (typeof Buffer !== 'undefined') {
-    return Buffer.from(buffer)
-      .toString('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
+    return Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   }
   // Browser fallback
   const bytes = new Uint8Array(buffer);
@@ -116,14 +112,19 @@ export async function exchangeOAuthCode(
   code: string,
   codeVerifier: string,
   redirectUri: string,
-  provider: OAuthProvider = 'openrouter'
+  provider: OAuthProvider = 'openrouter',
 ): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
   const config = OAUTH_PROVIDERS[provider];
-  const tokenUrl = provider === 'openrouter' ? 'https://openrouter.ai/oauth/token' :
-                  provider === 'google' ? 'https://oauth2.googleapis.com/token' :
-                  provider === 'github' ? 'https://github.com/login/oauth/access_token' :
-                  provider === 'microsoft' ? 'https://login.microsoftonline.com/common/oauth2/v2.0/token' :
-                  '';
+  const tokenUrl =
+    provider === 'openrouter'
+      ? 'https://openrouter.ai/oauth/token'
+      : provider === 'google'
+        ? 'https://oauth2.googleapis.com/token'
+        : provider === 'github'
+          ? 'https://github.com/login/oauth/access_token'
+          : provider === 'microsoft'
+            ? 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+            : '';
   const res = await fetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -199,11 +200,11 @@ export class OpenRouterKeyManager implements KeyManagerApi {
     if (!res.ok) {
       throw new Error(`Key manager list failed: ${res.status} ${await res.text()}`);
     }
-    const data = await res.json() as { data?: ManagedKey[] };
+    const data = (await res.json()) as { data?: ManagedKey[] };
     return data.data ?? [];
   }
 
-  async create(options: CreateKeyOptions = {}): Promise<ManagedKey> {
+  async create(_options: CreateKeyOptions = {}): Promise<ManagedKey> {
     throw new Error('OpenRouter create() does not return a key value — use createWithSecret()');
   }
 
@@ -225,7 +226,7 @@ export class OpenRouterKeyManager implements KeyManagerApi {
     if (!res.ok) {
       throw new Error(`Key manager create failed: ${res.status} ${await res.text()}`);
     }
-    const data = await res.json() as { id: string; hash: string; created: number; name?: string; limit?: number | null };
+    const data = (await res.json()) as { id: string; hash: string; created: number; name?: string; limit?: number | null };
     const key: ManagedKey = {
       id: data.id,
       name: data.name ?? name,

@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { loadRunHistory, saveRunHistory, RUN_HISTORY_KEY, LEGACY_RUN_HISTORY_KEY, MAX_RUN_HISTORY, type WorkflowRunRecord } from './runHistory';
+import {
+  loadRunHistory,
+  saveRunHistory,
+  RUN_HISTORY_KEY,
+  LEGACY_RUN_HISTORY_KEY,
+  MAX_RUN_HISTORY,
+  type WorkflowRunRecord,
+} from './runHistory';
 import { writeJSON, writeRaw } from '../storage';
 
 function createMemoryStorage(): Storage {
@@ -19,7 +26,9 @@ function createMemoryStorage(): Storage {
 function rec(at: number): WorkflowRunRecord {
   return {
     at,
-    results: [{ nodeId: 'a', nodeType: 'llm', output: 'ok', durationMs: 10, status: 'ok', tokens: { prompt: 7, completion: 2 }, cost: 0.001 }],
+    results: [
+      { nodeId: 'a', nodeType: 'llm', output: 'ok', durationMs: 10, status: 'ok', tokens: { prompt: 7, completion: 2 }, cost: 0.001 },
+    ],
     final: 'ok',
     input: 'hi',
     cost: 0.001,
