@@ -155,7 +155,14 @@ export class OpenAICompatibleProvider implements AbstractProvider {
     Object.entries(req.params ?? {}).forEach(([k, v]) => {
       if (v !== undefined && k !== 'stream') body[k] = v;
     });
-    if (req.tools?.length) body.tools = req.tools;
+    if (req.tools?.length) body.tools = req.tools.map((t) => ({
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    }));
 
     const base = req.baseUrl ?? this.apiBase;
     const res = await fetch(`${base}/chat/completions`, {
@@ -186,7 +193,14 @@ export class OpenAICompatibleProvider implements AbstractProvider {
     Object.entries(req.params ?? {}).forEach(([k, v]) => {
       if (v !== undefined && k !== 'stream') body[k] = v;
     });
-    if (req.tools?.length) body.tools = req.tools;
+    if (req.tools?.length) body.tools = req.tools.map((t) => ({
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    }));
 
     const base = req.baseUrl ?? this.apiBase;
     const res = await fetch(`${base}/chat/completions`, {
