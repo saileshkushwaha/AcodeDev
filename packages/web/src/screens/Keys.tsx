@@ -342,7 +342,9 @@ export function KeysScreen() {
       if (event.origin !== window.location.origin) return;
 
       const data = event.data;
+      console.log('[Keys] received message:', data.type);
       if (data.type === 'oauth-callback' && oauthPending) {
+        console.log('[Keys] OAuth callback received');
         void handleOAuthCallback(data.code, data.state, data.provider, oauthPending.codeVerifier);
       } else if (data.type === 'oauth-error' && oauthPending) {
         setOauthStatus((s) => ({ ...s, [oauthPending.provider]: 'error' }));
@@ -358,47 +360,57 @@ export function KeysScreen() {
   const startOAuth = useCallback(async (c: KnownConnector) => {
     if (!c.isProvider && !c.gateway) return;
 
+    console.log('[Keys] startOAuth called for', c.id);
     setOauthStatus((s) => ({ ...s, [c.id]: 'pending' }));
 
-    const redirectUri = `${window.location.origin}${window.location.pathname}`;
-    const { url, codeVerifier, state } = await generateOAuthPKCEParams(redirectUri);
+    try {
+      const redirectUri = `${window.location.origin}${window.location.pathname}`;
+      console.log('[Keys] redirect URI:', redirectUri);
+      const { url, codeVerifier, state } = await generateOAuthPKCEParams(redirectUri);
+      console.log('[Keys] OAuth URL:', url);
 
-    // Build the OAuth URL with provider parameter so we know which provider this is for
-    const urlObj = new URL(url);
-    urlObj.searchParams.set('provider', c.id);
-    const oauthUrl = urlObj.toString();
+      // Build the OAuth URL with provider parameter so we know which provider this is for
+      const urlObj = new URL(url);
+      urlObj.searchParams.set('provider', c.id);
+      const oauthUrl = urlObj.toString();
 
-    // Open popup window
-    const width = 600;
-    const height = 700;
-    const left = (window.innerWidth - width) / 2;
-    const top = (window.innerHeight - height) / 2;
+      // Open popup window
+      const width = 600;
+      const height = 700;
+      const left = (window.innerWidth - width) / 2;
+      const top = (window.innerHeight - height) / 2;
 
-    const popup = window.open(
-      oauthUrl,
-      'oauth',
-      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
-    );
+      const popup = window.open(
+        oauthUrl,
+        'oauth',
+        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+      );
 
-    if (!popup) {
-      setOauthStatus((s) => ({ ...s, [c.id]: 'error' }));
-      setToast('Could not open OAuth popup. Please disable popup blocker.');
-      return;
-    }
+      console.log('[Keys] popup opened:', !!popup);
 
-    setOauthPending({ provider: c.id, codeVerifier, state, popup });
-
-    // Listen for popup closing
-    const checkPopup = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(checkPopup);
-        // If popup closed without sending a message, it means the user cancelled
-        if (oauthPending) {
-          setOauthStatus((s) => ({ ...s, [c.id]: 'idle' }));
-          setOauthPending(null);
-        }
+      if (!popup) {
+        setOauthStatus((s) => ({ ...s, [c.id]: 'error' }));
+        setToast('Could not open OAuth popup. Please disable popup blocker.');
+        return;
       }
-    }, 1000);
+
+      setOauthPending({ provider: c.id, codeVerifier, state, popup });
+
+      // Listen for popup closing
+      const checkPopup = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkPopup);
+          // If popup closed without sending a message, it means the user cancelled
+          if (oauthPending) {
+            setOauthStatus((s) => ({ ...s, [c.id]: 'idle' }));
+            setOauthPending(null);
+          }
+        }
+      }, 1000);
+    } catch (e) {
+      setOauthStatus((s) => ({ ...s, [c.id]: 'error' }));
+      setToast(`OAuth failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }, [oauthPending]);
 
   const removeAccount = useCallback((provider: string, accountId: string, label: string) => {

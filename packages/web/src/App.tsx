@@ -30,6 +30,7 @@ export function App() {
     const provider = urlParams.get('provider') || 'openrouter';
 
     if (code && state && window.opener) {
+      console.log('[App] OAuth callback detected, sending to opener', { provider, codeLength: code.length, stateLength: state.length });
       // Send the OAuth code to the opener window
       window.opener.postMessage({
         type: 'oauth-callback',
@@ -38,8 +39,12 @@ export function App() {
         state,
       }, window.location.origin);
 
-      // Try to close the popup window
+      // Clear the URL parameters and try to close the popup window
+      const cleanUrl = `${window.location.pathname}${window.location.hash}`;
+      window.history.replaceState({}, '', cleanUrl);
       window.close();
+    } else if (code && state && !window.opener) {
+      console.log('[App] OAuth callback detected but no opener window');
     }
 
     // Also check for OAuth error

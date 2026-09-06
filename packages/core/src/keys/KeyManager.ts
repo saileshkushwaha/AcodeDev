@@ -5,15 +5,23 @@
 
 // Browser-compatible crypto helpers using Web Crypto API
 function base64URLEncode(buffer: ArrayBuffer): string {
-  return Buffer.from(buffer)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(buffer)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  }
+  // Browser fallback
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 function generateCodeVerifier(): string {
-  // Use Web Crypto API (available in both browsers and modern Node.js)
   const array = new Uint8Array(32);
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     crypto.getRandomValues(array);
@@ -27,7 +35,7 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
     const hash = await crypto.subtle.digest('SHA-256', data);
     return base64URLEncode(hash);
   }
-  // Fallback for Node.js < 19 (using createHash via dynamic import)
+  // Fallback for Node.js (using createHash via dynamic import)
   const { createHash } = await import('node:crypto');
   return base64URLEncode(createHash('sha256').update(verifier).digest().buffer);
 }
