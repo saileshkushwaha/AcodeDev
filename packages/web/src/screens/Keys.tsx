@@ -17,13 +17,14 @@ import {
   persistCatalog,
   getProxyBase,
   setProxyBase,
-  upstreamFromModelsUrl,
   routeThroughProxy,
+  upstreamFromModelsUrl,
   readGithubToken,
   writeGithubToken,
   createKeyManager,
   generateOAuthPKCEParams,
   exchangeOAuthCode,
+  type OAuthProvider,
   type ConnectorCategory,
   type KnownConnector,
   type ProviderDef,
@@ -78,8 +79,11 @@ export function KeysScreen() {
   const [mgmtKeyRevealed, setMgmtKeyRevealed] = useState<Record<string, boolean>>({});
   const [rotationStatus, setRotationStatus] = useState<Record<string, Status>>({});
   const [managedKeys, setManagedKeys] = useState<Record<string, ManagedKey[]>>({});
-  const [oauthPending, setOauthPending] = useState<{ provider: string; codeVerifier: string; state: string; popup: Window | null } | null>(null);
+  const [oauthPending, setOauthPending] = useState<{ provider: string; oauthProvider: OAuthProvider; codeVerifier: string; state: string; popup: Window | null } | null>(null);
   const [oauthStatus, setOauthStatus] = useState<Record<string, 'idle' | 'pending' | 'success' | 'error'>>({});
+  const [showOAuthProvider, setShowOAuthProvider] = useState(false);
+  const [selectedConnector, setSelectedConnector] = useState<KnownConnector | null>(null);
+  const [oauthProvider, setOauthProvider] = useState<OAuthProvider>('openrouter');
   const addCustomConnector = useCallback((label: string, connectorType: string) => {
     const id = 'custom-' + Date.now();
     const v = inputs['custom-new'] ?? '';
@@ -309,7 +313,7 @@ export function KeysScreen() {
 
     try {
       const redirectUri = `${window.location.origin}${window.location.pathname}`;
-      const tokenData = await exchangeOAuthCode(code, codeVerifier, redirectUri);
+      const tokenData = await exchangeOAuthCode(code, codeVerifier, redirectUri, oauthPending.oauthProvider);
 
       // Store the account
       const apiKey = tokenData.access_token;
@@ -357,31 +361,32 @@ export function KeysScreen() {
     return () => window.removeEventListener('message', handleMessage);
   }, [oauthPending, handleOAuthCallback]);
 
-  const startOAuth = useCallback(async (c: KnownConnector) => {
+  const startOAuth = useCallback((c: KnownConnector) => {
     if (!c.isProvider && !c.gateway) return;
 
-    console.log('[Keys] startOAuth called for', c.id);
+    setSelectedConnector(c);
+    setShowOAuthProvider(true);
+  }, []);
+
+  const startOAuthWithProvider = useCallback(async (c: KnownConnector, provider: OAuthProvider) => {
+    setShowOAuthProvider(false);
+    setSelectedConnector(null);
+
     setOauthStatus((s) => ({ ...s, [c.id]: 'pending' }));
 
     try {
       const redirectUri = `${window.location.origin}${window.location.pathname}`;
-      console.log('[Keys] redirect URI:', redirectUri);
-      const { url, codeVerifier, state } = await generateOAuthPKCEParams(redirectUri);
+      const { url, codeVerifier, state } = await generateOAuthPKCEParams(redirectUri, provider);
+
       console.log('[Keys] OAuth URL:', url);
 
-      // Build the OAuth URL with provider parameter so we know which provider this is for
-      const urlObj = new URL(url);
-      urlObj.searchParams.set('provider', c.id);
-      const oauthUrl = urlObj.toString();
-
-      // Open popup window
       const width = 600;
       const height = 700;
       const left = (window.innerWidth - width) / 2;
       const top = (window.innerHeight - height) / 2;
 
       const popup = window.open(
-        oauthUrl,
+        url,
         'oauth',
         `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
       );
@@ -394,13 +399,11 @@ export function KeysScreen() {
         return;
       }
 
-      setOauthPending({ provider: c.id, codeVerifier, state, popup });
+      setOauthPending({ provider: c.id, oauthProvider: provider, codeVerifier, state, popup });
 
-      // Listen for popup closing
       const checkPopup = setInterval(() => {
         if (popup.closed) {
           clearInterval(checkPopup);
-          // If popup closed without sending a message, it means the user cancelled
           if (oauthPending) {
             setOauthStatus((s) => ({ ...s, [c.id]: 'idle' }));
             setOauthPending(null);
@@ -687,6 +690,65 @@ export function KeysScreen() {
           {toast}
         </div>
       )}
+
+      <Modal open={showOAuthProvider} onClose={() => setShowOAuthProvider(false)} title="Select OAuth Provider">
+        <p style={{ color: tokens.textSecondary, fontSize: tokens.fontSizeSm, marginBottom: tokens.space3 }}>
+          Choose your OAuth provider to authenticate with <strong>{selectedConnector?.label || 'this service'}</strong>.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2, marginBottom: tokens.space4 }}>
+          <button
+            onClick={() => { setOauthProvider('openrouter'); selectedConnector && startOAuthWithProvider(selectedConnector, 'openrouter'); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: tokens.space2, padding: tokens.space3,
+              background: tokens.surfaceHover,
+              border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🔑</span>
+            <span>OpenRouter</span>
+          </button>
+          <button
+            onClick={() => { setOauthProvider('google'); selectedConnector && startOAuthWithProvider(selectedConnector, 'google'); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: tokens.space2, padding: tokens.space3,
+              background: tokens.surfaceHover,
+              border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: 20 }}>📧</span>
+            <span>Google / Gmail</span>
+          </button>
+          <button
+            onClick={() => { setOauthProvider('github'); selectedConnector && startOAuthWithProvider(selectedConnector, 'github'); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: tokens.space2, padding: tokens.space3,
+              background: tokens.surfaceHover,
+              border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🐙</span>
+            <span>GitHub</span>
+          </button>
+          <button
+            onClick={() => { setOauthProvider('microsoft'); selectedConnector && startOAuthWithProvider(selectedConnector, 'microsoft'); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: tokens.space2, padding: tokens.space3,
+              background: tokens.surfaceHover,
+              border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🔷</span>
+            <span>Microsoft</span>
+          </button>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.space2 }}>
+          <Button variant="ghost" onClick={() => setShowOAuthProvider(false)}>Cancel</Button>
+        </div>
+      </Modal>
     </Page>
   );
 }

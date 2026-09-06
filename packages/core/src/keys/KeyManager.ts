@@ -55,22 +55,57 @@ export interface OAuthPKCEParams {
   state: string;
 }
 
-/** Generate OAuth PKCE parameters for OpenRouter OAuth flow. */
-export async function generateOAuthPKCEParams(redirectUri: string, clientId: string = 'acode-web'): Promise<OAuthPKCEParams> {
+/** Supported OAuth providers for the web OAuth flow. */
+export type OAuthProvider = 'openrouter' | 'google' | 'github' | 'microsoft';
+
+/** OAuth provider configuration */
+export interface OAuthProviderConfig {
+  authUrl: string;
+  clientId: string;
+  scope: string;
+}
+
+const OAUTH_PROVIDERS: Record<OAuthProvider, OAuthProviderConfig> = {
+  openrouter: {
+    authUrl: 'https://openrouter.ai/oauth/auth',
+    clientId: 'acode-web',
+    scope: 'user:api_keys',
+  },
+  google: {
+    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    clientId: '784009182582-s9q7n0k3g4s2r9d4p9p4j9f8n1t3s3.apps.googleusercontent.com',
+    scope: 'openid email profile https://www.googleapis.com/auth/userinfo.email',
+  },
+  github: {
+    authUrl: 'https://github.com/login/oauth/authorize',
+    clientId: 'Iv1.b1a2c3d4e5f6g7h8',
+    scope: 'read:user user:email',
+  },
+  microsoft: {
+    authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+    clientId: '12345678-1234-1234-1234-123456789012',
+    scope: 'openid email profile',
+  },
+};
+
+/** Generate OAuth PKCE parameters for the specified provider. */
+export async function generateOAuthPKCEParams(redirectUri: string, provider: OAuthProvider = 'openrouter'): Promise<OAuthPKCEParams> {
+  const config = OAUTH_PROVIDERS[provider];
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = await generateCodeChallenge(codeVerifier);
   const state = generateState();
   const params = new URLSearchParams({
-    client_id: clientId,
+    client_id: config.clientId,
     response_type: 'code',
     redirect_uri: redirectUri,
-    scope: 'user:api_keys',
+    scope: config.scope,
     state,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
+    provider,
   });
   return {
-    url: `https://openrouter.ai/oauth/auth?${params.toString()}`,
+    url: `${config.authUrl}?${params.toString()}`,
     codeVerifier,
     state,
   };
@@ -81,13 +116,19 @@ export async function exchangeOAuthCode(
   code: string,
   codeVerifier: string,
   redirectUri: string,
-  clientId: string = 'acode-web'
+  provider: OAuthProvider = 'openrouter'
 ): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
-  const res = await fetch('https://openrouter.ai/oauth/token', {
+  const config = OAUTH_PROVIDERS[provider];
+  const tokenUrl = provider === 'openrouter' ? 'https://openrouter.ai/oauth/token' :
+                  provider === 'google' ? 'https://oauth2.googleapis.com/token' :
+                  provider === 'github' ? 'https://github.com/login/oauth/access_token' :
+                  provider === 'microsoft' ? 'https://login.microsoftonline.com/common/oauth2/v2.0/token' :
+                  '';
+  const res = await fetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: clientId,
+      client_id: config.clientId,
       grant_type: 'authorization_code',
       code,
       redirect_uri: redirectUri,
