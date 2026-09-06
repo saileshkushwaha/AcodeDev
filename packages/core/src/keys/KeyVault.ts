@@ -13,6 +13,8 @@ export interface KeyEntry {
   updatedAt: number;
   /** Additional API keys for fallback when the primary key fails. */
   keys?: Array<{ value: string; createdAt: number; updatedAt: number; label?: string }>;
+  /** OAuth token metadata (stored internally, not for public use). */
+  _auth?: { refreshToken?: string; expiresAt?: number };
 }
 
 /**
@@ -246,6 +248,48 @@ export class KeyVault {
     return [...this.entries.entries()]
       .filter(([id]) => id.endsWith('.mgmt'))
       .map(([id, entry]) => ({ provider: id.replace(/\.mgmt$/, ''), value: entry.value }));
+  }
+
+  /** Store an OAuth-authenticated account for a provider. */
+  setAccount(provider: string, accountId: string, apiKey: string, meta?: { refreshToken?: string; expiresAt?: number; label?: string }): void {
+    const now = Date.now();
+    const entry: KeyEntry = {
+      value: apiKey,
+      category: 'ai',
+      label: meta?.label ?? `${provider} (${accountId.slice(0, 8)})`,
+      connectorType: 'OAuth Account',
+      createdAt: now,
+      updatedAt: now,
+    };
+    // Store refresh token and expiry on the entry
+    if (meta) {
+      (entry as any)._auth = { refreshToken: meta.refreshToken, expiresAt: meta.expiresAt };
+    }
+    this.entries.set(`${provider}.acct.${accountId}`, entry);
+    void this.persist();
+  }
+
+  /** Get all OAuth accounts for a provider. */
+  getAccounts(provider: string): Array<{ accountId: string; apiKey: string; label: string; refreshToken?: string; expiresAt?: number }> {
+    return [...this.entries.entries()]
+      .filter(([id]) => id.startsWith(`${provider}.acct.`))
+      .map(([id, entry]) => {
+        const accountId = id.replace(`${provider}.acct.`, '');
+        const auth = (entry as any)._auth;
+        return {
+          accountId,
+          apiKey: entry.value,
+          label: entry.label,
+          refreshToken: auth?.refreshToken,
+          expiresAt: auth?.expiresAt,
+        };
+      });
+  }
+
+  /** Remove an OAuth account. */
+  removeAccount(provider: string, accountId: string): void {
+    this.entries.delete(`${provider}.acct.${accountId}`);
+    void this.persist();
   }
 
   clear() {
