@@ -61,6 +61,8 @@ export function KeysScreen() {
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [gatewayBaseUrls, setGatewayBaseUrls] = useState<Record<string, string>>({});
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [fallbackRevealed, setFallbackRevealed] = useState<Record<string, boolean>>({});
+  const [fallbackInputs, setFallbackInputs] = useState<Record<string, string>>({});
   const [testing, setTesting] = useState<Record<string, Status>>({});
   const [showCustom, setShowCustom] = useState(false);
   const [showGateway, setShowGateway] = useState(false);
@@ -150,6 +152,19 @@ export function KeysScreen() {
     setInputs((s) => ({ ...s, [c.id]: '' }));
     refresh();
   }, [vault, refresh, refreshCatalog]);
+
+  const addFallbackKey = useCallback((c: KnownConnector, value: string) => {
+    if (!value) return;
+    vault.addKey(c.id, value);
+    refresh();
+    setToast(`Added fallback key for ${c.label}`);
+  }, [vault, refresh]);
+
+  const removeFallbackKey = useCallback((c: KnownConnector, index: number) => {
+    vault.removeKeyAt(c.id, index);
+    refresh();
+    setToast(`Removed fallback key for ${c.label}`);
+  }, [vault, refresh]);
 
   const clearAll = useCallback(() => {
     vault.clear();
@@ -377,23 +392,34 @@ export function KeysScreen() {
         </Card>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: tokens.space3 }}>
-        {list.map((c) => (
+        {list.map((c) => {
+          const entry = vault.getEntry(c.id);
+          const fallbackKeys = entry?.keys ?? [];
+          return (
           <ConnectorCard
             key={c.id}
             c={c}
             storedKey={vault.getKey(c.id)}
+            fallbackKeys={fallbackKeys}
             inputValue={inputs[c.id] ?? ''}
             onInput={(v) => setInput(c.id, v)}
+            onAddFallback={(v) => addFallbackKey(c, v)}
+            onRemoveFallback={(idx) => removeFallbackKey(c, idx)}
             baseUrlValue={gatewayBaseUrls[c.id] ?? c.baseUrl ?? ''}
             onBaseUrlChange={(v) => { setGatewayBaseUrls((s) => ({ ...s, [c.id]: v })); updateGatewayBaseUrl(c.id, v); }}
             revealed={!!revealed[c.id]}
             toggleReveal={() => setRevealed((s) => ({ ...s, [c.id]: !s[c.id] }))}
+            fallbackRevealed={!!fallbackRevealed[c.id]}
+            toggleFallbackReveal={() => setFallbackRevealed((s) => ({ ...s, [c.id]: !s[c.id] }))}
+            fallbackInput={fallbackInputs[c.id] ?? ''}
+            onFallbackInput={(v) => setFallbackInputs((s) => ({ ...s, [c.id]: v }))}
             status={testing[c.id] ?? 'idle'}
             onSave={() => saveKey(c)}
             onRemove={() => removeKey(c)}
             onTest={() => void test(c)}
           />
-        ))}
+          );
+        })}
 
         {list.length === 0 && (
           <div style={{ gridColumn: '1 / -1', padding: tokens.space8, border: `1px dashed ${tokens.borderStrong}`, borderRadius: tokens.radiusLg, textAlign: 'center', color: tokens.textMuted }}>
@@ -468,16 +494,23 @@ const SummaryStat = React.memo(function SummaryStat({ label, value, accent, icon
 });
 
 const ConnectorCard = React.memo(function ConnectorCard({
-  c, storedKey, inputValue, onInput, baseUrlValue, onBaseUrlChange, revealed, toggleReveal, status, onSave, onRemove, onTest,
+  c, storedKey, fallbackKeys = [], inputValue, onInput, onAddFallback, onRemoveFallback, baseUrlValue, onBaseUrlChange, revealed, toggleReveal, fallbackRevealed, toggleFallbackReveal, fallbackInput, onFallbackInput, status, onSave, onRemove, onTest,
 }: {
   c: KnownConnector;
   storedKey?: string;
+  fallbackKeys?: Array<{ value: string; createdAt: number; updatedAt: number; label?: string }>;
   inputValue: string;
   onInput: (v: string) => void;
+  onAddFallback: (value: string, label?: string) => void;
+  onRemoveFallback: (index: number) => void;
   baseUrlValue: string;
   onBaseUrlChange: (v: string) => void;
   revealed: boolean;
   toggleReveal: () => void;
+  fallbackRevealed: boolean;
+  toggleFallbackReveal: () => void;
+  fallbackInput: string;
+  onFallbackInput: (v: string) => void;
   status: Status;
   onSave: () => void;
   onRemove: () => void;
@@ -540,6 +573,40 @@ const ConnectorCard = React.memo(function ConnectorCard({
             <Button variant="ghost" size="sm" onClick={onRemove}>{c.gateway && c.removable ? 'Remove' : 'Remove key'}</Button>
           )}
         </div>
+
+        {/* Fallback keys section */}
+        {connected && (
+          <div style={{ marginTop: tokens.space2, paddingTop: tokens.space2, borderTop: `1px solid ${tokens.border}` }}>
+            <div style={{ fontSize: tokens.fontSizeXs, fontWeight: 600, color: tokens.textMuted, marginBottom: tokens.space2 }}>Fallback keys ({fallbackKeys.length})</div>
+            {fallbackKeys.map((fk, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, marginBottom: tokens.space1 }}>
+                <div style={{ flex: 1, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={fk.value}>
+                  {maskKey(fk.value)}
+                </div>
+                <Button variant="ghost" size="sm" onClick={toggleFallbackReveal} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>
+                  {fallbackRevealed ? 'Hide' : 'Show'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onRemoveFallback(idx)} style={{ color: tokens.danger, fontSize: 11 }}>✕</Button>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: tokens.space2, marginTop: tokens.space2, alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <Input
+                  label="New fallback key"
+                  type="password"
+                  monospace
+                  value={fallbackInput}
+                  onChange={onFallbackInput}
+                  placeholder="Paste a backup API key"
+                />
+              </div>
+              <Button variant="secondary" size="sm" disabled={!fallbackInput.trim()} onClick={() => { onAddFallback(fallbackInput.trim()); onFallbackInput(''); }}>Add</Button>
+            </div>
+            <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginTop: tokens.space1 }}>
+              Fallback keys are tried automatically if the primary key fails.
+            </div>
+          </div>
+        )}
 
         {status === 'ok' && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.success, fontWeight: 600 }}>✓ Connection verified</div>}
         {status === 'fail' && <div style={{ fontSize: tokens.fontSizeXs, color: tokens.danger, fontWeight: 600 }}>✗ Could not verify — check the key and network</div>}
