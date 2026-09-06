@@ -2152,7 +2152,7 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
 
   const allProjects = projects.projectsList?.() ?? [];
   const filteredSessions = sessions.filter((s) =>
-    !(s.title === 'New session' || s.title === 'New chat') && s.messages.length === 0 &&
+    !(s.title === 'New session' || s.title === 'New chat') &&
     (!search || s.title.toLowerCase().includes(search.toLowerCase())),
   );
   const filteredArchived = archived.filter((s) =>
