@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useTheme } from '@acode/ui';
 import { readRaw, writeRaw } from '@acode/core';
 import { AppShell } from './components/AppShell';
@@ -20,6 +20,42 @@ export function App() {
   });
   const [promptIntent, setPromptIntent] = useState<{ tab: 'prompts' | 'evals'; key: number }>({ tab: 'prompts', key: 0 });
   const { tokens } = useTheme();
+
+  // Handle OAuth callback - when this page is opened in a popup with OAuth callback params,
+  // send the code/state back to the opener window and close itself.
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    const provider = urlParams.get('provider') || 'openrouter';
+
+    if (code && state && window.opener) {
+      // Send the OAuth code to the opener window
+      window.opener.postMessage({
+        type: 'oauth-callback',
+        provider,
+        code,
+        state,
+      }, window.location.origin);
+
+      // Try to close the popup window
+      window.close();
+    }
+
+    // Also check for OAuth error
+    const error = urlParams.get('error');
+    const errorDescription = urlParams.get('error_description');
+    if (error && window.opener) {
+      window.opener.postMessage({
+        type: 'oauth-error',
+        provider,
+        error,
+        error_description: errorDescription,
+      }, window.location.origin);
+
+      window.close();
+    }
+  }, []);
 
   // Persist the active screen so a reload returns to where the user left off.
   const changeTab = useCallback((t: string) => {

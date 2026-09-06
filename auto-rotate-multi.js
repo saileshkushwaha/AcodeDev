@@ -111,6 +111,7 @@ async function startOAuthFlow(accountName) {
     state,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
+    provider: 'openrouter',
   });
 
   const authUrl = `${OPENROUTER_OAUTH_BASE}/auth?${params.toString()}`;
