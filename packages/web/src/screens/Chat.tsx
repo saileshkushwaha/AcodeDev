@@ -1161,7 +1161,9 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
 
       {/* Sidebar panel */}
       {sidebarOpen && (
-        <SidebarPanel
+        <>
+          <div onClick={() => setSidebarOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 49 }} />
+          <SidebarPanel
           sessions={sessions}
           activeId={convId}
           onSelect={(id) => {
@@ -1184,6 +1186,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           onCreateProject={createProject}
           streaming={streaming}
         />
+        </>
       )}
 
       {/* Project picker (shown when trying to create session without a project) */}
