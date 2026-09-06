@@ -380,8 +380,9 @@ export function KeysScreen() {
 
       console.log('[Keys] OAuth URL:', url);
 
-      const width = 600;
-      const height = 700;
+      const isSmallScreen = window.innerWidth < 600;
+      const width = isSmallScreen ? Math.max(320, window.innerWidth - 20) : 600;
+      const height = isSmallScreen ? Math.max(500, window.innerHeight - 40) : 700;
       const left = (window.innerWidth - width) / 2;
       const top = (window.innerHeight - height) / 2;
 
@@ -614,7 +615,7 @@ export function KeysScreen() {
           )}
         </Card>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: tokens.space3 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: tokens.space3 }}>
         {list.map((c) => {
           const entry = vault.getEntry(c.id);
           const fallbackKeys = entry?.keys ?? [];

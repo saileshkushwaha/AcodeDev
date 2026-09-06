@@ -1127,7 +1127,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
             )}
 
             {messages.length === 0 ? (
-              <div style={{ margin: 'auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space6, padding: `${tokens.space6}px ${tokens.space4}px` }}>
+              <div style={{ margin: 'auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space6, padding: `${tokens.space6}px ${isMobile ? tokens.space2 : tokens.space4}px`, width: '100%' }}>
                 <style>{`
                   @keyframes opencode-fadein { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
                   @keyframes opencode-glow { 0%, 100% { text-shadow: 0 0 20px ${tokens.primary}40, 0 0 40px ${tokens.primary}20; } 50% { text-shadow: 0 0 30px ${tokens.primary}60, 0 0 60px ${tokens.primary}30; } }
@@ -1139,7 +1139,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                   .bubble-action-btn:focus { outline: 2px solid ${tokens.primary}; outline-offset: 1px; }
                 `}</style>
                 <div style={{ animation: 'opencode-fadein 0.8s ease-out', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space3 }}>
-                  <div style={{ fontSize: 72, fontWeight: 800, letterSpacing: '-0.03em', userSelect: 'none', lineHeight: 1, fontFamily: tokens.fontSans, background: `linear-gradient(135deg, ${tokens.textMuted}40, ${tokens.primary}80, ${tokens.textMuted}40)`, backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', animation: 'opencode-shimmer 4s linear infinite, opencode-glow 3s ease-in-out infinite' }}>
+                  <div style={{ fontSize: 'clamp(2.25rem, 9vw, 4.5rem)', fontWeight: 800, letterSpacing: '-0.03em', userSelect: 'none', lineHeight: 1, fontFamily: tokens.fontSans, background: `linear-gradient(135deg, ${tokens.textMuted}40, ${tokens.primary}80, ${tokens.textMuted}40)`, backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', animation: 'opencode-shimmer 4s linear infinite, opencode-glow 3s ease-in-out infinite' }}>
                     AcodeDev
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: tokens.space1 }}>
@@ -1238,8 +1238,8 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
 
       {/* Fixed bottom composer - only show when there are messages */}
       {messages.length > 0 && (
-      <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated, padding: `0 ${tokens.space4}px` }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.space3, position: 'relative' }}>
+      <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.border}`, background: tokens.bgElevated, padding: `0 ${isMobile ? tokens.space2 : tokens.space4}px`, paddingBottom: isMobile ? 'env(safe-area-inset-bottom)' : undefined }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? tokens.space2 : tokens.space3, position: 'relative' }}>
           <Composer
             input={input}
             setInput={setInput}
@@ -1338,7 +1338,7 @@ function AddMenu({ onFile, onFolder, onLink, onClose }: { onFile: () => void; on
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
-      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 71, width: 220, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
+      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 71, width: 220, maxWidth: 'calc(100vw - 32px)', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
         <div style={{ padding: `${tokens.space1}px ${tokens.space2}px`, fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontWeight: 600 }}>Add attachment</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.space1 }}>
           {items.map((it) => (
@@ -1515,7 +1515,7 @@ function Composer(props: {
         {menu && !menuDismissed && (cmdList.length > 0 || skillList.length > 0) && (
           <>
             <div onClick={() => setMenuDismissed(true)} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
-            <div style={{ position: 'absolute', bottom: 'calc(100% + 46px)', left: 0, zIndex: 71, minWidth: 260, maxHeight: 280, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
+            <div style={{ position: 'absolute', bottom: 'calc(100% + 46px)', left: 0, right: 0, zIndex: 71, minWidth: 260, maxWidth: 'calc(100vw - 32px)', maxHeight: 280, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space1 }}>
               <div style={{ padding: `${tokens.space1}px ${tokens.space2}px`, fontSize: tokens.fontSizeXs, color: tokens.textMuted, fontWeight: 600 }}>
                 {menu.kind === 'cmd' ? 'Commands' : 'Context — skills'}
               </div>
@@ -1565,7 +1565,7 @@ function Composer(props: {
             <button
               onClick={() => setProjectOpen((o) => !o)}
               title="Project"
-              style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, maxWidth: 200, overflow: 'hidden' }}
+              style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, borderRadius: tokens.radiusMd, maxWidth: 160, overflow: 'hidden', minWidth: 0 }}
             >
               {(() => {
                 const active = props.projects.find((p: ProjectDoc) => p.id === props.currentProjectId);
@@ -1575,9 +1575,9 @@ function Composer(props: {
                     <span style={{ width: 18, height: 18, borderRadius: tokens.radiusSm, background: active?.color ?? tokens.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 9, flexShrink: 0 }}>
                       {(active?.name?.charAt(0) || 'A').toUpperCase()}
                     </span>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                      <span style={{ fontWeight: 500 }}>{active?.name ?? 'All'}</span>
-                      {repoName && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>/ {repoName}</span>}
+                    <span style={{ overflow: 'hidden', textAlign: 'left', minWidth: 0, flex: 1, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                      <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{active?.name ?? 'All'}</span>
+                      {repoName && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/ {repoName}</span>}
                     </span>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6" /></svg>
                   </>
@@ -1596,14 +1596,14 @@ function Composer(props: {
               />
             )}
           </div>
-          <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 0, overflow: 'hidden' }}>
             <button
               onClick={() => setParamsOpen((o) => !o)}
               title="Model & settings"
-              style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, maxWidth: '100%', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, overflow: 'hidden' }}
+              style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, width: '100%', maxWidth: '100%', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, overflow: 'hidden' }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M4 5h16M4 12h16M4 19h16" /><circle cx="9" cy="5" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="7" cy="19" r="2" /></svg>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{props.model.split('/').pop() || 'Select model'}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{props.model.split('/').pop() || 'Select model'}</span>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6" /></svg>
             </button>
             {paramsOpen && (
@@ -1661,7 +1661,7 @@ function SkillsPicker({ selected, onToggle, onClose }: { selected: Set<string>; 
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
-      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 71, width: 320, maxHeight: 340, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space2 }}>
+      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 71, width: 320, maxWidth: 'calc(100vw - 32px)', maxHeight: 340, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space2 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space1}px ${tokens.space2}px` }}>
           <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 700 }}>Skills & context</span>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', fontSize: 14 }}>×</button>
@@ -1726,7 +1726,7 @@ function ParamsMenu({ provider, setProvider, gatewayProviders, directProviders, 
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 70 }} />
-      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 71, width: 340, maxHeight: '70vh', overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space3 }}>
+      <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 71, width: 340, maxWidth: 'calc(100vw - 32px)', maxHeight: '70vh', overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space3 }}>
         <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 700, marginBottom: tokens.space2 }}>Model</div>
         <Select label="Provider" value={provider} onChange={(v) => { setProvider(v as ProviderId); setModel(models[0]?.id ?? ''); }} options={[
           ...gatewayProviders.map((p) => ({ label: `${p.name} · gateway`, value: p.id })),
@@ -2222,7 +2222,7 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
   };
 
   return (
-    <div style={{ position: 'absolute', top: 44, left: tokens.space2, width: 320, maxHeight: 'calc(100vh - 44px)', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: `0 0 ${tokens.radiusMd} ${tokens.radiusMd}`, zIndex: 50, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: tokens.shadowLg }}>
+    <div style={{ position: 'absolute', top: 44, left: tokens.space2, right: tokens.space2, width: 320, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 44px)', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: `0 0 ${tokens.radiusMd} ${tokens.radiusMd}`, zIndex: 50, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: tokens.shadowLg }}>
       {/* Projects section */}
       <div style={{ padding: tokens.space3, borderBottom: `1px solid ${tokens.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
@@ -3011,7 +3011,7 @@ function DiffViewer({ hunks }: { hunks: DiffHunk[] }) {
                   key={lineIdx}
                   style={{ display: 'flex', alignItems: 'stretch', background: bgColor, borderLeft: `3px solid ${borderColor}` }}
                 >
-                  <span style={{ width: 40, flexShrink: 0, textAlign: 'right', paddingRight: 8, color: tokens.textMuted, userSelect: 'none', fontSize: tokens.fontSizeXs, lineHeight: '1.6', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                  <span style={{ width: 'clamp(24px, 5vw, 40px)', flexShrink: 0, textAlign: 'right', paddingRight: 8, color: tokens.textMuted, userSelect: 'none', fontSize: tokens.fontSizeXs, lineHeight: '1.6', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                     {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
                   </span>
                   <span style={{ flex: 1, paddingLeft: 8, paddingRight: 16, whiteSpace: 'pre', overflow: 'hidden', color: line.type === 'remove' ? '#ff8a8a' : line.type === 'add' ? '#8ae68a' : tokens.text, lineHeight: '1.6', display: 'flex', alignItems: 'center' }}>

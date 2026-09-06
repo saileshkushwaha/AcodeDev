@@ -105,7 +105,7 @@ const PrRow = React.memo(function PrRow({ pr, onClick, last }: { pr: PrWithRepo;
   const color = pr.merged ? tokens.info : pr.state === 'closed' ? tokens.danger : tokens.success;
   const icon = pr.merged ? '✔' : pr.state === 'closed' ? '✖' : pr.draft ? '○' : '⟳';
   return (
-    <button onClick={onClick} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: tokens.space3, padding: tokens.space3, background: 'transparent', border: 'none', borderBottom: last ? 'none' : `1px solid ${tokens.border}`, cursor: 'pointer', textAlign: 'left' }}>
+    <button onClick={onClick} style={{ width: '100%', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: tokens.space3, padding: tokens.space3, background: 'transparent', border: 'none', borderBottom: last ? 'none' : `1px solid ${tokens.border}`, cursor: 'pointer', textAlign: 'left' }}>
       <span style={{ color, fontSize: 16, width: 20, textAlign: 'center' }}>{icon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

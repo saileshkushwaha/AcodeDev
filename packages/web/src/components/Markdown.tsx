@@ -38,7 +38,7 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
           {copied ? '✓ Copied' : '⧉ Copy'}
         </button>
       </div>
-      <pre style={{ margin: 0, padding: tokens.space3, background: tokens.codeBg, border: `1px solid ${tokens.border}`, borderBottomLeftRadius: tokens.radiusSm, borderBottomRightRadius: tokens.radiusSm, overflow: 'auto', fontSize: 12.5, lineHeight: 1.6, maxHeight: 480 }}>
+      <pre style={{ margin: 0, padding: tokens.space3, background: tokens.codeBg, border: `1px solid ${tokens.border}`, borderBottomLeftRadius: tokens.radiusSm, borderBottomRightRadius: tokens.radiusSm, overflow: 'auto', fontSize: 12.5, lineHeight: 1.6, maxHeight: 'min(480px, 60vh)' }}>
         <code>{code}</code>
       </pre>
     </div>

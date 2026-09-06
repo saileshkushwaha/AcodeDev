@@ -85,7 +85,7 @@ export function App() {
   };
 
   return (
-    <div style={{ fontFamily: tokens.fontSans, background: tokens.bg, color: tokens.text, minHeight: '100vh' }}>
+    <div style={{ fontFamily: tokens.fontSans, background: tokens.bg, color: tokens.text, minHeight: '100dvh' }}>
       <AppShell active={tab} onSelect={changeTab}>
         {screens[tab] ?? <Dashboard onNavigate={changeTab} onOpenEvaluations={() => openPromptTab('evals')} />}
       </AppShell>

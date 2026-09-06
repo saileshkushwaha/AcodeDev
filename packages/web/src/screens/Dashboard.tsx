@@ -2,11 +2,12 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import React from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
-import { Card, Button, Badge, useTheme, Spinner } from '@acode/ui';
+import { Card, Button, Badge, useTheme, Spinner, useIsMobile } from '@acode/ui';
 import { listModels, getFreeModels, listProviders, getProvider, type ProviderId } from '@acode/core';
 
 export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: string) => void; onOpenEvaluations?: () => void }) {
   const { tokens } = useTheme();
+  const isMobile = useIsMobile();
   const { projects, prompts, chat, githubToken, hasKey, syncCatalog, catalogVersion } = useApp();
   void catalogVersion;
 
@@ -74,7 +75,7 @@ export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: 
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: tokens.space4, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: tokens.space4, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space4 }}>
           <Card title="Recent Projects" subtitle="Your all-in-one workspaces" actions={<Button size="sm" onClick={() => onNavigate('dashboard')}>New</Button>}>
             {projectsList.length === 0 ? (

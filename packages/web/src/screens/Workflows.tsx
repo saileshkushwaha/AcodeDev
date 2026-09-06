@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, type ReactNode, type CSSProperties } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
-import { Card, Button, Input, Select, Badge, Modal, useTheme, Spinner } from '@acode/ui';
+import { Card, Button, Input, Select, Badge, Modal, useTheme, Spinner, useIsMobile } from '@acode/ui';
 import { Markdown } from '../components/Markdown';
 import {
   type WorkflowDefinition,
@@ -96,6 +96,7 @@ function rewireNodes(ns: WorkflowNode[]): WorkflowEdge[] {
 
 export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const { tokens } = useTheme();
+  const isMobile = useIsMobile();
   const { workflows, workflowStore, github, githubToken, hasKey } = useApp();
   const [ver, force] = useState(0);
   const refresh = useCallback(() => force((x) => x + 1), []);
@@ -472,7 +473,7 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
 
       <Card title="Workflow" subtitle="Pick a preset, or save your current graph as a reusable workflow" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 12, alignItems: 'start' }}>
             <Select label="Workflow" value={activeId} onChange={(v) => loadDef(v)} options={workflowOptions} />
             <Input label="Name" value={defName} onChange={setDefName} placeholder="My workflow" />
             <Input label="Description" value={defDesc} onChange={setDefDesc} placeholder="What does this pipeline do?" />
@@ -491,7 +492,7 @@ export function WorkflowsScreen({ onNavigate }: { onNavigate?: (tab: string) => 
         </div>
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
         <Card
           title="Pipeline"
           subtitle="Runs top → bottom · ▲▼ reorders, ⧉ duplicates, ✕ deletes · click to edit"

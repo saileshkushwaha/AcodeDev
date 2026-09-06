@@ -72,7 +72,7 @@ export function RepositoriesView({ initialRepo, onInitialRepoConsumed }: { initi
             <Button variant="secondary" onClick={refresh}>{loading ? <Spinner size={15} /> : 'Refresh'}</Button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: tokens.space4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 240px), 1fr))', gap: tokens.space4 }}>
             {loading && filtered.length === 0 ? (
               <div style={{ gridColumn: '1/-1' }}><LoadingSpinner /></div>
             ) : filtered.length === 0 ? (

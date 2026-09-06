@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import React from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
-import { Card, Button, Input, Select, Toggle, Badge, useTheme, Spinner } from '@acode/ui';
+import { Card, Button, Input, Select, Toggle, Badge, useTheme, Spinner, useIsMobile } from '@acode/ui';
 import { Toolbox, listModels, listProviders, type ProviderId } from '@acode/core';
 
 const TOOL_NAMES: Record<string, string> = {
@@ -37,6 +37,7 @@ const ConvMsgItem = React.memo(function ConvMsgItem({ msg, tokens }: { msg: Conv
 
 export function AgentsScreen() {
   const { tokens } = useTheme();
+  const isMobile = useIsMobile();
   const { agents, agentStore, rag, hasKey } = useApp();
   const saved = agentStore.all()[0];
   const mainId = saved?.id ?? 'main';
@@ -124,7 +125,7 @@ export function AgentsScreen() {
   return (
     <Page maxWidth={1100}>
       <PageHeader title="AI Agent Builder" subtitle="Create agents with tools, memory, and RAG over your documents" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Card title="Agent configuration">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -165,7 +166,7 @@ export function AgentsScreen() {
         </div>
 
         <Card title="Chat with agent" subtitle={`${activeTools.length} tools enabled ${enableRAG ? '· RAG on' : ''}`} padded>
-          <div style={{ height: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          <div style={{ height: isMobile ? 'min(50dvh, 360px)' : 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
             {conv.length === 0 && <div style={{ color: tokens.textMuted, fontSize: 13, textAlign: 'center', marginTop: 40 }}>Ask your agent something</div>}
             {conv.map((m, i) => (
               <ConvMsgItem key={i} msg={m} tokens={tokens} />
