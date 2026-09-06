@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import React from 'react';
-import { useTheme, Card, Button, Input, Badge, Spinner, Select } from '@acode/ui';
+import { useTheme, Card, Button, Input, Badge, Spinner, Select, Icon, type IconName } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubPullRequest, GitHubComment } from '@acode/core';
 import { makeClient, timeAgo, splitRef, renderMd, trimSha } from './shared';
@@ -103,10 +103,10 @@ interface PrWithRepo extends GitHubPullRequest {
 const PrRow = React.memo(function PrRow({ pr, onClick, last }: { pr: PrWithRepo; onClick: () => void; last: boolean }) {
   const { tokens } = useTheme();
   const color = pr.merged ? tokens.info : pr.state === 'closed' ? tokens.danger : tokens.success;
-  const icon = pr.merged ? '✔' : pr.state === 'closed' ? '✖' : pr.draft ? '○' : '⟳';
+  const icon: IconName = pr.merged ? 'gitMerge' : pr.state === 'closed' ? 'gitPullRequestClosed' : pr.draft ? 'gitPullRequestDraft' : 'gitPullRequest';
   return (
     <button onClick={onClick} style={{ width: '100%', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: tokens.space3, padding: tokens.space3, background: 'transparent', border: 'none', borderBottom: last ? 'none' : `1px solid ${tokens.border}`, cursor: 'pointer', textAlign: 'left' }}>
-      <span style={{ color, fontSize: 16, width: 20, textAlign: 'center' }}>{icon}</span>
+      <span style={{ color, width: 20, textAlign: 'center', display: 'inline-flex', justifyContent: 'center' }}><Icon name={icon} size={16} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {pr.repository && <span style={{ color: tokens.textMuted, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, marginRight: tokens.space1 }}>{pr.repository}</span>}
@@ -221,7 +221,7 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
       <BackButton onClick={onBack} label="Back to pull requests" />
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.space2, flexWrap: 'wrap', marginBottom: tokens.space2 }}>
-        <span style={{ color: stateColor, fontSize: 18, marginTop: 2 }}>{detail.merged ? '✔' : detail.state === 'closed' ? '✖' : '⟳'}</span>
+        <span style={{ color: stateColor, marginTop: 2, display: 'inline-flex' }}><Icon name={detail.merged ? 'gitMerge' : detail.state === 'closed' ? 'gitPullRequestClosed' : 'gitPullRequest'} size={20} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ margin: 0, fontSize: 'clamp(1.1rem, 2.5vw, 1.5rem)', fontWeight: 700 }}>{detail.title}</h1>
           <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginTop: 4 }}>

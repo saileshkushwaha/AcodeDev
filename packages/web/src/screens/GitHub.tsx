@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useTheme, Button, Input, Spinner, Badge } from '@acode/ui';
+import { useTheme, Button, Input, Spinner, Badge, GithubIcon } from '@acode/ui';
 import { useApp } from '../state/AppProvider';
 import type { GitHubUserInfo } from '@acode/core';
 import { makeClient } from './github/shared';
@@ -62,7 +62,7 @@ export function GitHubScreen() {
         <div style={{ width: '100%', maxWidth: 460, animation: 'acode-rise 0.3s ease both' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
             <div style={{ width: 44, height: 44, borderRadius: 14, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 00-1.3-3.2 4.2 4.2 0 00-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 00-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 00-.1 3.2A4.6 4.6 0 004 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21" /></svg>
+              <GithubIcon size={24} color={tokens.text} />
             </div>
             <div>
               <div style={{ fontSize: tokens.fontSizeLg, fontWeight: 700 }}>GitHub</div>

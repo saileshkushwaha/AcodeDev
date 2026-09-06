@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import React from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
-import { Card, Button, Badge, useTheme, Spinner, useIsMobile } from '@acode/ui';
+import { Icon, Card, Button, Badge, useTheme, Spinner, useIsMobile } from '@acode/ui';
 import { listModels, getFreeModels, listProviders, getProvider, type ProviderId } from '@acode/core';
 
 export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: string) => void; onOpenEvaluations?: () => void }) {
@@ -97,7 +97,7 @@ export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: 
             subtitle={`Free & live models — ${gateways.length} gateways (OpenRouter, OpenCode Zen, Kilo & more)`}
             actions={
               <Button size="sm" variant="ghost" onClick={() => void sync()} disabled={syncing}>
-                {syncing ? <Spinner size={14} /> : '⇄ Sync'}
+                {syncing ? <Spinner size={14} /> : <><Icon name="repeat" size={14} /> Sync</>}
               </Button>
             }
           >
@@ -126,7 +126,7 @@ export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: 
           <Card title="Quick actions">
             <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2 }}>
               <Button variant="secondary" full onClick={() => onNavigate('chat')}>💬 New chat</Button>
-              <Button variant="secondary" full onClick={() => onNavigate('workflows')}>⚡ New workflow</Button>
+              <Button variant="secondary" full onClick={() => onNavigate('workflows')}><Icon name="zap" size={14} /> New workflow</Button>
               <Button variant="secondary" full onClick={() => onNavigate('agents')}>🤖 New agent</Button>
               <Button variant="secondary" full onClick={() => onOpenEvaluations ? onOpenEvaluations() : onNavigate('prompts')}>🧪 Run eval</Button>
             </div>

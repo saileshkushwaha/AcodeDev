@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
-import { Card, Button, Input, Badge, useTheme, useIsMobile, Modal, Spinner } from '@acode/ui';
+import { Card, Button, Input, Badge, useTheme, useIsMobile, Modal, Spinner, Icon } from '@acode/ui';
 import {
   KNOWN_CONNECTORS,
   connectorsFor,
@@ -518,11 +518,11 @@ export function KeysScreen() {
 
       {/* Summary strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: tokens.space3, marginBottom: tokens.space5 }}>
-        <SummaryStat label="Connectors stored" value={String(allEntries.length)} accent={tokens.primary} icon="🔐" />
-        <SummaryStat label="AI providers" value={String(countFor('ai'))} accent={tokens.primary} icon="🧠" />
-        <SummaryStat label="Gateways" value={String(cachedGatewayProviders.length)} accent={tokens.info} icon="⇄" />
-        <SummaryStat label="Business apps" value={String(countFor('business'))} accent={tokens.accent} icon="🏢" />
-        <SummaryStat label="Dev & DevOps" value={String(countFor('dev'))} accent={tokens.success} icon="🛠" />
+        <SummaryStat label="Connectors stored" value={String(allEntries.length)} accent={tokens.primary} icon={<Icon name="lock" size={14} />} />
+        <SummaryStat label="AI providers" value={String(countFor('ai'))} accent={tokens.primary} icon={<Icon name="bot" size={14} />} />
+        <SummaryStat label="Gateways" value={String(cachedGatewayProviders.length)} accent={tokens.info} icon={<Icon name="repeat" size={14} />} />
+        <SummaryStat label="Business apps" value={String(countFor('business'))} accent={tokens.accent} icon={<Icon name="briefcase" size={14} />} />
+        <SummaryStat label="Dev & DevOps" value={String(countFor('dev'))} accent={tokens.success} icon={<Icon name="wrench" size={14} />} />
       </div>
 
       {/* Category tabs */}
@@ -579,7 +579,7 @@ export function KeysScreen() {
           )}
           {active === 'gateway' && (
             <Button size="sm" variant="ghost" onClick={() => void syncModels()} disabled={syncing}>
-              {syncing ? <Spinner size={14} /> : '⇄ Sync free models from gateways'}
+              {syncing ? <Spinner size={14} /> : <><Icon name="repeat" size={14} /> Sync free models from gateways</>}
             </Button>
           )}
           {active === 'custom' && (
@@ -706,7 +706,7 @@ export function KeysScreen() {
               textAlign: 'left',
             }}
           >
-            <span style={{ fontSize: 20 }}>🔑</span>
+            <span style={{ display: 'inline-flex' }}><Icon name="key" size={18} /></span>
             <span>OpenRouter</span>
           </button>
           <button
@@ -777,7 +777,7 @@ async function syncGatewayModels(gatewayId: string, baseUrl: string, apiKey: str
   }
 }
 
-const SummaryStat = React.memo(function SummaryStat({ label, value, accent, icon }: { label: string; value: string; accent: string; icon: string }) {
+const SummaryStat = React.memo(function SummaryStat({ label, value, accent, icon }: { label: string; value: string; accent: string; icon: React.ReactNode }) {
   const { tokens } = useTheme();
   return (
     <div style={{ background: tokens.surface, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusLg, padding: `${tokens.space3}px ${tokens.space4}px`, boxShadow: tokens.shadowSm }}>
@@ -901,7 +901,7 @@ const ConnectorCard = React.memo(function ConnectorCard({
                         {maskKey(acct.apiKey)}
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => onRemoveAccount(acct.accountId, acct.label)} style={{ color: tokens.danger, fontSize: 11 }}>✕</Button>
+                    <Button variant="ghost" size="sm" onClick={() => onRemoveAccount(acct.accountId, acct.label)} title="Remove account" style={{ color: tokens.danger, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={12} /></Button>
                   </div>
                 ))}
               </div>
@@ -995,7 +995,7 @@ const ConnectorCard = React.memo(function ConnectorCard({
                 <Button variant="ghost" size="sm" onClick={toggleFallbackReveal} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>
                   {fallbackRevealed ? 'Hide' : 'Show'}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => onRemoveFallback(idx)} style={{ color: tokens.danger, fontSize: 11 }}>✕</Button>
+                <Button variant="ghost" size="sm" onClick={() => onRemoveFallback(idx)} title="Remove fallback" style={{ color: tokens.danger, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={12} /></Button>
               </div>
             ))}
             <div style={{ display: 'flex', gap: tokens.space2, marginTop: tokens.space2, alignItems: 'flex-end' }}>

@@ -8,3 +8,4 @@ export * from './Select';
 export * from './Badge';
 export * from './Controls';
 export * from './Sidebar';
+export * from './Icon';

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';import { useApp } from '../state/AppProvider';
 import { Page, PageHeader } from '../components/Page';
-import { Card, Button, Input, Badge, Select, Modal, TabBar, useTheme, useIsMobile } from '@acode/ui';
+import { Card, Button, Input, Badge, Select, Modal, TabBar, useTheme, useIsMobile, Icon } from '@acode/ui';
 import {
   PROMPT_CATEGORIES,
   extractVariables,
@@ -159,8 +159,8 @@ function PromptsWorkspace({
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <CatButton icon="⊞" label="All prompts" count={all.length} active={activeCat === 'all'} onClick={() => setActiveCat('all')} />
-            <CatButton icon="★" label="Favorites" count={all.filter((p) => p.favorite).length} active={activeCat === 'favorites'} onClick={() => setActiveCat('favorites')} />
+            <CatButton icon={<Icon name="inbox" size={14} />} label="All prompts" count={all.length} active={activeCat === 'all'} onClick={() => setActiveCat('all')} />
+            <CatButton icon={<Icon name="star" size={14} />} label="Favorites" count={all.filter((p) => p.favorite).length} active={activeCat === 'favorites'} onClick={() => setActiveCat('favorites')} />
             <div style={{ height: tokens.space2 }} />
             {PROMPT_CATEGORIES.map((c) => (
               <CatButton
@@ -297,7 +297,7 @@ const StatRow = React.memo(function StatRow({ label, value, accent }: { label: s
   );
 });
 
-const CatButton = React.memo(function CatButton({ icon, label, count, active, onClick, title }: { icon: string; label: string; count: number; active: boolean; onClick: () => void; title?: string }) {
+const CatButton = React.memo(function CatButton({ icon, label, count, active, onClick, title }: { icon: React.ReactNode; label: string; count: number; active: boolean; onClick: () => void; title?: string }) {
   const { tokens } = useTheme();
   return (
     <button
@@ -386,7 +386,7 @@ const PromptCard = React.memo(function PromptCard({
             title={prompt.favorite ? 'Unfavorite' : 'Favorite'}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: prompt.favorite ? '#f59e0b' : tokens.textMuted, fontSize: 16 }}
           >
-            {prompt.favorite ? '★' : '☆'}
+            {prompt.favorite ? <Icon name="star" size={16} color="#f59e0b" /> : <Icon name="star" size={16} color={tokens.textMuted} />}
           </button>
         </div>
         <div style={{ marginTop: tokens.space1, fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>
@@ -406,8 +406,8 @@ const PromptCard = React.memo(function PromptCard({
           {vars.length} var{vars.length === 1 ? '' : 's'} · ~{formatTokens(tokensEst)} tok · {prompt.uses ?? 0} uses
         </span>
         <div style={{ flex: 1 }} />
-        <Button size="sm" variant="ghost" onClick={onCopy}>⧉ Copy</Button>
-        <Button size="sm" variant="ghost" onClick={onEdit}>✎</Button>
+        <Button size="sm" variant="ghost" onClick={onCopy}><Icon name="copy" size={14} /> Copy</Button>
+        <Button size="sm" variant="ghost" onClick={onEdit} title="Edit"><Icon name="squarePen" size={14} /></Button>
         <Button size="sm" onClick={onUse}>Use in chat</Button>
       </div>
     </Card>

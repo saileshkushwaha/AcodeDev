@@ -2,6 +2,7 @@ import React from 'react';
 import { useTheme } from './Theme';
 import { Badge } from './Badge';
 import { Button } from './Button';
+import { Icon } from './Icon';
 
 export interface NavItem {
   id: string;
@@ -154,10 +155,7 @@ export function Sidebar({
               justifyContent: collapsed ? 'center' : 'flex-start',
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="18" rx="1" />
-              <rect x="14" y="3" width="7" height="18" rx="1" />
-            </svg>
+            <Icon name="panels" size={16} strokeWidth={2} />
             {!collapsed && <span>Collapse</span>}
           </button>
         </div>

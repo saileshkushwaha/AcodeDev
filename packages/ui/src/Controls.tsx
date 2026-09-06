@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTheme } from './Theme';
+import { Icon } from './Icon';
 
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
   const { tokens } = useTheme();
@@ -130,8 +131,8 @@ export function Modal({ open, onClose, title, children, width = 560 }: { open: b
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space3}px ${tokens.space4}px`, borderBottom: `1px solid ${tokens.border}` }}>
           <div style={{ fontSize: tokens.fontSizeMd, fontWeight: 600, color: tokens.text }}>{title}</div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: tokens.textMuted, fontSize: tokens.fontSizeXl, cursor: 'pointer', lineHeight: 1 }}>
-            ×
+          <button onClick={onClose} title="Close" style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+            <Icon name="x" size={16} />
           </button>
         </div>
         <div style={{ padding: tokens.space4 }}>{children}</div>

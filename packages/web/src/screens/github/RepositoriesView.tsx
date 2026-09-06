@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useTheme, Card, Button, Input, Badge, TabBar, Spinner, Select, Modal, Chip } from '@acode/ui';
+import { useTheme, Card, Button, Input, Badge, TabBar, Spinner, Select, Modal, Chip, Icon, type IconName } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubContent, GitHubCommit, GitHubBranch, GitHubRelease, GitHubPullRequest, GitHubIssue, GitHubWorkflowRun } from '@acode/core';
 import { makeClient, timeAgo, compact, splitRef, renderMd, trimSha } from './shared';
@@ -86,7 +86,7 @@ export function RepositoriesView({ initialRepo, onInitialRepoConsumed }: { initi
                       <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{r.private ? 'Private' : 'Public'}{r.archived ? ' · archived' : ''}</div>
                     </button>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <Badge color={tokens.warning}>★ {compact(r.stars)}</Badge>
+                      <Badge color={tokens.warning}><Icon name="star" size={11} /> {compact(r.stars)}</Badge>
                     </div>
                   </div>
                   <div style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary, minHeight: 32, lineHeight: 1.5 }}>{r.description || 'No description'}</div>
@@ -175,18 +175,18 @@ function RepoDetail({ repo, onBack, onRefresh }: { repo: GitHubRepo; onBack: () 
           {repoMeta.description && <div style={{ color: tokens.textSecondary, fontSize: tokens.fontSizeMd, marginTop: tokens.space1 }}>{repoMeta.description}</div>}
           <div style={{ display: 'flex', gap: tokens.space4, marginTop: tokens.space2, flexWrap: 'wrap' }}>
             {repoMeta.language && <Badge color={tokens.info}>{repoMeta.language}</Badge>}
-            <Badge color={tokens.warning}>★ {compact(repoMeta.stars)}</Badge>
+            <Badge color={tokens.warning}><Icon name="star" size={11} /> {compact(repoMeta.stars)}</Badge>
             <Badge color={tokens.textSecondary}>⑂ {compact(repoMeta.forks)}</Badge>
             <Badge color={tokens.info}>⚑ {compact(repoMeta.openIssues)}</Badge>
           </div>
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: tokens.space2 }}>
-          <Button variant={starred ? 'secondary' : 'primary'} onClick={toggleStar} size="sm">{starred ? '★ Unstar' : '☆ Star'}</Button>
+          <Button variant={starred ? 'secondary' : 'primary'} onClick={toggleStar} size="sm"><Icon name="star" size={12} /> {starred ? 'Unstar' : 'Star'}</Button>
           <a href={repoMeta.htmlUrl} target="_blank" rel="noreferrer">
             <Button variant="secondary" size="sm">Open on GitHub</Button>
           </a>
-          <Button variant="secondary" size="sm" onClick={onRefresh}>⟳</Button>
+          <Button variant="secondary" size="sm" onClick={onRefresh} title="Refresh"><Icon name="refresh" size={14} /></Button>
         </div>
       </div>
 
@@ -282,7 +282,7 @@ function CodeBrowser({ owner, name, refName, path, onPath }: { owner: string; na
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.space2 }}>
             <div style={{ fontFamily: tokens.fontMono, fontWeight: 600, fontSize: tokens.fontSizeSm }}>{file.name}</div>
-            <Button variant="ghost" size="sm" onClick={() => setFile(null)}>× close</Button>
+            <Button variant="ghost" size="sm" onClick={() => setFile(null)}><Icon name="x" size={14} /> close</Button>
           </div>
           <pre style={{ background: 'var(--code-bg)', padding: tokens.space4, borderRadius: tokens.radiusMd, overflow: 'auto', fontSize: 13, lineHeight: 1.6, margin: 0 }}>{file.content}</pre>
         </div>
@@ -360,7 +360,7 @@ function BranchesPanel({ owner, name }: { owner: string; name: string }) {
     <div>
       {branches.map((b, i) => (
         <div key={b.name} style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.space3, padding: `${tokens.space2}px 0`, borderBottom: i < branches.length - 1 ? `1px solid ${tokens.border}` : 'none' }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={tokens.textSecondary} strokeWidth="2"><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="6" r="3" /><path d="M18 9a6 6 0 01-6 6h-6" /></svg>
+          <Icon name="gitBranch" size={18} color={tokens.textSecondary} strokeWidth={2} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2 }}>
               <span style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontMono }}>{b.name}</span>
@@ -447,7 +447,7 @@ function RepoIssues({ owner, name }: { owner: string; name: string }) {
     <div>
       {issues.map((i, idx) => (
         <div key={i.number} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px 0`, borderBottom: idx < issues.length - 1 ? `1px solid ${tokens.border}` : 'none' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color(i.state)} strokeWidth="2"><circle cx="12" cy="12" r="9" /></svg>
+          <Icon name="circle" size={16} color={color(i.state)} strokeWidth={2} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{i.number} {i.title}</div>
             <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>by {i.user} · {i.comments} comments</div>
@@ -534,8 +534,8 @@ function CreateRepoModal({ open, onClose, onCreated }: { open: boolean; onClose:
 function PrState({ pr }: { pr: GitHubPullRequest }) {
   const { tokens } = useTheme();
   const color = pr.merged ? tokens.info : pr.state === 'closed' ? tokens.danger : tokens.success;
-  const icon = pr.merged ? '✔' : pr.state === 'closed' ? '✖' : '⟳';
-  return <span style={{ color, width: 20, textAlign: 'center' }}>{icon}</span>;
+  const icon: IconName = pr.merged ? 'gitMerge' : pr.state === 'closed' ? 'gitPullRequestClosed' : 'gitPullRequest';
+  return <span style={{ color, width: 20, display: 'inline-flex', justifyContent: 'center', textAlign: 'center' }}><Icon name={icon} size={16} /></span>;
 }
 
 function Empty({ text }: { text: string }) {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useTheme, Card, Badge, Spinner, Button } from '@acode/ui';
+import { useTheme, Card, Badge, Spinner, Button, Icon } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubUserInfo, GitHubRepo, GitHubNotification, GitHubActivityEvent } from '@acode/core';
 import { makeClient, timeAgo, compact } from './shared';
@@ -122,7 +122,7 @@ export function OverviewView({
                   <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{r.name}</div>
                   <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{r.language || 'Repository'}</div>
                 </div>
-                <Badge color={tokens.warning}>★ {compact(r.stars)}</Badge>
+                <Badge color={tokens.warning}><Icon name="star" size={11} /> {compact(r.stars)}</Badge>
               </button>
             ))}
             {!topRepos.length && <div style={{ fontSize: tokens.fontSizeSm, color: tokens.textMuted, padding: tokens.space2 }}>No repositories yet</div>}

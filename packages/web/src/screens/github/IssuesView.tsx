@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import React from 'react';
-import { useTheme, Card, Button, Input, Badge, Spinner, Select, Modal } from '@acode/ui';
+import { useTheme, Card, Button, Input, Badge, Spinner, Select, Modal, Icon } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubIssue, GitHubComment } from '@acode/core';
 import { makeClient, timeAgo, splitRef, renderMd } from './shared';
@@ -96,7 +96,7 @@ const IssueRow = React.memo(function IssueRow({ issue, onClick, last }: { issue:
   const color = issue.state === 'open' ? tokens.success : tokens.danger;
   return (
     <button onClick={onClick} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: tokens.space3, padding: tokens.space3, background: 'transparent', border: 'none', borderBottom: last ? 'none' : `1px solid ${tokens.border}`, cursor: 'pointer', textAlign: 'left' }}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"><circle cx="12" cy="12" r="9" /></svg>
+      <Icon name="circle" size={16} color={color} strokeWidth={2} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: tokens.fontSizeSm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           <span style={{ color: tokens.textMuted, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, marginRight: tokens.space1 }}>{issue.repository}</span>
@@ -173,7 +173,7 @@ function IssueDetail({ issue, onBack, onChanged }: { issue: IssueWithRepo; onBac
       <BackButton onClick={onBack} label="Back to issues" />
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.space3, flexWrap: 'wrap', marginBottom: tokens.space3 }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" style={{ marginTop: 4 }}><circle cx="12" cy="12" r="9" /></svg>
+        <Icon name="circle" size={20} color={color} strokeWidth={2} style={{ marginTop: 4 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ margin: 0, fontSize: 'clamp(1.1rem, 2.5vw, 1.5rem)', fontWeight: 700 }}>{detail.title}</h1>
           <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, marginTop: 4 }}>

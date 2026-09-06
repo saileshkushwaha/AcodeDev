@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useTheme, Card, Input, Button, Badge, Spinner } from '@acode/ui';
+import { useTheme, Card, Input, Button, Badge, Spinner, Icon } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubSearchResult } from '@acode/core';
 import { makeClient, compact } from './shared';
@@ -65,7 +65,7 @@ export function SearchView() {
             <Card key={r.fullName} style={{ display: 'flex', flexDirection: 'column', gap: tokens.space2 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: tokens.space2 }}>
                 <div style={{ fontWeight: 700, fontSize: tokens.fontSizeMd, color: tokens.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.fullName}</div>
-                <Badge color={tokens.warning}>★ {compact(r.stars)}</Badge>
+                <Badge color={tokens.warning}><Icon name="star" size={11} /> {compact(r.stars)}</Badge>
               </div>
               <div style={{ fontSize: tokens.fontSizeSm, color: tokens.textSecondary, minHeight: 32, lineHeight: 1.5 }}>{r.description || 'No description'}</div>
               <div style={{ marginTop: 'auto', display: 'flex', gap: tokens.space3, flexWrap: 'wrap' }}>

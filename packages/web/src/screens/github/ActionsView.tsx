@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useTheme, Card, Button, Badge, Spinner, Select } from '@acode/ui';
+import { useTheme, Card, Button, Badge, Spinner, Select, Icon } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
 import type { GitHubRepo, GitHubWorkflowRun } from '@acode/core';
 import { makeClient, timeAgo, splitRef, compact, shortDate } from './shared';
@@ -127,7 +127,7 @@ function RunLogs({ run, onBack }: { run: GitHubWorkflowRun; onBack: () => void }
         </div>
         <div style={{ flex: 1 }} />
         <Badge color={resultColor(run.conclusion ?? run.status, tokens)}>{run.conclusion ?? run.status}</Badge>
-        <Button variant="secondary" size="sm" onClick={() => void load()}>{loading ? <Spinner size={14} /> : '⟳ Retry'}</Button>
+        <Button variant="secondary" size="sm" onClick={() => void load()}>{loading ? <Spinner size={14} /> : <><Icon name="refresh" size={13} /> Retry</>}</Button>
       </div>
       <Card title={error ? 'Logs unavailable' : `Logs (${compact(logs.length)} chars)`}>
         {loading ? (

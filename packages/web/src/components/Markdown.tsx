@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useTheme } from '@acode/ui';
+import { useTheme, Icon } from '@acode/ui';
 
 function inline(text: string, renderKey: () => number, tokens: ReturnType<typeof useTheme>['tokens']): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
@@ -35,7 +35,7 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
           onClick={() => { navigator.clipboard?.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}
           style={{ background: 'transparent', border: 'none', color: copied ? tokens.success : tokens.textSecondary, cursor: 'pointer', fontSize: tokens.fontSizeXs, fontWeight: 600 }}
         >
-          {copied ? '✓ Copied' : '⧉ Copy'}
+          {copied ? <><Icon name="check" size={13} /> Copied</> : <><Icon name="copy" size={13} /> Copy</>}
         </button>
       </div>
       <pre style={{ margin: 0, padding: tokens.space3, background: tokens.codeBg, border: `1px solid ${tokens.border}`, borderBottomLeftRadius: tokens.radiusSm, borderBottomRightRadius: tokens.radiusSm, overflow: 'auto', fontSize: 12.5, lineHeight: 1.6, maxHeight: 'min(480px, 60vh)' }}>

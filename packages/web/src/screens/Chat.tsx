@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../state/AppProvider';
-import { Button, Select, Input, Toggle, Spinner, useTheme, Badge, useIsMobile } from '@acode/ui';
+import { Button, Select, Input, Toggle, Spinner, useTheme, Badge, useIsMobile, Icon, GithubIcon, type IconName } from '@acode/ui';
 import {
   listModels,
   listProviders,
@@ -608,10 +608,10 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
   };
 
   const COMMANDS = [
-    { id: 'new', label: 'New session', hint: 'Start a fresh conversation', icon: '+', run: () => newSession() },
-    { id: 'clear', label: 'Clear session', hint: 'Erase all messages in this conversation', icon: '✕', run: clearSession },
-    { id: 'export', label: 'Export session', hint: 'Download this conversation as markdown', icon: '↓', run: exportSession },
-    { id: 'skills', label: 'Skills', hint: 'Open the skills context picker', icon: '◎', run: () => setSkillsOpen(true) },
+    { id: 'new', label: 'New session', hint: 'Start a fresh conversation', icon: 'plus', run: () => newSession() },
+    { id: 'clear', label: 'Clear session', hint: 'Erase all messages in this conversation', icon: 'trash', run: clearSession },
+    { id: 'export', label: 'Export session', hint: 'Download this conversation as markdown', icon: 'download', run: exportSession },
+    { id: 'skills', label: 'Skills', hint: 'Open the skills context picker', icon: 'sparkles', run: () => setSkillsOpen(true) },
   ];
 
   const runCommand = (id: string) => {
@@ -947,13 +947,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           }}
           style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: sidebarOpen ? `${tokens.primary}1a` : 'transparent', border: `1px solid ${sidebarOpen ? tokens.primary : 'transparent'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: sidebarOpen ? tokens.primary : tokens.textSecondary, flexShrink: 0 }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="6" height="6" rx="1" />
-            <rect x="14" y="3" width="6" height="6" rx="1" />
-            <rect x="3" y="14" width="6" height="6" rx="1" />
-            <line x1="17" y1="14" x2="17" y2="20" />
-            <line x1="14" y1="17" x2="20" y2="17" />
-          </svg>
+          <Icon name="layoutGrid" size={16} />
         </button>
 
         {/* Session tabs */}
@@ -981,11 +975,11 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                     </span>
                   ) : (
                     <span style={{ width: 20, height: 20, borderRadius: tokens.radiusSm, background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.text} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                      <Icon name="squarePen" size={12} color={tokens.text} />
                     </span>
                   )
                 ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                  <Icon name="squarePen" size={14} color={tokens.textMuted} />
                 )}
                 {hasBadge && (
                   <span style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', border: `2px solid ${tokens.bgElevated}` }} />
@@ -999,7 +993,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                 aria-label="Close tab"
                 onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
                 style={{ width: 18, height: 18, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 12, flexShrink: 0 }}
-              >×</button>
+              ><Icon name="x" size={12} /></button>
             </div>
           );
         })}
@@ -1117,7 +1111,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           <div ref={messagesRef} onScroll={onScrollBody} style={{ flex: 1, overflowY: 'auto', padding: tokens.space4, position: 'relative', display: 'flex', flexDirection: 'column', gap: tokens.space4 }}>
             {!connected && (
               <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space3, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, background: `linear-gradient(90deg, ${tokens.warning}1f, ${tokens.bgElevated})`, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: tokens.fontSizeMd }}>⚠️</span>
+                <Icon name="circleAlert" size={17} color={tokens.warning} style={{ flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ fontSize: tokens.fontSizeSm, fontWeight: 600 }}>{provDef?.name ?? provider} isn't connected</div>
                   <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textSecondary }}>Add your API key to get real responses.</div>
@@ -1219,7 +1213,7 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
                 aria-label="Scroll to bottom"
                 style={{ position: 'sticky', bottom: tokens.space2, left: '50%', transform: 'translateX(-50%)', width: 40, height: 40, borderRadius: '50%', border: `1px solid ${tokens.borderStrong}`, background: tokens.bgElevated, color: tokens.textSecondary, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: tokens.shadowMd, flexShrink: 0, marginLeft: 'auto', marginRight: 'auto' }}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14m0 0l-5-5m5 5l5-5" /></svg>
+                <Icon name="arrowDown" size={18} strokeWidth={2} />
               </button>
             )}
           </div>
@@ -1320,7 +1314,7 @@ const AttachmentChip = React.memo(function AttachmentChip({ attachment: a, onRem
       <span>{kindIcon[a.kind]}</span>
       <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{a.name}</span>
       <span style={{ color: tokens.textMuted }}>{meta}</span>
-      <button onClick={onRemove} title="Remove" style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>
+      <button onClick={onRemove} title="Remove" style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', padding: 0, lineHeight: 1, display: 'inline-flex' }}><Icon name="x" size={14} /></button>
     </div>
   );
 });
@@ -1328,12 +1322,12 @@ const AttachmentChip = React.memo(function AttachmentChip({ attachment: a, onRem
 function AddMenu({ onFile, onFolder, onLink, onClose }: { onFile: () => void; onFolder: () => void; onLink: () => void; onClose: () => void }) {
   const { tokens } = useTheme();
   const items = [
-    { icon: '📄', label: 'File', fn: onFile },
-    { icon: '🖼', label: 'Image', fn: onFile },
-    { icon: '📁', label: 'Folder', fn: onFolder },
-    { icon: '◫', label: 'SVG', fn: onFile },
-    { icon: '⬡', label: 'draw.io', fn: onFile },
-    { icon: '🔗', label: 'Link', fn: onLink },
+    { icon: 'fileText', label: 'File', fn: onFile },
+    { icon: 'image', label: 'Image', fn: onFile },
+    { icon: 'folder', label: 'Folder', fn: onFolder },
+    { icon: 'fileCode', label: 'SVG', fn: onFile },
+    { icon: 'shapes', label: 'draw.io', fn: onFile },
+    { icon: 'link', label: 'Link', fn: onLink },
   ];
   return (
     <>
@@ -1343,7 +1337,7 @@ function AddMenu({ onFile, onFolder, onLink, onClose }: { onFile: () => void; on
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.space1 }}>
           {items.map((it) => (
             <button key={it.label} onClick={() => it.fn()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: `${tokens.space2}px 4px`, border: `1px dashed ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, background: tokens.bg, cursor: 'pointer', color: tokens.textSecondary, fontFamily: tokens.fontSans, fontSize: tokens.fontSizeXs }}>
-              <span style={{ fontSize: 18 }}>{it.icon}</span>
+              <span style={{ display: 'inline-flex' }}><Icon name={it.icon as IconName} size={18} /></span>
               <span>{it.label}</span>
             </button>
           ))}
@@ -1480,7 +1474,7 @@ function Composer(props: {
           >
             <span>{s.icon}</span>
             <span>{s.name}</span>
-            <span style={{ color: tokens.textMuted }}>✕</span>
+            <Icon name="x" size={10} color={tokens.textMuted} />
           </button>
         ))}
         <button
@@ -1490,7 +1484,7 @@ function Composer(props: {
         >
           <span>◎</span>
           <span>Skills</span>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 9l6 6 6-6" /></svg>
+          <Icon name="chevronDown" size={10} strokeWidth={2.5} />
         </button>
         {props.skillsOpen && (
           <SkillsPicker
@@ -1534,7 +1528,7 @@ function Composer(props: {
                     onMouseEnter={() => setMenuIdx(idx)}
                     style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, width: '100%', textAlign: 'left', padding: `${tokens.space2}px ${tokens.space3}px`, background: idx === menuIdx ? tokens.surfaceHover : 'transparent', border: 'none', borderRadius: tokens.radiusSm, cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.text, fontSize: tokens.fontSizeSm }}
                   >
-                    <span style={{ width: 18, flexShrink: 0, textAlign: 'center', color: tokens.textSecondary }}>{icon}</span>
+                    <span style={{ width: 18, flexShrink: 0, textAlign: 'center', color: tokens.textSecondary }}>{isCmd ? <Icon name={icon as IconName} size={15} /> : icon}</span>
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontWeight: 600 }}>{label}</span>
                       <span style={{ display: 'block', fontSize: tokens.fontSizeXs, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hint}</span>
@@ -1579,7 +1573,7 @@ function Composer(props: {
                       <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{active?.name ?? 'All'}</span>
                       {repoName && <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>/ {repoName}</span>}
                     </span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6" /></svg>
+                    <Icon name="chevronDown" size={12} strokeWidth={2} style={{ flexShrink: 0 }} />
                   </>
                 );
               })()}
@@ -1602,9 +1596,9 @@ function Composer(props: {
               title="Model & settings"
               style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, width: '100%', maxWidth: '100%', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, color: tokens.textSecondary, fontSize: tokens.fontSizeSm, padding: `${tokens.space1}px ${tokens.space2}px`, overflow: 'hidden' }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M4 5h16M4 12h16M4 19h16" /><circle cx="9" cy="5" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="7" cy="19" r="2" /></svg>
+              <Icon name="settings" size={14} color={tokens.textSecondary} style={{ flexShrink: 0 }} />
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{props.model.split('/').pop() || 'Select model'}</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6" /></svg>
+              <Icon name="chevronDown" size={14} color={tokens.textSecondary} style={{ flexShrink: 0 }} />
             </button>
             {paramsOpen && (
               <ParamsMenu
@@ -1636,7 +1630,7 @@ function Composer(props: {
               style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: props.sendDisabled || props.streaming ? tokens.surfaceHover : tokens.primary, color: props.sendDisabled || props.streaming ? tokens.textMuted : '#fff', cursor: props.sendDisabled || props.streaming ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
             >
               {props.streaming ? <Spinner size={16} color="#fff" /> : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5m0 0l-6 6m6-6l6 6" /></svg>
+                <Icon name="send" size={18} strokeWidth={2} />
               )}
             </button>
           </div>
@@ -1664,7 +1658,7 @@ function SkillsPicker({ selected, onToggle, onClose }: { selected: Set<string>; 
       <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 71, width: 320, maxWidth: 'calc(100vw - 32px)', maxHeight: 340, overflowY: 'auto', background: tokens.surface, border: `1px solid ${tokens.borderStrong}`, borderRadius: tokens.radiusMd, boxShadow: tokens.shadowLg, padding: tokens.space2 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space1}px ${tokens.space2}px` }}>
           <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 700 }}>Skills & context</span>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', fontSize: 14 }}>×</button>
+          <button onClick={onClose} title="Close" style={{ background: 'transparent', border: 'none', color: tokens.textMuted, cursor: 'pointer', fontSize: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}><Icon name="x" size={14} /></button>
         </div>
         <div style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, padding: `0 ${tokens.space2}px ${tokens.space2}px` }}>
           Active skills are injected into the system prompt and steer how the model answers. Type <span style={{ fontFamily: tokens.fontMono }}>@</span> in the composer to quick-add.
@@ -1689,7 +1683,7 @@ function SkillsPicker({ selected, onToggle, onClose }: { selected: Set<string>; 
                       <span style={{ display: 'block', fontSize: tokens.fontSizeXs, color: tokens.textMuted }}>{s.description}</span>
                     </span>
                     <span style={{ width: 16, height: 16, borderRadius: tokens.radiusSm, border: `1px solid ${active ? tokens.primary : tokens.borderStrong}`, background: active ? tokens.primary : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {active && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
+                      {active && <span style={{ color: '#fff', lineHeight: 1, display: 'inline-flex' }}><Icon name="check" size={12} /></span>}
                     </span>
                   </button>
                 );
@@ -1904,7 +1898,7 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
           <div key={`tool-${i}`} style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, marginBottom: tokens.space1 }}>
             <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.accent, textTransform: 'uppercase' }}>Webfetch</span>
             <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, color: tokens.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{webfetchMatch[1]}</span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+            <Icon name="externalLink" size={12} color={tokens.textMuted} strokeWidth={2} style={{ flexShrink: 0 }} />
           </div>
         );
         i++;
@@ -1988,9 +1982,9 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, color: copied ? tokens.success : tokens.textMuted, cursor: 'pointer', transition: 'all 0.15s' }}
             >
               {copied ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                <Icon name="check" size={14} strokeWidth={2} />
               ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
+                <Icon name="copy" size={14} strokeWidth={2} />
               )}
             </button>
             {onRetry && !streaming && (
@@ -2000,7 +1994,7 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
                 title="Retry"
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, color: tokens.textMuted, cursor: 'pointer', transition: 'all 0.15s' }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 102.13-9.36L1 10" /></svg>
+                <Icon name="rotateCcw" size={14} strokeWidth={2} />
               </button>
             )}
             {onInsert && (
@@ -2010,7 +2004,7 @@ const Bubble = React.memo(function Bubble({ msg, streaming, onRetry, onInsert }:
                 title="Edit & resend"
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, background: 'transparent', border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, color: tokens.textMuted, cursor: 'pointer', transition: 'all 0.15s' }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                <Icon name="squarePen" size={14} strokeWidth={2} />
               </button>
             )}
           </div>
@@ -2031,7 +2025,7 @@ const ShellBlock = React.memo(function ShellBlock({ command, output }: { command
       >
         <span style={{ fontSize: tokens.fontSizeXs, fontWeight: 700, color: tokens.primary, textTransform: 'uppercase' }}>Shell</span>
         <span style={{ flex: 1, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, color: tokens.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{command}</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}><path d="M6 9l6 6 6-6" /></svg>
+        <Icon name="chevronDown" size={14} strokeWidth={2} style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }} />
       </div>
       {open && output && (
         <pre style={{ marginTop: tokens.space1, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bg, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}`, fontFamily: tokens.fontMono, fontSize: tokens.fontSizeXs, color: tokens.textSecondary, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 300, overflowY: 'auto' }}>
@@ -2232,9 +2226,7 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
             onClick={() => setProjectModalOpen(true)}
             style={{ width: 24, height: 24, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+            <Icon name="plus" size={14} />
           </button>
         </div>
         {allProjects.length === 0 ? (
@@ -2246,7 +2238,7 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
               onClick={() => setProjectModalOpen(true)}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd, background: tokens.primary, color: '#fff', border: 'none', cursor: 'pointer', fontFamily: tokens.fontSans, fontSize: tokens.fontSizeSm, fontWeight: 600 }}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              <Icon name="plus" size={12} />
               Create your first project
             </button>
           </div>
@@ -2258,7 +2250,7 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
       {/* Search */}
       <div style={{ padding: `${tokens.space2}px ${tokens.space3}px` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}` }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+          <Icon name="search" size={14} color={tokens.textMuted} />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -2367,13 +2359,13 @@ function SidebarPanel({ sessions, activeId, archived, inactive, onSelect, onUnar
               <button
                 onClick={() => setProjectModalOpen(false)}
                 style={{ width: 28, height: 28, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 16 }}
-              >×</button>
+              ><Icon name="x" size={16} /></button>
             </div>
 
             {/* Search */}
             <div style={{ padding: `${tokens.space3}px ${tokens.space4}px 0` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}` }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+<Icon name="search" size={14} color={tokens.textMuted} />
                 <input
                   value={projectSearch}
                   onChange={(e) => setProjectSearch(e.target.value)}
@@ -2471,7 +2463,7 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onEdit, onDel
                 onMouseEnter={(e) => { e.currentTarget.style.color = tokens.text; e.currentTarget.style.background = tokens.surfaceHover; }}
                 onMouseLeave={(e) => { e.currentTarget.style.color = tokens.textMuted; e.currentTarget.style.background = 'transparent'; }}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                <Icon name="squarePen" size={12} strokeWidth={2} />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(p.id); onClose(); }}
@@ -2481,7 +2473,7 @@ function ProjectDropdown({ projects, activeId, onSelect, onCreate, onEdit, onDel
                 onMouseEnter={(e) => { e.currentTarget.style.color = tokens.danger; e.currentTarget.style.background = tokens.surfaceHover; }}
                 onMouseLeave={(e) => { e.currentTarget.style.color = tokens.textMuted; e.currentTarget.style.background = 'transparent'; }}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
+                <Icon name="trash" size={12} strokeWidth={2} />
               </button>
             </div>
           );
@@ -2558,13 +2550,13 @@ function ProjectPicker({ projects, onSelect, onCreate, onClose }: {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${tokens.space3}px ${tokens.space4}px`, borderBottom: `1px solid ${tokens.border}` }}>
           <span style={{ fontSize: tokens.fontSizeMd, fontWeight: 600, color: tokens.text }}>Select a project</span>
-          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted, fontSize: 16 }}>×</button>
+          <button onClick={onClose} title="Close" style={{ width: 28, height: 28, borderRadius: tokens.radiusSm, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textMuted }}><Icon name="x" size={16} /></button>
         </div>
 
         {/* Search */}
         <div style={{ padding: `${tokens.space3}px ${tokens.space4}px 0` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, background: tokens.bgSubtle, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.border}` }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+<Icon name="search" size={14} color={tokens.textMuted} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -2723,7 +2715,7 @@ function SessionGroup({ label, sessions, activeId, onSelect, onNewSession, getPr
             onClick={onNewSession}
             style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, background: 'transparent', border: 'none', cursor: 'pointer', color: tokens.textSecondary, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+            <Icon name="squarePen" size={12} strokeWidth={2} />
             New session
           </button>
         )}
@@ -2831,7 +2823,7 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
             style={{ display: 'flex', alignItems: 'center', gap: tokens.space2, padding: `${tokens.space2}px ${tokens.space3}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, background: 'transparent', cursor: 'pointer', color: tokens.text, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans, fontWeight: 500 }}
           >
             {modeLabel}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round" style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}><path d="M6 9l6 6 6-6" /></svg>
+            <Icon name="chevronDown" size={14} color={tokens.textMuted} strokeWidth={2} style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }} />
           </button>
           {dropdownOpen && (
             <>
@@ -2844,7 +2836,7 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
                   onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
                 >
                   <span>Git changes</span>
-                  {mode === 'git' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.primary} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                  {mode === 'git' && <Icon name="check" size={14} color={tokens.primary} strokeWidth={2.5} />}
                 </button>
                 <button
                   onClick={() => { onModeChange('lastTurn'); setDropdownOpen(false); }}
@@ -2853,7 +2845,7 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
                   onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
                 >
                   <span>Last turn changes</span>
-                  {mode === 'lastTurn' && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.primary} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                  {mode === 'lastTurn' && <Icon name="check" size={14} color={tokens.primary} strokeWidth={2.5} />}
                 </button>
               </div>
             </>
@@ -2864,7 +2856,7 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
             onClick={toggleAll}
             style={{ display: 'flex', alignItems: 'center', gap: tokens.space1, padding: `4px ${tokens.space2}px`, borderRadius: tokens.radiusMd, border: `1px solid ${tokens.borderStrong}`, background: 'transparent', cursor: 'pointer', color: tokens.textSecondary, fontSize: tokens.fontSizeSm, fontFamily: tokens.fontSans }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
+            <Icon name={allExpanded ? 'collapse' : 'expand'} size={14} strokeWidth={2} />
             {allExpanded ? 'Collapse all' : 'Expand all'}
           </button>
         )}
@@ -2876,7 +2868,7 @@ function FilesPanel({ changedFiles, mode, onModeChange, proxyBase }: {
           </div>
         ) : mode === 'git' && gitError ? (
           <div style={{ textAlign: 'center', padding: tokens.space6, color: tokens.textMuted, fontSize: tokens.fontSizeSm, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.space3 }}>
-            <div style={{ fontSize: tokens.fontSizeXs }}>⚠️ {gitError}</div>
+            <div style={{ fontSize: tokens.fontSizeXs, display: 'flex', alignItems: 'center', gap: tokens.space1 }}><Icon name="circleAlert" size={13} color={tokens.warning} /> {gitError}</div>
             {isLocal && <Button size="sm" onClick={() => void loadGit()}>Retry</Button>}
           </div>
         ) : shown.length === 0 ? (
@@ -2939,16 +2931,14 @@ function FileCard({ file, expanded, onToggle, proxyBase }: { file: { path: strin
         onMouseEnter={(e) => { if (!expanded) e.currentTarget.style.background = tokens.surfaceHover; }}
         onMouseLeave={(e) => { if (!expanded) e.currentTarget.style.background = 'transparent'; }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-          <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.32 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
-        </svg>
+        <Icon name="fileText" size={16} color={tokens.textMuted} style={{ flexShrink: 0 }} />
         <span style={{ fontFamily: tokens.fontMono, fontSize: tokens.fontSizeSm, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tokens.text }}>{path}</span>
         {status && STATUS_LABEL[status] && (
           <span style={{ fontSize: tokens.fontSizeXs, color: tokens.textMuted, background: tokens.bgSubtle, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: '0 6px', flexShrink: 0 }}>{STATUS_LABEL[status]}</span>
         )}
         {addCount > 0 && <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.success, fontFamily: tokens.fontMono }}>+{addCount}</span>}
         {removeCount > 0 && <span style={{ fontSize: tokens.fontSizeSm, fontWeight: 600, color: tokens.danger, fontFamily: tokens.fontMono }}>-{removeCount}</span>}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}><path d="M9 18l6-6-6-6" /></svg>
+        <Icon name="chevronRight" size={14} color={tokens.textMuted} strokeWidth={2} style={{ flexShrink: 0, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }} />
       </div>
       {expanded && (
         <div style={{ borderTop: `1px solid ${tokens.border}` }}>
@@ -2989,7 +2979,7 @@ function DiffViewer({ hunks }: { hunks: DiffHunk[] }) {
               onClick={() => toggleSection(hunkIdx)}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.space2, padding: `6px ${tokens.space3}px`, background: tokens.bgSubtle, cursor: 'pointer', borderTop: hunkIdx > 0 ? `1px solid ${tokens.border}` : 'none', borderBottom: `1px solid ${tokens.border}` }}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.textMuted} strokeWidth="2" strokeLinecap="round" style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 0.15s ease' }}><path d="M9 18l6-6-6-6" /></svg>
+              <Icon name="chevronRight" size={12} color={tokens.textMuted} strokeWidth={2} style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 0.15s ease' }} />
               <span style={{ color: tokens.textMuted, fontSize: tokens.fontSizeXs }}>{hunk.label}</span>
             </div>
           );
