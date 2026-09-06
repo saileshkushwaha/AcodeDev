@@ -8,7 +8,7 @@ import { listModels, getFreeModels, listProviders, type ProviderId } from '@acod
 export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: string) => void; onOpenEvaluations?: () => void }) {
   const { tokens } = useTheme();
   const isMobile = useIsMobile();
-  const { projects, prompts, githubToken, hasKey, syncCatalog, catalogVersion } = useApp();
+  const { projects, prompts, hasKey, syncCatalog, catalogVersion } = useApp();
   void catalogVersion;
 
   const [syncing, setSyncing] = useState(false);
@@ -61,18 +61,7 @@ export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: 
 
   return (
     <Page>
-      <PageHeader
-        title="Dashboard"
-        subtitle="Everything in one place — manage your AI projects, models, agents and GitHub."
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => onNavigate('github')}>
-              GitHub {githubToken ? '•' : ''}
-            </Button>
-            <Button onClick={() => onNavigate('chat')}>New Chat</Button>
-          </>
-        }
-      />
+      <PageHeader title="Dashboard" subtitle="Everything in one place — manage your AI projects, models, agents and GitHub." />
 
       <div
         style={{
