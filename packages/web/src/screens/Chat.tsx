@@ -956,13 +956,6 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
           </svg>
         </button>
 
-        {/* New session button — always next to sidebar toggle */}
-        <button
-          title="New session"
-          onClick={newSession}
-          style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary, flexShrink: 0, fontSize: 18 }}
-        >+</button>
-
         {/* Session tabs */}
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab;
@@ -1010,6 +1003,13 @@ export function ChatScreen({ onNavigate }: { onNavigate?: (tab: string) => void 
             </div>
           );
         })}
+
+        {/* New session button — always last */}
+        <button
+          title="New session"
+          onClick={newSession}
+          style={{ width: 32, height: 32, borderRadius: tokens.radiusMd, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.textSecondary, flexShrink: 0, fontSize: 18 }}
+        >+</button>
       </div>
 
       {/* Sidebar panel */}
