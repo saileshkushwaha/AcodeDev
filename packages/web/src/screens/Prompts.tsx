@@ -147,7 +147,7 @@ function PromptsWorkspace({
   const usePrompt = useId ? prompts.get(useId) : undefined;
 
   return (
-    <div style={{ display: 'flex', gap: tokens.space4, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: tokens.space4, alignItems: 'flex-start' }}>
       {/* Category sidebar */}
       <aside style={{ width: isMobile ? '100%' : 210, flexShrink: 0 }}>
         {isMobile ? (
@@ -209,7 +209,7 @@ function PromptsWorkspace({
       </aside>
 
       {/* Results */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, width: isMobile ? '100%' : 'auto' }}>
         {/* Toolbar */}
         <div style={{ display: 'flex', gap: tokens.space2, alignItems: 'center', marginBottom: tokens.space3, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 200 }}>
@@ -614,6 +614,7 @@ const PromptDetailModal = React.memo(function PromptDetailModal({
 const HistoryList = React.memo(function HistoryList({ prompt, refresh }: { prompt: PromptRecord; refresh: () => void }) {
   const { prompts } = useApp();
   const { tokens } = useTheme();
+  const isMobile = useIsMobile();
   const [active, setActive] = useState<number>(prompt.currentVersion);
   const v = prompt.versions.find((x) => x.version === active);
 
@@ -625,7 +626,7 @@ const HistoryList = React.memo(function HistoryList({ prompt, refresh }: { promp
   }, [prompts, prompt.id, v, refresh]);
 
   return (
-    <div style={{ display: 'flex', gap: tokens.space3, marginTop: tokens.space3 }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: tokens.space3, marginTop: tokens.space3 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 120 }}>
         {[...prompt.versions]
           .sort((a, b) => b.version - a.version)
@@ -695,6 +696,7 @@ const UseInChatModal = React.memo(function UseInChatModal({
 }) {
   const { prompts } = useApp();
   const { tokens } = useTheme();
+  const isMobile = useIsMobile();
   const [provider, setProvider] = useState('openrouter');
   const [model, setModel] = useState('nvidia/nemotron-3.5-lightning:free');
   const [values, setValues] = useState<Record<string, string>>({});
@@ -744,7 +746,7 @@ const UseInChatModal = React.memo(function UseInChatModal({
   if (!p) return null;
   return (
     <Modal open onClose={onClose} title={`Use "${p.name}" in chat`} width={720}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.space3, marginBottom: tokens.space3 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: tokens.space3, marginBottom: tokens.space3 }}>
         <Select label="Provider" value={provider} onChange={setProvider} options={providerOpts} />
         <Select label="Model" value={model} onChange={setModel} options={modelOpts} />
       </div>
@@ -814,6 +816,7 @@ const EditorModal = React.memo(function EditorModal({
 }) {
   const { prompts } = useApp();
   const { tokens } = useTheme();
+  const isMobile = useIsMobile();
   const existing = id ? prompts.get(id) : undefined;
   const isNew = !existing;
   const [name, setName] = useState(existing?.name ?? '');
@@ -873,7 +876,7 @@ const EditorModal = React.memo(function EditorModal({
   return (
     <Modal open onClose={onClose} title={isNew ? 'New Prompt' : `Edit ${existing?.name ?? ''}`} width={720}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.space3 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: tokens.space3 }}>
           <Input label="Name" value={name} onChange={setName} placeholder="My production prompt" />
           <Select label="Category" value={category || ''} onChange={(v) => setCategory(v as PromptCategory)} options={categoryOptions} />
         </div>
@@ -919,6 +922,7 @@ const EditorModal = React.memo(function EditorModal({
 /* ------------------------------------------------------------------- */
 const EvalPanel = React.memo(function EvalPanel() {
   const { tokens } = useTheme();
+  const isMobile = useIsMobile();
   const app = useApp();
   const snap = useMemo(readEvalSnapshot, []);
   const [open, setOpen] = useState(false);
@@ -1050,7 +1054,7 @@ const EvalPanel = React.memo(function EvalPanel() {
       <Modal open={open} onClose={() => setOpen(false)} title="Create Evaluation" width={640}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space3 }}>
           <Input label="Eval name" value={def.name ?? ''} onChange={(v) => setDef((d) => ({ ...d, name: v }))} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.space3 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: tokens.space3 }}>
             <Select label="Model" value={def.model ?? ''} onChange={(v) => setDef((d) => ({ ...d, model: v }))} options={modelOpts} />
             <Select
               label="Provider"
