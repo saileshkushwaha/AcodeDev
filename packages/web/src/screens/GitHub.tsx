@@ -16,17 +16,45 @@ export function GitHubScreen() {
   const { tokens } = useTheme();
   const { githubToken, setGithubToken } = useApp();
   const [tokenInput, setTokenInput] = useState(githubToken);
-  const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [user, setUser] = useState<GitHubUserInfo | null>(null);
   const [nav, setNav] = useState<NavId>('overview');
   const [unread, setUnread] = useState(0);
   const [pendingRepo, setPendingRepo] = useState<string | null>(null);
+  // A saved token means we treat the account as connected immediately and
+  // validate it in the background, so the GitHub UI renders without a flash
+  // of the token screen on every navigation.
+  const connected = !!githubToken;
 
   const openRepo = (fullName: string) => {
     setPendingRepo(fullName);
     setNav('repositories');
   };
+
+  // Validate an existing token in the background: refresh the profile and
+  // unread count without ever blocking the UI behind the network call.
+  useEffect(() => {
+    if (!githubToken) return;
+    let alive = true;
+    const refresh = async () => {
+      try {
+        const client = makeClient(githubToken);
+        const u = await client.user();
+        if (!alive) return;
+        setUser(u);
+        client
+          .notifications({ all: true })
+          .then((n) => alive && setUnread(n.filter((x) => x.unread).length))
+          .catch(() => {});
+      } catch {
+        /* keep whatever UI is shown; a bad token surfaces only on explicit connect */
+      }
+    };
+    void refresh();
+    return () => {
+      alive = false;
+    };
+  }, [githubToken]);
 
   const connect = async () => {
     setGithubToken(tokenInput);
@@ -35,13 +63,12 @@ export function GitHubScreen() {
       const client = makeClient(tokenInput);
       const u = await client.user();
       setUser(u);
-      setConnected(true);
       client
         .notifications({ all: true })
         .then((n) => setUnread(n.filter((x) => x.unread).length))
         .catch(() => {});
     } catch (e) {
-      setConnected(false);
+      setGithubToken('');
       alert(`GitHub connection failed: ${e instanceof Error ? e.message : e}`);
     } finally {
       setConnecting(false);
@@ -50,14 +77,8 @@ export function GitHubScreen() {
 
   const disconnect = () => {
     setGithubToken('');
-    setConnected(false);
     setUser(null);
   };
-
-  useEffect(() => {
-    if (githubToken && !connected) void connect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   if (!connected) {
     return (
