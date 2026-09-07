@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import React from 'react';
 import { useTheme, Card, Button, Input, Badge, Spinner, Select, Icon, type IconName } from '@acode/ui';
 import { useApp } from '../../state/AppProvider';
-import type { GitHubRepo, GitHubPullRequest, GitHubComment } from '@acode/core';
+import type { GitHubRepo, GitHubPullRequest, GitHubComment, GitHubPrFile } from '@acode/core';
 import { makeClient, timeAgo, splitRef, renderMd } from './shared';
 import { EmptyState, LoadingSpinner, BackButton, FilterChips, Avatar } from '../../components/SharedComponents';
 
@@ -177,12 +177,11 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
   const { githubToken } = useApp();
   const [detail, setDetail] = useState<GitHubPullRequest>(pr);
   const [comments, setComments] = useState<GitHubComment[]>([]);
-  const [diff, setDiff] = useState('');
-  const [loadingDiff, setLoadingDiff] = useState(false);
+  const [files, setFiles] = useState<GitHubPrFile[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
   const [comment, setComment] = useState('');
   const [review, setReview] = useState('');
   const [busy, setBusy] = useState(false);
-  const [showDiff, setShowDiff] = useState(false);
   const { owner, name } = splitRef(pr.repository);
 
   const load = useCallback(async () => {
@@ -203,21 +202,21 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
     void load();
   }, [load]);
 
-  const loadDiff = async () => {
-    setLoadingDiff(true);
+  const loadFiles = useCallback(async () => {
+    setFilesLoading(true);
     try {
-      const res = await fetch(`https://api.github.com/repos/${owner}/${name}/pulls/${pr.number}`, {
-        headers: { Authorization: `Bearer ${githubToken}`, Accept: 'application/vnd.github.diff', 'X-GitHub-Api-Version': '2022-11-28' },
-      });
-      setDiff(await res.text());
-      setShowDiff(true);
+      const f = await makeClient(githubToken).pullRequestFiles(owner, name, pr.number);
+      setFiles(f);
     } catch {
-      setDiff('Failed to load diff');
-      setShowDiff(true);
+      setFiles([]);
     } finally {
-      setLoadingDiff(false);
+      setFilesLoading(false);
     }
-  };
+  }, [owner, name, pr.number, githubToken]);
+
+  useEffect(() => {
+    void loadFiles();
+  }, [loadFiles]);
 
   const submitComment = async () => {
     if (!comment.trim()) return;
@@ -368,33 +367,81 @@ function PrDetail({ pr, onBack, onChanged }: { pr: PrWithRepo; onBack: () => voi
               </Button>
             </div>
             <div style={{ marginTop: tokens.space4 }}>
-              <Button variant="secondary" size="sm" full onClick={loadDiff} disabled={loadingDiff}>
-                {loadingDiff ? <Spinner size={14} /> : showDiff ? 'Refresh diff' : 'Show diff'}
+              <Button variant="secondary" size="sm" full onClick={() => void loadFiles()} disabled={filesLoading}>
+                {filesLoading ? <Spinner size={14} /> : 'Refresh files'}
               </Button>
             </div>
           </Card>
         </div>
       </div>
 
-      {showDiff && (
-        <Card title="Diff" style={{ marginTop: tokens.space4 }}>
-          <pre
-            style={{
-              background: 'var(--code-bg)',
-              padding: tokens.space4,
-              borderRadius: tokens.radiusMd,
-              overflow: 'auto',
-              fontSize: 12,
-              lineHeight: 1.6,
-              maxHeight: 500,
-              margin: 0,
-            }}
-          >
-            {diff}
-          </pre>
+      {files.length > 0 && (
+        <Card
+          title={`Files changed (${files.length})`}
+          subtitle={`+${files.reduce((a, f) => a + f.additions, 0)} −${files.reduce((a, f) => a + f.deletions, 0)}`}
+          style={{ marginTop: tokens.space4 }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {files.map((f) => (
+              <div
+                key={f.filename}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.space2,
+                  padding: `${tokens.space2}px ${tokens.space2}px`,
+                  borderBottom: `1px solid ${tokens.border}`,
+                }}
+              >
+                <FileStatusChip status={f.status} />
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontSize: tokens.fontSizeSm,
+                    fontFamily: tokens.fontMono,
+                  }}
+                >
+                  {f.filename}
+                </div>
+                <span style={{ fontSize: tokens.fontSizeXs, color: tokens.success, whiteSpace: 'nowrap' }}>+{f.additions}</span>
+                <span style={{ fontSize: tokens.fontSizeXs, color: tokens.danger, whiteSpace: 'nowrap' }}>−{f.deletions}</span>
+              </div>
+            ))}
+          </div>
         </Card>
       )}
     </div>
+  );
+}
+
+function FileStatusChip({ status }: { status: GitHubPrFile['status'] }) {
+  const { tokens } = useTheme();
+  let label = status;
+  let color = tokens.textSecondary;
+  if (status === 'added') {
+    label = 'A';
+    color = tokens.success;
+  } else if (status === 'removed') {
+    label = 'D';
+    color = tokens.danger;
+  } else if (status === 'modified') {
+    label = 'M';
+    color = tokens.primary;
+  } else if (status === 'renamed') {
+    label = 'R';
+    color = tokens.info;
+  } else if (status === 'copied') {
+    label = 'C';
+    color = tokens.info;
+  }
+  return (
+    <Badge color={color} style={{ width: 22, justifyContent: 'center', padding: '0 4px' }}>
+      {label}
+    </Badge>
   );
 }
 

@@ -135,6 +135,17 @@ export interface GitHubComment {
   updatedAt: string;
 }
 
+/** A file changed in a pull request, from the `/pulls/{n}/files` endpoint. */
+export interface GitHubPrFile {
+  filename: string;
+  status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  previousFilename?: string;
+  contentsUrl?: string;
+}
+
 export interface GitHubNotification {
   id: string;
   reason: string;
@@ -458,6 +469,20 @@ export class GitHubClient {
       mergedBy: x.merged_by?.login ?? null,
       authorAssociation: x.author_association,
     };
+  }
+
+  /** List the files changed in a pull request, with per-file add/delete counts. */
+  async pullRequestFiles(owner: string, repo: string, number: number, perPage = 100): Promise<GitHubPrFile[]> {
+    const r = await this.request<AnyJson[]>(`/repos/${owner}/${repo}/pulls/${number}/files?per_page=${perPage}`);
+    return (r ?? []).map((f) => ({
+      filename: f.filename,
+      status: f.status ?? 'modified',
+      additions: f.additions ?? 0,
+      deletions: f.deletions ?? 0,
+      changes: f.changes ?? 0,
+      previousFilename: f.previous_filename,
+      contentsUrl: f.contents_url,
+    }));
   }
 
   async mergePullRequest(
