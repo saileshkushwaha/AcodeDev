@@ -83,15 +83,7 @@ export function Dashboard({ onNavigate, onOpenEvaluations }: { onNavigate: (id: 
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: tokens.space4, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space4 }}>
-          <Card
-            title="Recent Projects"
-            subtitle="Your all-in-one workspaces"
-            actions={
-              <Button size="sm" onClick={() => onNavigate('dashboard')}>
-                New
-              </Button>
-            }
-          >
+          <Card title="Recent Projects" subtitle="Your all-in-one workspaces">
             {projectsList.length === 0 ? (
               <div style={{ color: tokens.textSecondary, fontSize: tokens.fontSizeSm }}>No projects yet. Create one to get started.</div>
             ) : (
