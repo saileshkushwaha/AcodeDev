@@ -78,9 +78,13 @@ export function webCryptoAdapter(): CryptoAdapter {
           try {
             const stored = await idbGet(idb, 'cryptoKey');
             if (stored instanceof CryptoKey) {
-              // Persist a copy to localStorage so the key survives IndexedDB clears
-              const exported = new Uint8Array(await crypto.subtle.exportKey('raw', stored));
-              writeRaw(LS_KEY, bytesToBase64(exported));
+              // Try to export and persist to localStorage as backup
+              try {
+                const exported = new Uint8Array(await crypto.subtle.exportKey('raw', stored));
+                writeRaw(LS_KEY, bytesToBase64(exported));
+              } catch {
+                /* non-extractable key — can't backup, but still works in this session */
+              }
               return stored;
             }
           } catch {
