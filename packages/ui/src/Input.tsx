@@ -13,6 +13,7 @@ export function Input({
   textarea,
   rows,
   onEnter,
+  disabled,
 }: {
   label?: string;
   value: string;
@@ -25,6 +26,7 @@ export function Input({
   textarea?: boolean;
   rows?: number;
   onEnter?: () => void;
+  disabled?: boolean;
 }) {
   const { tokens } = useTheme();
   const base: React.CSSProperties = {
@@ -39,6 +41,8 @@ export function Input({
     outline: 'none',
     resize: textarea ? 'vertical' : 'none',
     boxSizing: 'border-box',
+    opacity: disabled ? 0.6 : 1,
+    cursor: disabled ? 'not-allowed' : 'text',
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space1 }}>
@@ -59,6 +63,7 @@ export function Input({
                 }
               : undefined
           }
+          disabled={disabled}
           style={base}
         />
       ) : (
@@ -74,6 +79,7 @@ export function Input({
                 }
               : undefined
           }
+          disabled={disabled}
           style={base}
         />
       )}

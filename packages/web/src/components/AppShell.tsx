@@ -16,6 +16,7 @@ const icons: Record<string, React.ReactNode> = {
   agents: <Icon name="bot" size={18} />,
   keys: <Icon name="key" size={18} />,
   github: <GithubIcon size={18} />,
+  settings: <Icon name="settings" size={18} />,
 };
 
 export const NAV: NavItem[] = [
@@ -26,6 +27,7 @@ export const NAV: NavItem[] = [
   { id: 'agents', label: 'AI Agents', icon: icons.agents },
   { id: 'keys', label: 'API Keys', icon: icons.keys },
   { id: 'github', label: 'GitHub', icon: icons.github },
+  { id: 'settings', label: 'Settings', icon: icons.settings },
 ];
 
 export function AppShell({
