@@ -31,6 +31,8 @@ export class KeyVault {
   private storageKey = 'acode.vault.v1';
   private readyPromise: Promise<void>;
   private persistChain: Promise<void> = Promise.resolve();
+  /** Set when vault had encrypted data but decryption failed (likely lost crypto key). */
+  decryptionFailed = false;
 
   constructor(adapter: CryptoAdapter) {
     this.adapter = adapter;
@@ -42,15 +44,18 @@ export class KeyVault {
       const raw = await this.adapter.secureStore.get(this.storageKey);
       if (!raw) return;
       const parsed = JSON.parse(raw) as Record<string, string>;
+      const ids = Object.keys(parsed);
+      let decrypted = 0;
       await Promise.all(
         Object.entries(parsed).map(async ([id, payload]) => {
           try {
-            const decrypted = await this.adapter.decrypt(payload);
+            const dec = await this.adapter.decrypt(payload);
             // New format: JSON entry
             try {
-              const entry = JSON.parse(decrypted) as KeyEntry;
+              const entry = JSON.parse(dec) as KeyEntry;
               if (entry && typeof entry.value === 'string') {
                 this.entries.set(id, entry);
+                decrypted++;
                 return;
               }
             } catch {
@@ -58,18 +63,24 @@ export class KeyVault {
             }
             // Legacy format: raw secret -> treat as an AI provider key
             this.entries.set(id, {
-              value: decrypted,
+              value: dec,
               category: id === 'local' ? 'ai' : 'ai',
               label: id,
               connectorType: 'LLM',
               createdAt: Date.now(),
               updatedAt: Date.now(),
             });
+            decrypted++;
           } catch {
             /* ignore corrupted */
           }
         }),
       );
+      // If we had stored data but decrypted nothing, the crypto key was likely lost
+      if (ids.length > 0 && decrypted === 0) {
+        this.decryptionFailed = true;
+        console.warn('[vault] All entries failed to decrypt — crypto key may have been lost. Re-enter your API keys.');
+      }
     } catch {
       /* ignore */
     }

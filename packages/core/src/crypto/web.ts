@@ -66,25 +66,36 @@ export function webCryptoAdapter(): CryptoAdapter {
   const getCryptoKey = async (): Promise<CryptoKey> => {
     if (!keyPromise) {
       keyPromise = (async () => {
-        const idb = await openIdb();
-        if (idb) {
-          try {
-            const stored = await idbGet(idb, 'cryptoKey');
-            if (stored instanceof CryptoKey) return stored;
-            const key = await generateKey(false);
-            await idbSet(idb, 'cryptoKey', key);
-            return key;
-          } catch {
-            /* fall through to localStorage fallback */
-          }
-        }
+        // Always check localStorage first — it persists reliably on Android
+        // WebView where IndexedDB CryptoKey objects can be lost on restart.
         const raw = readRaw(LS_KEY);
         if (raw) {
           return await crypto.subtle.importKey('raw', base64ToBytes(raw), { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
         }
+
+        const idb = await openIdb();
+        if (idb) {
+          try {
+            const stored = await idbGet(idb, 'cryptoKey');
+            if (stored instanceof CryptoKey) {
+              // Persist a copy to localStorage so the key survives IndexedDB clears
+              const exported = new Uint8Array(await crypto.subtle.exportKey('raw', stored));
+              writeRaw(LS_KEY, bytesToBase64(exported));
+              return stored;
+            }
+          } catch {
+            /* fall through to generate */
+          }
+        }
+
+        // Generate a new extractable key and persist to localStorage
         const key = await generateKey(true);
         const exported = new Uint8Array(await crypto.subtle.exportKey('raw', key));
         writeRaw(LS_KEY, bytesToBase64(exported));
+        // Also try to persist to IndexedDB for performance
+        if (idb) {
+          try { await idbSet(idb, 'cryptoKey', key); } catch { /* ignore */ }
+        }
         return key;
       })();
     }
