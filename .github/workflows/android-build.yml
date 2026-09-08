@@ -174,11 +174,11 @@ jobs:
         working-directory: packages/web
         run: npm run build
 
-      - name: Upload web build
+      - name: Upload web build (for GitHub Pages)
         uses: actions/upload-artifact@v4
         with:
           name: web-build
-          path: packages/web/dist
+          path: packages/web/www
           retention-days: 7
 
   deploy-preview:
@@ -192,6 +192,11 @@ jobs:
         with:
           name: web-build
           path: dist
+
+      - name: Copy www to dist (for GitHub Pages)
+        run: |
+          cp -r packages/web/www/* dist/
+          echo "dist/*" > dist/.nojekyll
 
       - name: Deploy to GitHub Pages (preview)
         uses: peaceiris/actions-gh-pages@v3
