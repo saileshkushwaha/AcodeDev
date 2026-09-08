@@ -49,6 +49,9 @@ export class ChatEngine {
   private resolve(req: ChatRequest): ChatRequest {
     if (req.apiKey && req.baseUrl) return req;
     const key = this.vault.getKey(req.provider);
+    if (!key) {
+      throw new Error(`No API key found for "${req.provider}". Go to Settings → Keys and add your ${req.provider} API key.`);
+    }
     const realBase = req.baseUrl ?? baseUrlFor(req.provider) ?? '';
     const proxy = getProxyBase();
     const isGateway = getProvider(req.provider)?.gateway;
@@ -60,6 +63,7 @@ export class ChatEngine {
   }
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
+    await this.vault.ready();
     let lastErr: Error | undefined;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       const resolved = this.resolver ? { ...req, ...this.resolver(req) } : this.resolve(req);
@@ -85,6 +89,7 @@ export class ChatEngine {
   }
 
   async *stream(req: ChatRequest): AsyncIterable<ChatStreamChunk> {
+    await this.vault.ready();
     let lastErr: Error | undefined;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       const resolved = this.resolver ? { ...req, ...this.resolver(req) } : this.resolve(req);
